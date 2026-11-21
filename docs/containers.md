@@ -349,13 +349,15 @@ intake's containment and caps).
   placed there keep it from its idle stop, and start it with the server
   (`placedInContainer`).
 
-**In the clients** (visor_ui's MigrateMenu, from a session's context menu):
-**Migrate…** lists the places a session can be, the one it's in ticked: its
-computer (`migrate-host`: Move Back), that computer's Sessions container
-(`migrate-container`: Move to Container, offered while `GET
-/api/container` says it takes sessions, asked on connecting and after each
-move), then any other computer connected now that migrates (the Migrate
-sheet, as before). Move to a Runner (the dispatcher's) is no longer
+**In the clients** (visor_ui's MigratePlaces, from a session's context
+menu): **Migrate…** asks where the session goes, saying where it is, and
+offers each place but that one: its computer ("‹computer›": Move Back),
+that computer's Sessions container ("‹computer›'s Container": Move to
+Container, offered while `GET /api/container` says it takes sessions,
+asked on connecting and after each move), then any other computer
+connected now that migrates (the Migrate sheet, as before). It's a button
+and an alert, not a menu within the context menu, which only Apple's
+SwiftUI draws. Move to a Runner (the dispatcher's) is no longer
 offered. A session's row marks where it runs: a box, "In the Sessions
 container", for one placed there (SessionPlaceMark, from
 `SessionInfo.placement`).

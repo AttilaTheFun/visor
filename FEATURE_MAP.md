@@ -77,7 +77,7 @@ flowchart TD
     Sessions -->|"tap settings"| Settings
     Sessions -->|"longpress session-‹id›, tap “Project Settings”"| Project
     Sessions -->|"longpress session-‹id›, tap “Migrate…”, tap ‹another computer›"| Migrate
-    Sessions -->|"longpress session-‹id›, tap “Migrate…”, tap migrate-container (or, in it, migrate-host)"| Sessions
+    Sessions -->|"longpress session-‹id›, tap “Migrate…”, tap “‹computer›'s Container” (or, in it, “‹computer›”)"| Sessions
     Sessions -->|"longpress session-‹id›, tap “Export…”"| Export
     Export -->|"tap export-done"| Sessions
     Sessions -->|"longpress session-‹id›, tap “Super Compact…”"| SuperCompact
@@ -133,7 +133,7 @@ that opens it directly (see "Driving it" below).
 |---|---|---|---|
 | Onboarding | text "Welcome to Visor" | `add-computer`, `settings` | `onboarding` |
 | Sign in to Visor | text "Sign in to Visor" | `account-sign-in` | none: launch with the setting `account=fixture` and no `fixture` (the fixture skips the account) |
-| Sessions | the navigation title "Sessions", and the rows "Snapshot Mac", "Offline sync" (`computer-‹name›` and `session-‹id›`); `add-computer` too, but on the iPhone on its side, or after an account's sign-in, it can be below the fold | `session-‹id›` (its `place-` — labelled "In the Sessions container" for one placed in its computer's container, "On macOS" on the Mac itself — `waiting-`, `sub-sessions-‹id›` inside), `computer-‹name›`, `archived-‹name›`, `add-computer`, `settings`, "New session", the "Search sessions" field; a row's context menu's "Migrate…", its places `migrate-host` (the computer, ticked where the session is) and `migrate-container` (its Sessions container, while it takes sessions), then any other computer that migrates | `sessions`, `machines` (the release notes in the container) |
+| Sessions | the navigation title "Sessions", and the rows "Snapshot Mac", "Offline sync" (`computer-‹name›` and `session-‹id›`); `add-computer` too, but on the iPhone on its side, or after an account's sign-in, it can be below the fold | `session-‹id›` (its `place-` — labelled "In the Sessions container" for one placed in its computer's container, "On macOS" on the Mac itself — `waiting-`, `sub-sessions-‹id›` inside), `computer-‹name›`, `archived-‹name›`, `add-computer`, `settings`, "New session", the "Search sessions" field; a row's context menu's "Migrate…", an alert of the places it can go: "‹computer›" (back from its Sessions container), "‹computer›'s Container" (while the container takes sessions), then any other computer that migrates | `sessions`, `machines` (the release notes in the container) |
 | Search results | text "Messages" or `message-hit` | `message-hit`, `session-‹id›` | `search` (types "sync") |
 | Archived Sessions | text "Archived Sessions" | `archived-session-‹id›` | none (the fixture has no archived sessions) |
 | Project settings | the project's page, titled by its name: "Copy folder path" listed | "Rename in Visor…", "Copy folder path", "Archived Sessions (‹n›)", "Remove Project" | none: `longpress session-fixture-chat` on `sessions`, then tap "Project Settings" (not on the iPhone yet: see "Not wired yet") |

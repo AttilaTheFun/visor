@@ -45,6 +45,8 @@ public struct VisorRootView: View {
     @State private var deletingSession: SessionTarget?
     /// A session being moved to another computer.
     @State private var migrating: SessionMigration?
+    /// A session whose places Migrate… offers (MigratePlaces).
+    @State private var placing: SessionTarget?
     /// A session being super-compacted (its menu's Super Compact…).
     @State private var superCompacting: SuperCompact?
     @State private var removingProject: ProjectTarget?
@@ -314,6 +316,32 @@ public struct VisorRootView: View {
             }
         } message: {
             Text("A name for this folder in Visor. The folder itself is not renamed; clear the name to use the folder's own again.")
+        }
+        .alert("Migrate “\(placing?.session.title ?? "")”", isPresented: presenting($placing)) {
+            if let target = placing {
+                let places = places(of: target.session, on: target.host)
+                if places.back {
+                    Button(places.name) {
+                        target.host.moveBack(target.session.id)
+                        placing = nil
+                    }
+                }
+                if places.intoContainer {
+                    Button(places.containerName) {
+                        target.host.moveToContainer(target.session.id)
+                        placing = nil
+                    }
+                }
+                ForEach(places.elsewhere, id: \.id) { other in
+                    Button(other.record.name) {
+                        migrating = SessionMigration(session: target.session, from: target.host, to: other)
+                        placing = nil
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) { placing = nil }
+        } message: {
+            Text(placing.map { places(of: $0.session, on: $0.host).here } ?? "")
         }
         .alert("Remove this session?", isPresented: presenting($deletingSession)) {
             Button("Cancel", role: .cancel) { deletingSession = nil }
@@ -620,6 +648,12 @@ public struct VisorRootView: View {
         }
     }
 
+    /// Where `session` of `host` can go from Migrate…: the other computers
+    /// connected now that migrate.
+    private func places(of session: SessionInfo, on host: AgentServerConnection) -> MigratePlaces {
+        MigratePlaces(session: session, host: host, others: store.servers.filter { $0.id != host.id && $0.state == .connected && $0.migrates })
+    }
+
     /// The session on screen exported (File › Export…).
     private func exportViewedSession() {
         guard let serverID = store.viewedServer, let id = store.viewedSession, let host = store.server(for: serverID), host.archives,
@@ -641,8 +675,12 @@ public struct VisorRootView: View {
                 Label("Export…", systemImage: "square.and.arrow.up")
             }
         }
-        MigrateMenu(session: session, host: host, others: store.servers.filter { $0.id != host.id && $0.state == .connected && $0.migrates }) {
-            other in migrating = SessionMigration(session: session, from: host, to: other)
+        // Where else it can be: its computer, that computer's Sessions
+        // container, another computer (MigratePlaces).
+        if places(of: session, on: host).offers {
+            Button { placing = SessionTarget(host: host, session: session) } label: {
+                Label("Migrate…", systemImage: "arrow.right.circle")
+            }
         }
         // Its conversation condensed into HANDOFF.md, reviewed, and a new
         // session carrying the work on from it (docs/super-compact.md).

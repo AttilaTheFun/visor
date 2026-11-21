@@ -60,27 +60,28 @@ extension FeatureMapTests {
             FeatureMapNode.project.expectShown(on: try app.tap("Project Settings"))
         }
 
-        @Test("Sessions → Sessions: longpress session-‹id›, tap “Migrate…”, tap migrate-container; and back, migrate-host")
+        @Test("Sessions → Sessions: longpress session-‹id›, tap “Migrate…”, “‹computer›'s Container”; and back, “‹computer›”")
         func movesIntoTheContainerAndBack() throws {
             let app = try VisorLaunch.fixture("sessions")
             defer { app.quit() }
             try app.screen { FeatureMapNode.sessions.isShown(on: $0) }
             // The fixture's computer has a Sessions container that takes
-            // sessions: Migrate… offers it, the chat's own computer ticked.
+            // sessions: Migrate… offers it.
             let menu = try app.longPress("session-fixture-chat")
             #expect(menu.element("Migrate…") != nil, "no Migrate… in the menu: \(menu.summary)")
             let places = try app.tap("Migrate…")
-            #expect(places.has(id: "migrate-container") && places.has(id: "migrate-host"), "\(places.summary)")
-            let moved = try app.tap("migrate-container")
+            #expect(places.element("Snapshot Mac's Container") != nil, "\(places.summary)")
+            _ = try app.tap("Snapshot Mac's Container")
             let placed = try app.screen { $0.element("place-fixture-chat")?.label == "In the Sessions container" }
             FeatureMapNode.sessions.expectShown(on: placed)
-            #expect(placed.element("place-fixture-chat")?.label == "In the Sessions container", "\(moved.summary)")
 
+            // In it, Migrate… offers its computer.
             _ = try app.longPress("session-fixture-chat")
-            _ = try app.tap("Migrate…")
-            _ = try app.tap("migrate-host")
-            let back = try app.screen { $0.element("place-fixture-chat")?.label == "On macOS" || $0.element("place-fixture-chat") == nil }
-            FeatureMapNode.sessions.expectShown(on: back)
+            let back = try app.tap("Migrate…")
+            #expect(back.element("Snapshot Mac") != nil && back.element("Snapshot Mac's Container") == nil, "\(back.summary)")
+            _ = try app.tap("Snapshot Mac")
+            let home = try app.screen { $0.element("place-fixture-chat")?.label != "In the Sessions container" }
+            FeatureMapNode.sessions.expectShown(on: home)
         }
 
         @Test("Sessions → Settings: tap settings")
