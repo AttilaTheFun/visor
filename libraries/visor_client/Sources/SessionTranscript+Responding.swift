@@ -73,10 +73,26 @@ extension SessionTranscript {
     /// end, where a reply's row lands.
     func carried(_ id: String) -> Bool { _entries.last { Self.carries($0, id) } != nil }
 
-    /// More words of message `id`. None for a message the rows already
-    /// hold: its row is the reply.
-    func takeDelta(id: String, text: String) {
+    /// More words of message `id`, going where `from` says (the UTF-8
+    /// length of the words before them; nil from a server before 0.64,
+    /// whose words are appended). None for a message the rows already
+    /// hold: its row is the reply. Words held already (a snapshot brought
+    /// them first) are passed over; words that don't meet what is held
+    /// (some were missed) are not taken, and the state is asked for again,
+    /// once until it comes: its snapshot puts the words right.
+    func takeDelta(id: String, text: String, from: Int? = nil) {
         guard !carried(id) else { return }
+        if let from {
+            let held = _responding.first { $0.id == id }?.text.utf8.count ?? 0
+            if from != held {
+                guard from + text.utf8.count > held else { return }
+                if !stateAsked {
+                    stateAsked = true
+                    askState?()
+                }
+                return
+            }
+        }
         if let index = _responding.firstIndex(where: { $0.id == id }) {
             _responding[index].text += text
         } else {
@@ -91,6 +107,7 @@ extension SessionTranscript {
     /// and not in it was recorded there, or lost with a restart: it is
     /// kept, finished, until the rows bring it or a new turn clears it.
     func takeStreams(_ streams: [StreamChunk]) {
+        stateAsked = false
         let before = _responding
         let given = Dictionary(streams.map { ($0.id, $0.text) }, uniquingKeysWith: { $1 })
         for index in _responding.indices {
@@ -170,6 +187,7 @@ extension SessionTranscript {
         respondingFraming = false
         respondingDirty = false
         writingNow = false
+        stateAsked = false
         guard !_responding.isEmpty else { return }
         _responding = []
         tellResponding()
