@@ -14,7 +14,10 @@
 //
 // `Visor server-agent register`: the agent registered with SMAppService
 // from this bundle (ServerAgentService), for the update's watcher when
-// launchd no longer has the job.
+// launchd no longer has the job. `Visor server-agent unregister`: stopped
+// and unregistered (out of launchd and Background Items), and 0.64's plist
+// removed, for Visor Disk Utility's Uninstall…, which can't unregister
+// another app's agent itself.
 //
 // Sent TERM (launchd: the app handing the server back, a restart of the
 // job, logging out; or anyone: `killall Visor` reaches it too, its process
@@ -44,8 +47,26 @@ enum MacServerAgent {
             }
             exit(0)
         }
+        if given == [ServerAgentJob.command, "unregister"] {
+            unregister()
+        }
         guard given.first == ServerAgentJob.argument else { return }
         run()
+    }
+
+    /// The agent stopped and unregistered, whatever the settings say; ends.
+    private static func unregister() -> Never {
+        let job = ServerAgentJob.job(bundleID: MacPlaces.own, logs: VisorFolders.locate().logs.path)
+        let done = DispatchSemaphore(value: 0)
+        Task.detached {
+            await ServerAgentService.removeLegacy(job: job, bundleID: MacPlaces.own, log: { print($0) })
+            try? await ServerAgentService.service(bundleID: MacPlaces.own).unregister()
+            await Launchctl.stop(label: job.label)
+            done.signal()
+        }
+        done.wait()
+        print("the server agent (\(job.label)) is stopped and unregistered")
+        exit(0)
     }
 
     private static func run() -> Never {

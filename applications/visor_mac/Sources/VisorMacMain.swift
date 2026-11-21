@@ -1,7 +1,8 @@
 // The program's start: the server agent when asked for (`--server`, the
-// launchd job's: MacServerAgent), agent-proxy when asked for
-// (`--agent-proxy`, the launchd job's; `agent-proxy …`, its secrets'
-// command: MacAgentProxy), else Visor, the app.
+// launchd job's: MacServerAgent; `server-agent register|unregister`),
+// agent-proxy when asked for (`--agent-proxy`, the launchd job's;
+// `agent-proxy …`, its secrets' command: MacAgentProxy), the admin token
+// for a script (`admin-token`: MacAdminTokenCommand), else Visor, the app.
 
 @main
 enum VisorMacMain {
@@ -9,6 +10,7 @@ enum VisorMacMain {
     static func main() {
         MacServerAgent.handle(CommandLine.arguments)
         MacAgentProxy.handle(CommandLine.arguments)
+        MacAdminTokenCommand.handle(CommandLine.arguments)
         VisorMacApp.main()
     }
 }

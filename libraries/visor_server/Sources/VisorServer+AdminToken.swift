@@ -27,6 +27,13 @@ import Foundation
 import VisorProtocol
 
 extension VisorServer {
+    /// Whether the admin token itself is kept with the secrets, beside its
+    /// hash, for `Visor admin-token` to print (Visor.app's, set before the
+    /// server is made): where the secrets are the app's own alone.
+    public static var keepsAdminToken = false
+    /// The token itself among the secrets, when it's kept.
+    public static let adminTokenSecret = AdminToken.tokenKey
+
     /// `/api/admin-token…`, by method.
     func restAdminToken(_ call: RESTCall) -> HTTPResponse {
         switch (call.request.method, call.parts.count) {

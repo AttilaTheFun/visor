@@ -26,7 +26,9 @@
 #   APPLE_DEVELOPER_ID_P12, APPLE_DEVELOPER_ID_PASSWORD, APPLE_NOTARY_KEY,
 #   APPLE_NOTARY_KEY_ID, APPLE_NOTARY_ISSUER and APPLE_PROFILES (its
 #   Developer ID profile: Visor.app asks for push and the app group;
-#   Visor Disk Utility needs none). Each Mac app's assets go by its own
+#   Visor Disk Utility, from 0.65, for Visor's keychain access group, so
+#   Uninstall… reaches the app key: its own profile, granting the team's
+#   `<team>.*`). Each Mac app's assets go by its own
 #   name (mac_app_name): Visor-<version>-macos.zip, and
 #   Visor-Disk-Utility-<version>-macos.zip with its own builds.json line;
 # - .apk: android_sign.sh with Visor's release key (`visor`), its

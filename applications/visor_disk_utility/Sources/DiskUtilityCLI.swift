@@ -3,14 +3,21 @@
 
 import DiskVolumes
 import Foundation
+import VisorUninstall
 
 /// `Visor Disk Utility status`, `… create sessions|sources|visor`, `…
 /// erase-containers --yes` (the container's folder on Visor emptied);
 /// options `--reserve-gb <n>`, `--quota-gb <n>` (the role's defaults
 /// otherwise) and `--sudo` (`sudo -n` instead of the administrator prompt).
 /// Each writes volumes.json after.
+///
+/// `… uninstall`: Uninstall…'s dry run, printed, and nothing done; `…
+/// uninstall --yes` does it (UninstallRunner), the apps moved to the Trash
+/// last; with `--delete-volumes`, the three volumes too, once their names
+/// are typed on standard input as the dry run asks (or given with
+/// `--confirm "<that>"`).
 enum DiskUtilityCLI {
-    static let verbs: Set<String> = ["status", "create", "erase-containers"]
+    static let verbs: Set<String> = ["status", "create", "erase-containers", "uninstall"]
 
     /// Runs and exits when the arguments are a command; else returns, for
     /// the app.
@@ -27,6 +34,7 @@ enum DiskUtilityCLI {
 
     private static func run(_ arguments: [String]) throws {
         let route: PrivilegeRoute = arguments.contains("--sudo") ? .sudo : .administratorPrompt
+        if arguments[0] == "uninstall" { return try uninstall(arguments, route: route) }
         var survey = try DiskTool.survey()
         switch arguments[0] {
         case "create":
@@ -48,6 +56,28 @@ enum DiskUtilityCLI {
         }
         for role in VolumeRole.allCases { print(describe(survey.state(for: role))) }
         print("wrote \(try DiskTool.writeStatus(survey).path)")
+    }
+
+    /// Uninstall…: the dry run, then, with `--yes`, the plan run.
+    private static func uninstall(_ arguments: [String], route: PrivilegeRoute) throws {
+        let plan = try UninstallRunner.plan(deleteVolumes: arguments.contains("--delete-volumes"))
+        print(plan.dryRun)
+        guard arguments.contains("--yes") else {
+            print("\nA dry run: nothing was done. Run again with --yes to uninstall.")
+            return
+        }
+        var typed: String?
+        if !plan.volumes.isEmpty {
+            let phrase = UninstallConfirmation.phrase(for: plan.volumes)
+            if let index = arguments.firstIndex(of: "--confirm"), index + 1 < arguments.count {
+                typed = arguments[index + 1]
+            } else {
+                print("\nEverything on those volumes is deleted. Type \"\(phrase)\" to delete them, or anything else to keep them:")
+                typed = readLine()
+            }
+        }
+        UninstallRunner.run(plan, typed: typed, route: route) { print($0) }
+        UninstallRunner.forgetOwn()
     }
 
     /// `--name <gigabytes>` in bytes; nil when it isn't given.
