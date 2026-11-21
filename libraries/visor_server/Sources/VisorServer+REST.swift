@@ -36,6 +36,13 @@ extension VisorServer {
             Task { respond(await restMoveToRunner(call)) }
             return
         }
+        // Into the Sessions container (VisorServer+ContainerRunner): answered
+        // once its agent has started there, or the session is back here.
+        if request.method == "POST", parts.count == 3, parts[0] == "sessions", parts[2] == "moveToContainer", authorized(request) {
+            let call = RESTCall(request: request, parts: parts, query: Self.query(request.path), body: Envelope.decodeBody(request.body))
+            Task { respond(await restMoveToContainer(call)) }
+            return
+        }
         if request.method == "POST", parts.count == 3, parts[0] == "sessions", parts[2] == "moveBack", authorized(request) {
             // Answered once the session is back: its runner's agent may hand
             // it back first (VisorServer+HandBack).

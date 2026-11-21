@@ -71,6 +71,9 @@ public actor ContainerEngine {
     var egress: String?
     var errors: [String] = []
     var idleLoop: Task<Void, Never>?
+    /// Why it's held stopped (Stop, or turned off): its sessions' agents
+    /// wait for Start Agent then. Nil once it starts again.
+    var held: String?
 
     public init(context: Context) {
         self.context = context
@@ -86,7 +89,7 @@ public actor ContainerEngine {
                                cpus: booted?.cpus ?? configuration.cpus, memoryGiB: booted?.memoryGiB ?? configuration.memoryGiB,
                                idleMinutes: configuration.idleMinutes, image: (booted?.image ?? configuration.image)?.value,
                                since: since.timeIntervalSince1970, processes: executions.count, relayPort: configuration.relayPort,
-                               egress: egress, errors: errors)
+                               egress: egress, errors: errors, held: machine == nil && starting == nil ? held : nil)
     }
 
     /// Started if it isn't running (Settings' Start, `POST /api/container/start`);
@@ -105,10 +108,23 @@ public actor ContainerEngine {
     }
 
     /// Stopped (Settings' Stop, `POST /api/container/stop`): what runs in it
-    /// ends. How it stands after.
+    /// ends, and it's held stopped (its sessions' agents wait for Start
+    /// Agent rather than starting it again). How it stands after.
     public func stop() async -> ContainerStatus {
+        // Held first: what ends with it asks why as it ends.
+        held = "it was stopped by hand"
         await stop(reason: "stopped by hand")
         return status()
+    }
+
+    /// Stopped and started again (Settings' Restart, `POST
+    /// /api/container/restart`): a new image pinned meanwhile is taken
+    /// now, and its sessions' agents are started again in it (the
+    /// container runner's). How it stands after.
+    public func restart() async -> ContainerStatus {
+        held = nil
+        await stop(reason: "restarted")
+        return await start()
     }
 
     /// The server has started: the container started again if a session is
@@ -135,6 +151,7 @@ public actor ContainerEngine {
     public func configurationChanged() async {
         let configuration = context.configuration()
         if (!configuration.enabled || !context.host.canRunContainer), machine != nil || starting != nil {
+            held = "it was turned off in Settings"
             await stop(reason: "turned off in Settings")
         } else if machine == nil, starting == nil {
             set(configuration.enabled && context.host.canRunContainer ? (state == .noEgress ? .noEgress : .stopped) : .off)

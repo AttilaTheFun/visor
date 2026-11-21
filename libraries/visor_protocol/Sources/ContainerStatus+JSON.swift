@@ -10,6 +10,7 @@ extension ContainerStatus {
         if let since { o["since"] = .number(since) }
         if let relayPort { o["relayPort"] = .number(Double(relayPort)) }
         if let egress { o["egress"] = .string(egress) }
+        if let held { o["held"] = .string(held) }
         return .object(o)
     }
 
@@ -19,6 +20,7 @@ extension ContainerStatus {
         self.init(state: state, enabled: json["enabled"].bool ?? false, canRun: json["canRun"].bool ?? false, cpus: json["cpus"].int,
                   memoryGiB: json["memoryGiB"].int, idleMinutes: json["idleMinutes"].int, image: json["image"].string,
                   since: json["since"].double, processes: json["processes"].int ?? 0, relayPort: json["relayPort"].int,
-                  egress: json["egress"].string, errors: json["errors"].array?.compactMap(\.string) ?? [])
+                  egress: json["egress"].string, errors: json["errors"].array?.compactMap(\.string) ?? [],
+                  held: json["held"].string)
     }
 }

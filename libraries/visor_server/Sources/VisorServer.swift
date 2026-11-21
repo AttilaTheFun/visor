@@ -71,7 +71,12 @@ public final class VisorServer {
     /// Mac's background server; none elsewhere. Told of the settings as
     /// it's given.
     public var sessionsContainer: (any SessionsContainer)? {
-        didSet { containerSettingsChanged() }
+        didSet {
+            containerSettingsChanged()
+            // The sessions placed in it, read before it was given: their
+            // agents started in it now.
+            if sessionsContainer != nil { resumeContainerSessions() }
+        }
     }
     /// What each client connected here last said it is connected to, by
     /// the client's id (VisorServer+Directory.swift).
@@ -362,6 +367,12 @@ public final class VisorServer {
     /// Where jobs for runners go (`POST /api/jobs`): VisorDriver's
     /// dispatcher. None where no dispatcher runs.
     package var jobs: (any AgentJobQueue)?
+    /// The agents Visor starts itself in its Sessions container, for the
+    /// sessions placed there (VisorServer+ContainerRunner): the driver
+    /// asks it of their tokens.
+    package lazy var containerRunner = ContainerRunner(tokens: agentTokens) { [weak self] id in
+        self?.session(id).map { !$0.info.archived }
+    }
 
     /// The sessions' store, written once `archiveSaveDelay` after a change
     /// however many come in it (saveArchive): written whole on each, it

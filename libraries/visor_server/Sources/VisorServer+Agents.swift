@@ -75,6 +75,7 @@ extension VisorServer {
     func archive(_ record: SessionRecord) {
         Self.log("session archived: \(record.info.title)")
         record.process.stop()
+        if record.driven { containerRunner.release(session: record.info.id) }
         record.refreshResume()
         record.setArchived(true)
         removeSessionTokenFile(of: record.info.id)
