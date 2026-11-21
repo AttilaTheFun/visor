@@ -1105,7 +1105,10 @@ container agents.
     `Visor-Disk-Utility-<version>-macos.zip` (no disk image), with its own
     builds.json line (tools/ci/sign_builds.sh); `alpha-launch` and
     `release-launch` check it's signed and opens
-    (tools/ci/mac_app_opens.sh). The agent
+    (tools/ci/mac_app_opens.sh). So is Visor Client
+    (applications/visor_macos, sandboxed: docs/visor-client.md),
+    `Visor-Client-<version>-macos.zip`, checked sandboxed too
+    (`mac_app_opens.sh --sandboxed`). The agent
     image of that version follows when tools/containers/ changed
     (`agent-image`, built with buildah on GitHub's arm64 Ubuntu, arm64
     alone). A branch's builds are experiments only (Logan, 12 Nov 2026):
