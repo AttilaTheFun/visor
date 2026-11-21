@@ -7,12 +7,17 @@
 //   store/initfs/<digest>.ext4          the init filesystem, unpacked from vminit
 //   templates/<digest>-<GiB>.ext4       the agent image's root filesystem, unpacked once
 //   tools/<visor version>/              Visor's Linux programs, copied out of the app
+//   sessions/rootfs.ext4, rootfs.json   the Sessions container's root filesystem (a clone
+//                                       of the template) and the image it was cloned from
+//   sessions/boot.log                   the guest's console, each boot
+//   sessions/logs/<process>.log         each process exec'd in it
 //
 // TODO(case sensitivity, still open with Logan): where the sessions'
 // checkouts live in the container. Sessions is case-insensitive on both
 // Macs today and virtiofs passes that on; the proposal is a third,
 // case-sensitive APFS volume (`/Volumes/Work`) made by Visor Disk Utility.
-// Nothing here decides it: the engine (PR 2) mounts Sessions alone.
+// Nothing here decides it: the engine mounts Sessions, and the checkouts'
+// folder only where the settings name one (ContainerSettings.checkouts).
 
 import DiskVolumes
 import Foundation
@@ -62,6 +67,22 @@ public struct ContainerLayout: Equatable, Sendable {
     public func tools(version: String) -> URL? {
         guard !version.isEmpty, version != ".", version != "..", !version.contains("/"), !version.contains("\0") else { return nil }
         return toolsRoot.appendingPathComponent(version, isDirectory: true)
+    }
+
+    /// The Sessions container's own: its root filesystem, its record, its
+    /// boot log and its processes' logs.
+    public var sessionsFolder: URL { root.appendingPathComponent("sessions", isDirectory: true) }
+    public var rootfs: URL { sessionsFolder.appendingPathComponent("rootfs.ext4") }
+    /// Which image the root filesystem was cloned from (RootfsRecord).
+    public var rootfsRecord: URL { sessionsFolder.appendingPathComponent("rootfs.json") }
+    public var bootLog: URL { sessionsFolder.appendingPathComponent("boot.log") }
+    public var logs: URL { sessionsFolder.appendingPathComponent("logs", isDirectory: true) }
+
+    /// A process's log, by its id (letters, digits, `-`, `_` and `.`; any
+    /// other character a `_`).
+    public func log(process id: String) -> URL {
+        let safe = String(id.map { $0.isASCII && ($0.isLetter || $0.isNumber || "-_.".contains($0)) ? $0 : "_" })
+        return logs.appendingPathComponent("\(safe.isEmpty || safe.hasPrefix(".") ? "_" + safe : safe).log")
     }
 
     /// A digest's hex digits (`sha256:` dropped).

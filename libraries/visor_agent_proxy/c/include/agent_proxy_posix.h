@@ -18,6 +18,17 @@ int agent_proxy_listen(unsigned short port, int everywhere);
 /// at once). -1 with errno set.
 int agent_proxy_listen6(unsigned short port);
 
+/// A Unix socket listening at `path` (a file there already removed first;
+/// close-on-exec, mode 0600): the container's relay's host end
+/// (VisorContainerCore's HostRelay). -1 with errno set (ENAMETOOLONG for a
+/// path that doesn't fit).
+int agent_proxy_listen_unix(const char *path);
+
+/// A connection to the Unix socket at `path` (close-on-exec, its writes
+/// given up after 30 seconds of a peer that reads nothing). -1 with errno
+/// set.
+int agent_proxy_connect_unix(const char *path);
+
 /// A TCP connection to `host` (a name or an address) at `port`
 /// (close-on-exec, its writes given up after 30 seconds of a peer that
 /// reads nothing). -1 with errno set.

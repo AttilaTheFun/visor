@@ -1,5 +1,6 @@
 // relay-client run [--relay <socket>] [--port <n>] [--no-setup] -- <command…>
 // relay-client check <host>:<port> [--send <text>]
+// relay-client check [--relay <socket>]
 //
 // The container's helper (Visor's docs/server-proxy.md, "Containers: no
 // network"): the container has no network, only the relay's socket to
@@ -23,6 +24,7 @@ public enum RelayClientCommand {
     static let usage = """
         Usage: relay-client run [--relay <socket>] [--port <n>] [--no-setup] -- <command…>
                relay-client check <host>:<port> [--send <text>]
+               relay-client check [--relay <socket>]
 
           --relay     The relay's socket (/run/agent-proxy/relay.sock; MultiPass's
                       /run/multipass/relay.sock where only that is there).
@@ -33,6 +35,9 @@ public enum RelayClientCommand {
         check resolves a name and connects to it as any program in the container
         would (through the relay, once run has set things up), sending --send's
         text and showing what comes back. Its status is 0 if all went through.
+        With no <host>:<port>, check asks agent-proxy's health over the relay's
+        socket itself (nothing resolved, nothing on the internet): 0 when
+        agent-proxy answers.
         """
 
     static let log: @Sendable (String) -> Void = { FileHandle.standardError.write(Data("relay-client: \($0)\n".utf8)) }
@@ -41,6 +46,11 @@ public enum RelayClientCommand {
     /// answers the status to exit with.
     public static func main(_ commandLine: [String]) async -> Int32 {
         var arguments = Array(commandLine.dropFirst())
+        if arguments.first == "check", arguments.count == 1 || (arguments.count == 3 && arguments[1] == "--relay") {
+            let (ok, line) = RelayHealthCheck.run(path: arguments.count == 3 ? arguments[2] : RelayDialer.defaultPath)
+            print(line)
+            return ok ? 0 : 1
+        }
         if arguments.first == "check" {
             let target = arguments.count >= 2 ? arguments[1] : ""
             let send = arguments.count == 4 && arguments[2] == "--send" ? arguments[3] : nil

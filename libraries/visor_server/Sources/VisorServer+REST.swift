@@ -56,6 +56,10 @@ extension VisorServer {
         if request.method == "POST", parts.first == "import", parts.count <= 2, authorized(request) {
             return routeImport(request, parts: parts, respond: respond)
         }
+        // The Sessions container (VisorServer+Container).
+        if parts.first == "container", authorized(request) {
+            return routeContainer(request, parts: parts, respond: respond)
+        }
         // Sessions backed up to a folder here, and restored from one.
         if parts.first == "backups", authorized(request) {
             return routeBackups(request, parts: parts, respond: respond)

@@ -17,6 +17,7 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/time.h>
+#include <sys/un.h>
 #include <unistd.h>
 
 int agent_proxy_listen(unsigned short port, int everywhere) {
@@ -58,6 +59,45 @@ int agent_proxy_listen6(unsigned short port) {
         return -1;
     }
     return listener;
+}
+
+int agent_proxy_listen_unix(const char *path) {
+    struct sockaddr_un address;
+    if (strlen(path) >= sizeof address.sun_path) { errno = ENAMETOOLONG; return -1; }
+    int listener = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (listener < 0) return -1;
+    (void)fcntl(listener, F_SETFD, FD_CLOEXEC);
+    memset(&address, 0, sizeof address);
+    address.sun_family = AF_UNIX;
+    strncpy(address.sun_path, path, sizeof address.sun_path - 1);
+    (void)unlink(path);
+    if (bind(listener, (struct sockaddr *)&address, sizeof address) != 0 || chmod(path, 0600) != 0 || listen(listener, 64) != 0) {
+        int error = errno;
+        close(listener);
+        errno = error;
+        return -1;
+    }
+    return listener;
+}
+
+int agent_proxy_connect_unix(const char *path) {
+    struct sockaddr_un address;
+    if (strlen(path) >= sizeof address.sun_path) { errno = ENAMETOOLONG; return -1; }
+    int connection = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (connection < 0) return -1;
+    (void)fcntl(connection, F_SETFD, FD_CLOEXEC);
+    memset(&address, 0, sizeof address);
+    address.sun_family = AF_UNIX;
+    strncpy(address.sun_path, path, sizeof address.sun_path - 1);
+    if (connect(connection, (struct sockaddr *)&address, sizeof address) != 0) {
+        int error = errno;
+        close(connection);
+        errno = error;
+        return -1;
+    }
+    struct timeval patience = {30, 0};
+    setsockopt(connection, SOL_SOCKET, SO_SNDTIMEO, &patience, sizeof patience);
+    return connection;
 }
 
 // The egress policy (NCH's review of #414): what an agent's connection may

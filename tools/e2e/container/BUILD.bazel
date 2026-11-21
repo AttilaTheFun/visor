@@ -1,0 +1,34 @@
+load("@rules_swift//swift:swift.bzl", "swift_binary")
+load("//tools/swift:defs.bzl", "STRICT_SWIFT")
+
+# The Sessions container booted for real (docs/containers.md), end to end,
+# on a throwaway data folder: its assets fetched into a scratch Containers
+# folder, agent-proxy's relay listener started in this process on a free
+# loopback port, the container engine's boot (no network, Sessions shared,
+# relay-client its main process), `relay-client check` through the relay,
+# `uname`, a file written to /Volumes/Sessions/<scratch> and read back
+# both ways, no LAN from the guest; then stopped and everything deleted.
+#
+# Bare metal only: a Mac with Apple silicon and macOS 26 or later where
+# Virtualization can make a VM (never a macOS VM lease, which can't nest).
+# It needs the virtualization entitlement, which a command-line program of
+# Bazel's can't be given (rules_apple's have none), so it signs a copy of
+# itself ad hoc with it, in /tmp, and runs that (SelfSigning).
+#
+#   bazel run //tools/e2e/container --config=apple_cross_mac -- --linux <Linux programs folder> --image <visor-agent@sha256:…>
+swift_binary(
+    name = "container",
+    srcs = glob(["Sources/*.swift"]),
+    copts = STRICT_SWIFT,
+    module_name = "ContainerEndToEnd",
+    target_compatible_with = ["@platforms//os:macos"],
+    deps = [
+        "//:foundation",
+        "//libraries/visor_agent_proxy",
+        "//libraries/visor_agent_proxy:visor_agent_proxy_host",
+        "//libraries/visor_container",
+        "//libraries/visor_container:visor_container_core",
+        "//libraries/visor_protocol",
+        "//libraries/visor_server",
+    ],
+)

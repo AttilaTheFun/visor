@@ -64,7 +64,14 @@ public final class VisorServer {
                 fillMCPSwitches()
                 broadcastSessions()
             }
+            if settings.container != oldValue.container || settings.agentProxy != oldValue.agentProxy { containerSettingsChanged() }
         }
+    }
+    /// The Sessions container's engine (VisorServer+Container), given by a
+    /// Mac's background server; none elsewhere. Told of the settings as
+    /// it's given.
+    public var sessionsContainer: (any SessionsContainer)? {
+        didSet { containerSettingsChanged() }
     }
     /// What each client connected here last said it is connected to, by
     /// the client's id (VisorServer+Directory.swift).

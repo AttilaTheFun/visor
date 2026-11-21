@@ -2,7 +2,9 @@
 // background agent). Visor.app's own executable run headless by this
 // user's launchd (ServerAgentJob, settled by the app: LocalServer), with no
 // AppKit UI: the same server the app runs (MacServer), with agent-proxy
-// inside it (MacAgentProxy.foldIn), restarted and updated by launchd
+// inside it (MacAgentProxy.foldIn) and the Sessions container's engine
+// (MacSessionsContainer, its VM in this process: an update restarts it),
+// restarted and updated by launchd
 // (ServerAgentRestart). Its lines go to the system log, as the app's do, and
 // to standard error, which launchd points at ~/Library/Logs/Visor-server.log.
 //
@@ -56,7 +58,16 @@ enum MacServerAgent {
         if !server.listening, server.password.isEmpty, !server.settings.asksNothing {
             log("the server agent has no password: it serves once one is set")
         }
-        Task { await MacAgentProxy.foldIn(server) }
+        // The Sessions container's engine (docs/containers.md): given first,
+        // so turning it on has given agent-proxy its relay port before
+        // agent-proxy is folded in; started again once it is, if a session
+        // is placed in it.
+        let container = MacSessionsContainer(settings: server.settings)
+        server.sessionsContainer = container
+        Task {
+            await MacAgentProxy.foldIn(server)
+            await container.engine.serverStarted()
+        }
         RunLoop.main.run()
         exit(0)
     }
