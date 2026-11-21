@@ -5,8 +5,9 @@
 # relay-client's, the Disk Utility's volume model's, the server agent's
 # launchd job, hand-over and restart watch (visor_launch_agent_tests),
 # the Sessions container's assets' core (visor_container_tests: no
-# Containerization, which is the Mac's alone), and the client link's protos
-# (visor_client_proto_tests).
+# Containerization, which is the Mac's alone), the client link's protos
+# (visor_client_proto_tests), and Visor Client's entitlements
+# (visor_macos_tests: plists, read on Linux as anywhere).
 test_suite(
     name = "linux",
     tests = [
@@ -19,6 +20,7 @@ test_suite(
         "//tests/visor_disk_volumes_tests",
         "//tests/visor_driver_tests",
         "//tests/visor_launch_agent_tests",
+        "//tests/visor_macos_tests",
         "//tests/visor_server_tests:visor_server_linux_tests",
         "//tests/visor_services_tests",
     ],

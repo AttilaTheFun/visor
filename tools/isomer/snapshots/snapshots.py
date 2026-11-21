@@ -533,21 +533,26 @@ class MacOS:
         # zipfile drops the executable bits
         sh(["chmod", "-R", "u+x", os.path.join(self.app, "Contents", "MacOS")])
         mac = mac_lease()
-        guest("pkill -x Visor; rm -rf ~/Applications/Visor.app; mkdir -p ~/Applications", check=False)
+        # Visor Client (applications/visor_macos), sandboxed: its saved state
+        # and defaults are in its container.
+        guest("pkill -x 'Visor Client'; rm -rf ~/Applications/Visor\\ Client.app /tmp/visor-client-snapshot.app; mkdir -p ~/Applications", check=False)
         subprocess.run(guest_ssh(mac) + ["cat > /tmp/windows.js"], input=WINDOWS_JS.encode(), check=True)
         subprocess.run(["scp", "-rq", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
-                        "-o", "LogLevel=ERROR", "-o", "IdentitiesOnly=yes", "-i", mac["key"], "-P", mac["port"], self.app, f"{mac['target']}:Applications/Visor.app"], check=True)
+                        "-o", "LogLevel=ERROR", "-o", "IdentitiesOnly=yes", "-i", mac["key"], "-P", mac["port"], self.app, f"{mac['target']}:/tmp/visor-client-snapshot.app"], check=True)
+        # Moved into place by a shell: scp's remote path is left with no space in it.
+        guest("rm -rf ~/Applications/Visor\\ Client.app; mv /tmp/visor-client-snapshot.app ~/Applications/Visor\\ Client.app")
     def capture(self, screen, out):
         # A fresh window each time: no restored frame or state.
-        guest("pkill -x Visor; sleep 1; rm -rf ~/Library/Saved\\ Application\\ State/com.LoganShire.VisorClient.macOS.savedState; "
-              "defaults delete com.LoganShire.VisorClient.macOS 'NSWindow Frame main' 2>/dev/null; "
-              + as_user(f"open ~/Applications/Visor.app --args -visor.fixture snapshot -visor.fixture.screen {screen}"), check=False)
+        library = "~/Library/Containers/com.LoganShire.VisorClient.macOS/Data/Library"
+        guest(f"pkill -x 'Visor Client'; sleep 1; rm -rf {library}/Saved\\ Application\\ State/com.LoganShire.VisorClient.macOS.savedState; "
+              f"defaults delete {library}/Preferences/com.LoganShire.VisorClient.macOS 'NSWindow Frame main' 2>/dev/null; "
+              + as_user(f"open ~/Applications/Visor\\ Client.app --args -visor.fixture snapshot -visor.fixture.screen {screen}"), check=False)
         time.sleep(SETTLE)
         windows = guest(as_user("osascript -l JavaScript /tmp/windows.js")).stdout.splitlines()
         rows = [line.split("\t") for line in windows]
         # The app's largest window: its main one, with any sheet over it (a
         # sheet is a window of its own, in front).
-        x, y, width, height = max((tuple(int(float(v)) for v in row[2:6]) for row in rows if row[:2] == ["Visor", "0"]),
+        x, y, width, height = max((tuple(int(float(v)) for v in row[2:6]) for row in rows if row[:2] == ["Visor Client", "0"]),
                                   key=lambda frame: frame[2] * frame[3])
         # The menu bar spans the screen: its width in points against the
         # screenshot's in pixels is the screen's scale.
@@ -560,7 +565,7 @@ class MacOS:
             "--cropOffset", str(y * scale), str(x * scale), whole, "--out", out])
         remove(whole)
     def finish(self):
-        guest("pkill -x Visor; true", check=False)
+        guest("pkill -x 'Visor Client'; true", check=False)
 
 KINDS = {"web-mobile": WebMobile, "red-ios": RedIOS, "android": Android, "android-lab": AndroidLab,
          "android-lab-landscape": AndroidLabLandscape, "web-desktop": WebDesktop, "macos": MacOS}

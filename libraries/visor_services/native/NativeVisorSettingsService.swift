@@ -57,7 +57,44 @@ public final class NativeVisorSettingsService: VisorSettingsService {
         else { defaults.set(value, forKey: "visor." + key) }
     }
 
+    /// Everything kept here forgotten: every setting (the `visor.` keys,
+    /// and with `domain` the whole of that defaults domain, the app's own)
+    /// and every secret, the keychain's under the service where there is
+    /// one, in the group and out of it. Settings' Forget Everything (Visor
+    /// Client on the Mac), before the app quits.
+    public func forgetEverything(domain: String? = nil) {
+        launch = [:]
+        for key in defaults.dictionaryRepresentation().keys where key.hasPrefix("visor.") {
+            defaults.removeObject(forKey: key)
+        }
+        if let domain { defaults.removePersistentDomain(forName: domain) }
+        #if canImport(Security)
+        forgetSecrets()
+        #endif
+    }
+
     #if canImport(Security)
+    /// Every generic password under the service: the group's (the
+    /// data-protection keychain's) and the login keychain's, where a build
+    /// without the group kept them. One at a time until none is left, as a
+    /// Mac's login keychain may delete only the first that matches.
+    private func forgetSecrets() {
+        var queries: [[String: Any]] = [[kSecClass as String: kSecClassGenericPassword,
+                                         kSecAttrService as String: keychainService]]
+        if let keychainGroup {
+            queries.append([kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: keychainService,
+                            kSecAttrAccessGroup as String: keychainGroup, kSecUseDataProtectionKeychain as String: true])
+        }
+        for query in queries {
+            for _ in 0..<1_000 {
+                let status = SecItemDelete(query as CFDictionary)
+                if status == errSecSuccess { continue }
+                if status != errSecItemNotFound { Self.problem("delete", "*", status) }
+                break
+            }
+        }
+    }
+
     /// Secrets in the keychain, a generic password per key under the app's
     /// bundle id. The app that wrote one reads it without asking, as long
     /// as it is signed the same way (a stable signature, not ad hoc).
