@@ -24,7 +24,9 @@ public enum VisorFixture {
     /// chat, with rows coming in twelve and twenty-six seconds on, or
     /// from `goFile`'s coming) and
     /// burst (eight long rows at once, eight seconds on),
-    /// responding (the chat with a reply being written: `responding`),
+    /// turn (the chat with a turn going through its states, then its
+    /// reply's row: `turnSteps`), turn-tool, turn-subagents and
+    /// turn-background (the chat held in one state: `stillTurn`),
     /// and super-compact-running, -review and -done (Super Compact's
     /// sheet over the chat: its job running, done for review, cut over).
     /// A session to open a few seconds after launch, for a recording of
@@ -103,6 +105,13 @@ public enum VisorFixture {
         var chat = session(chatSession, .claude, "/Users/visor/Developer/weather", "Offline sync",
                            model: "opus", preview: "Rows now sync in the background; waiting for your approval to run the tests.", age: 60)
         chat.goal = "Rows written offline are all on the server after reconnecting"
+        // On the turn screens, the chat's turn as the list has it.
+        if screen == "turn" || stillTurn != nil {
+            let turn = stillTurn ?? turnSteps[0]
+            chat.busy = turn.waits.first?.kind != .background
+            chat.turn = turn
+            if !chat.busy { chat.background = [StatusItem(id: "b1c43c1za", kind: .monitor, label: "CI checks on PR #92", running: true)] }
+        }
         // Past what 32 bits hold, as a long session's count is: the web's
         // `Int` is 32 bits, and a client there must take it.
         chat.usage = SessionUsage(input: 3_302_964_500, cached: 3_100_000_000, output: 36_400, cost: 6.42)
@@ -252,18 +261,32 @@ public enum VisorFixture {
         TranscriptEntry(id: "f9", role: .assistant, text: "Rows now sync in the background, and the banner matches your layout. I'd like to run the tests next."),
     ]
 
-    /// The responding screen's reply: its words so far when the chat
-    /// opens, the rest as they come (`respondingDeltasAfter` on, a few a
-    /// second), and its row on the record (`respondingRowAfter` after the
-    /// last), whose words end with what the stream never had.
-    static let responding = (
-        id: "msg_fixture_reply",
-        start: "Running the sync tests now.",
-        deltas: [" All 42", " sync tests", " pass,", " offline rows", " included,", " and the banner", " shows how many"],
-        final: "Running the sync tests now. All 42 sync tests pass, offline rows included, and the banner shows how many are still waiting."
-    )
-    static let respondingDeltasAfter: UInt64 = 4_000_000_000
-    static let respondingRowAfter: UInt64 = 4_000_000_000
+    /// The turn screen's turn, a state every `turnStep` from the chat's
+    /// opening (thinking, as it opens): responding, running the tests,
+    /// two subagents, responding again; then the turn's end, and its
+    /// reply's row (`turnReply`) with the sync `turnStep` after.
+    static let turnSteps: [TurnState] = [
+        TurnState(.thinking),
+        TurnState(.responding),
+        TurnState(.waiting, waits: [TurnWait(kind: .tool, id: "toolu_tests", label: "Bash: swift test --filter SyncTests", work: .shell)]),
+        TurnState(.waiting, waits: [TurnWait(kind: .subagent, id: "toolu_a", label: "Review the sync queue", work: .subagent),
+                                    TurnWait(kind: .subagent, id: "toolu_b", label: "Check the banner's copy", work: .subagent)]),
+        TurnState(.responding),
+    ]
+    static let turnStep: UInt64 = 1_500_000_000
+    static let turnReply = TranscriptEntry(id: "msg_fixture_reply", role: .assistant,
+                                           text: "All 42 sync tests pass, offline rows included, and the banner shows how many are still waiting.")
+
+    /// The state a turn-‹state› screen holds the chat in; nil on any other.
+    @MainActor static var stillTurn: TurnState? {
+        switch screen {
+        case "turn-tool": turnSteps[2]
+        case "turn-subagents": turnSteps[3]
+        case "turn-background":
+            TurnState(.waiting, waits: [TurnWait(kind: .background, id: "b1c43c1za", label: "CI checks on PR #92", work: .monitor)])
+        default: nil
+        }
+    }
 
     /// The question the question screen's chat waits on (AskUserQuestion).
     static let question = ApprovalRequest(

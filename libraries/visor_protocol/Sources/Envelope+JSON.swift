@@ -25,7 +25,6 @@ extension Envelope {
         e.skipPermissions = value["skipPermissions"].bool
         e.session = value["session"].string
         e.text = value["text"].string
-        e.from = value["from"].int
         e.sessions = value["sessions"].array?.compactMap(SessionInfo.init(json:))
         e.catalogs = value["catalogs"].array?.compactMap(AgentCatalog.init(json:))
         e.account = AgentAccount(json: value["account"])
@@ -67,10 +66,7 @@ extension Envelope {
         e.questions = value["questions"].array?.compactMap(AgentQuestion.init(json:))
         if case .object(let map) = value["answers"] { e.answers = map.compactMapValues(\.string) }
         e.status = value["status"].array?.compactMap(StatusItem.init(json:))
-        e.streams = value["streams"].array?.compactMap { item in
-            guard let id = item["id"].string, let text = item["text"].string else { return nil }
-            return StreamChunk(id: id, text: text)
-        }
+        e.turn = TurnState(json: value["turn"])
         e.images = value["images"].array?.compactMap(\.string)
         e.folders = value["folders"].array?.compactMap(\.string)
         e.addresses = value["addresses"].array?.compactMap(\.string)
@@ -115,7 +111,6 @@ extension Envelope {
         put("agent", agent?.rawValue); put("cwd", cwd); put("title", title); put("runsOn", runsOn)
         putBool("skipPermissions", skipPermissions)
         put("session", session); put("text", text)
-        if let from { o["from"] = .number(Double(from)) }
         if let sessions { o["sessions"] = .array(sessions.map(\.json)) }
         if let catalogs { o["catalogs"] = .array(catalogs.map(\.json)) }
         if let account { o["account"] = account.json }
@@ -148,7 +143,7 @@ extension Envelope {
         if let questions { o["questions"] = .array(questions.map(\.json)) }
         if let answers { o["answers"] = .object(answers.mapValues(JSONValue.string)) }
         if let status { o["status"] = .array(status.map(\.json)) }
-        if let streams { o["streams"] = .array(streams.map { .object(["id": .string($0.id), "text": .string($0.text)]) }) }
+        if let turn { o["turn"] = turn.json }
         if let images, !images.isEmpty { o["images"] = .array(images.map(JSONValue.string)) }
         if let folders { o["folders"] = .array(folders.map(JSONValue.string)) }
         if let addresses { o["addresses"] = .array(addresses.map(JSONValue.string)) }

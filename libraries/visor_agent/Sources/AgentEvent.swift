@@ -3,9 +3,14 @@ import Synchronization
 import VisorProtocol
 
 public enum AgentEvent: Sendable {
-    /// More of the reply being written.
-    /// Words streamed for the assistant message with this id.
+    /// More of the reply being written: words streamed for the assistant
+    /// message with this id. The server takes them only as a sign that
+    /// the agent is responding (TurnState); the words come with the
+    /// message's row.
     case delta(message: String, text: String)
+    /// The agent has the message it was sent, and its turn has begun (or
+    /// one it began itself has): no longer sending.
+    case turnBegan
     /// What the agent is doing now, or nothing (one line, for a list).
     case activity(String?)
     /// The model is thinking, or has stopped.

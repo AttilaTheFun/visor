@@ -66,6 +66,12 @@ public struct SessionInfo: Codable, Identifiable, Hashable, Sendable {
     /// between turns — a monitor, a command, a subagent — as the agent
     /// reports the list; empty when nothing is.
     public var background: [StatusItem] = []
+    /// Where its turn stands (sending, thinking, responding, waiting on
+    /// something), for the list's line under a session at work; nil when
+    /// idle, and from a server of 0.64.1 or before (a client reads it from
+    /// `busy`, `pendingApproval` and `background` then). Never read back
+    /// from the store: a turn doesn't outlive the server that saw it.
+    public var turn: TurnState?
     /// How much memory the agent and what it runs are using, in bytes, as
     /// its host last said; nil where the agent has no host, or is not
     /// running.

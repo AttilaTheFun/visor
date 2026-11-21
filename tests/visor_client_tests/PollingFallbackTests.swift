@@ -17,7 +17,7 @@ import XCTest
 final class PollingHTTP: VisorHTTPService {
     var sessions: [SessionInfo] = [SessionInfo(id: "s1", agent: .claude, cwd: "/tmp", title: "One", created: 0)]
     var listRevision = 3
-    var state = Envelope.ephemeral(session: "s1", streams: [], status: [], activity: nil, busy: false, approval: nil, queued: [], notice: nil)
+    var state = Envelope.ephemeral(session: "s1", turn: .idle, status: [], activity: nil, busy: false, approval: nil, queued: [], notice: nil)
     var stateRevision = 7
     private(set) var asked: [String] = []
     /// Polls held for the next change, by the path asked.
