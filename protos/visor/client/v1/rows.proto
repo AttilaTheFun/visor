@@ -1,0 +1,82 @@
+// A session's record: its rows, as the agent's own log has them, read
+// into the server's SQLite and synced by revision and generation. Pulled,
+// as the REST side's `GET /sessions/<id>/transcript` and `earlier` are
+// (docs/protocol.md): Sessions.Sync and Sessions.Earlier.
+syntax = "proto3";
+
+package visor.client.v1;
+
+// One row of the thread: what AgentUI's TranscriptMessage carries
+// (VisorProtocol's TranscriptEntry).
+message Row {
+  enum Role {
+    ROLE_UNSPECIFIED = 0;
+    ROLE_USER = 1;
+    ROLE_ASSISTANT = 2;
+    ROLE_TOOL = 3;
+  }
+  string id = 1;
+  Role role = 2;
+  string text = 3;
+  // An assistant row's tool calls, as activity labels ("Bash: ls").
+  repeated string activities = 4;
+  // A tool result's tool name; empty for any other row.
+  string tool_name = 5;
+  // Pictures that came with the row, as paths on the server's computer,
+  // and their sizes in pixels, in the same order (fewer when one isn't
+  // known).
+  repeated string images = 6;
+  repeated ImageSize image_sizes = 7;
+}
+
+message ImageSize {
+  int32 width = 1;
+  int32 height = 2;
+}
+
+// The rows past the revision a client holds.
+message SyncRequest {
+  string session = 1;
+  // What the client holds: the revision and generation of its rows (0 and
+  // 0 for none). Another generation than the server's is answered whole.
+  int64 revision = 2;
+  int64 generation = 3;
+  // A client catching up a page at a time: the last row of the page it
+  // took (empty for the first page).
+  string after = 4;
+  // Held until the rows move past `revision` (or for a while), as the
+  // REST side's sync is; false answers at once.
+  bool wait = 5;
+}
+
+message SyncResponse {
+  // The rows' revision and generation as the server has them.
+  int64 revision = 1;
+  int64 generation = 2;
+  // The rows new, changed or moved since the revision asked about, each
+  // with the row it follows in `follow` ("" for the first); or, with
+  // `reset`, the latest rows whole.
+  repeated Row rows = 3;
+  repeated string follow = 4;
+  // The rows removed since the revision asked about.
+  repeated string removed = 5;
+  // The rows are the whole, not a delta: the client replaces what it holds.
+  bool reset = 6;
+  // More changed rows follow these: asked for again with `after`.
+  bool later = 7;
+  // In a whole answer, the row its first row follows ("" when it is the
+  // thread's first; unset when not known).
+  optional string follows = 8;
+}
+
+// The rows before one, of a thread served from its end.
+message EarlierRequest {
+  string session = 1;
+  string before = 2;
+}
+
+message EarlierResponse {
+  repeated Row rows = 1;
+  // The thread goes back further than these.
+  bool more = 2;
+}

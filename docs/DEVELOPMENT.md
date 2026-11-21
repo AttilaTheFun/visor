@@ -32,6 +32,15 @@ Swift package, by version in third_party/swift_packages like agent_ui),
 rules_swift_package_manager (rspm) brings SwiftPM packages into Bazel as `@swiftpkg_<identity>` — the
 identity keeps its dot: `@swiftpkg_agent_ui//:AgentUI`.
 
+The client's gRPC link (from 0.64) is protos/visor/client/v1. Bazel
+generates its Swift as it builds: `swift_proto_library`
+(libraries/visor_client_proto) with tools/proto's compilers, the plugins
+from the SwiftPM graph and protobuf's prebuilt protoc
+(`--incompatible_enable_proto_toolchain_resolution`). SwiftPM builds a
+copy that is kept in libraries/visor_client_proto/Sources. After a proto
+changes, write it again with `bazel run //tools/proto:generate`; `--check`
+fails when the copy differs from what the protos make.
+
 ## 2. Setting up a Mac
 
 1. Xcode 27 with the iOS 27 runtime; `xcode-select` to it. Bazelisk
