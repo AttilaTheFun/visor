@@ -43,10 +43,12 @@ struct MenuContent: View {
             }
             Text("\(server.clientCount) client\(server.clientCount == 1 ? "" : "s") connected")
             Divider()
-            if server.sessions.isEmpty {
-                Text("No sessions")
+            // The active sessions alone, as Visor.app's menu lists them.
+            let active = server.sessions.filter { !$0.info.archived }
+            if active.isEmpty {
+                Text("No active sessions")
             } else {
-                ForEach(server.sessions, id: \.info.id) { session in
+                ForEach(active, id: \.info.id) { session in
                     Text("\(session.info.agent.title): \(session.info.title.isEmpty ? session.info.cwd : session.info.title)\(session.info.busy ? " …" : "")")
                 }
             }
