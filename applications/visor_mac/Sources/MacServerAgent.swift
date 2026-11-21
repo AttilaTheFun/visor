@@ -13,7 +13,7 @@
 // and not mounted, it ends, for launchd to start it again.
 //
 // `Visor server-agent register`: the agent registered afresh with
-// SMAppService from this bundle (booted out, then registered:
+// SMAppService from this bundle (unregistered, booted out, then registered:
 // ServerAgentService.reregister), for the update's watcher after an update
 // or a rollback, when SMAppService's launch constraint still names the
 // bundle that was replaced.
@@ -47,7 +47,7 @@ enum MacServerAgent {
         run()
     }
 
-    /// Registered afresh from this bundle (booted out, then registered:
+    /// Registered afresh from this bundle (unregistered, booted out, then registered:
     /// ServerAgentService.reregister), which starts it; ends.
     private static func register() -> Never {
         let bundleID = MacPlaces.own

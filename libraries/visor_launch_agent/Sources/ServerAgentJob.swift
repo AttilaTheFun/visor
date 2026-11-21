@@ -124,17 +124,22 @@ public enum ServerAgentJob {
         return .start
     }
 
-    /// The agent registered afresh: out of launchd first (`stop`: launchctl
-    /// bootout, waited for), then registered (`register`: SMAppService,
-    /// which starts it); what went wrong, or nil. The one way it's started
-    /// once its bundle may have changed (ServerAgentService.reregister): an
-    /// update to another build, a rollback to the one before, a start of a
-    /// registered job that isn't running. SMAppService's launch constraint
-    /// is the bundle registered: launchd won't spawn the job from a bundle
-    /// put in its place (`spawn failed`, 78, "needs LWCR update") until it's
-    /// booted out and registered again (NCH's check of #491); registering
-    /// alone isn't enough.
-    public static func reregister(stop: () async -> Void, register: () async -> String?) async -> String? {
+    /// The agent registered afresh: unregistered first (`unregister`:
+    /// SMAppService's, which drops its Background Items record), out of
+    /// launchd (`stop`: launchctl bootout, waited for), then registered
+    /// (`register`: SMAppService, which starts it); what went wrong, or nil.
+    /// The one way it's started once its bundle may have changed
+    /// (ServerAgentService.reregister): an update to another build, a
+    /// rollback to the one before, a start of a registered job that isn't
+    /// running. Registering records the bundle's code as the job's launch
+    /// constraint, and launchd won't spawn the job from another build put in
+    /// its place (`spawn failed`, "Launch Constraint Violation", exit 78,
+    /// "needs LWCR update": NCH's check of #491, and an update between two
+    /// ad hoc builds on macOS 27.0.1); a bootout and a register keep the
+    /// record, and its constraint, so it's unregistered first.
+    public static func reregister(unregister: () async -> Void, stop: () async -> Void,
+                                  register: () async -> String?) async -> String? {
+        await unregister()
         await stop()
         return await register()
     }

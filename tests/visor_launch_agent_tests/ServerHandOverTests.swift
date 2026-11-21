@@ -150,17 +150,18 @@ private actor FakeSteps: ServerHandOverSteps {
         #expect(await run(wanted: true, serving) == .agent(4242))
     }
 
-    /// Registering afresh is a bootout first, then the registration
-    /// (SMAppService's launch constraint is the bundle it was registered
-    /// from: after an update or a rollback, registering alone leaves
-    /// launchd unable to spawn it).
-    @Test func reregisteringBootsOutFirstThenRegisters() async {
+    /// Registering afresh is an unregister and a bootout first, then the
+    /// registration: the record SMAppService keeps holds the launch
+    /// constraint of the bundle it was registered from, so after an update
+    /// or a rollback a bootout and a register alone leave launchd unable to
+    /// spawn it.
+    @Test func reregisteringUnregistersAndBootsOutFirstThenRegisters() async {
         let calls = Calls()
-        let problem = await ServerAgentJob.reregister(stop: { await calls.add("bootout") },
+        let problem = await ServerAgentJob.reregister(unregister: { await calls.add("unregister") }, stop: { await calls.add("bootout") },
                                                       register: { await calls.add("register"); return nil })
         #expect(problem == nil)
-        #expect(await calls.all == ["bootout", "register"])
-        let refused = await ServerAgentJob.reregister(stop: {}, register: { "Operation not permitted" })
+        #expect(await calls.all == ["unregister", "bootout", "register"])
+        let refused = await ServerAgentJob.reregister(unregister: {}, stop: {}, register: { "Operation not permitted" })
         #expect(refused == "Operation not permitted")
     }
 }
