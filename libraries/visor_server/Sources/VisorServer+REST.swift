@@ -191,6 +191,7 @@ extension VisorServer {
         case ("POST", 2, "push") where parts[1] == "test": restTestPush(call)
         case ("POST", 1, "push"): restRegisterPushDevice(call)
         case ("POST", 2, "ssh") where parts[1] == "keys": restAuthorizeSSHKey(call)
+        case ("POST", 3, "ssh") where parts[1] == "keys" && parts[2] == "forget": restForgetSSHKey(call)
         case ("POST", 1, "restart"): restRestart(call)
         case ("GET", 1, "push-proxy"): restPushProxy(call)
         case ("PUT", 1, "push-proxy"): restSetPushProxy(call)
@@ -242,10 +243,19 @@ extension VisorServer {
     }
 
     /// A device's SSH public key (`text`), into this user's authorized
-    /// keys, so the device comes in over SSH next.
+    /// keys, so the device comes in over SSH next, tagged with the device's
+    /// name (`title`).
     private func restAuthorizeSSHKey(_ call: RESTCall) -> HTTPResponse {
         guard let line = call.body.text, !line.isEmpty else { return HTTPResponse(400, Envelope.error("A public key line is required").encoded()) }
-        if let problem = authorizeSSHKey(line) { return HTTPResponse(400, Envelope.error(problem).encoded()) }
+        if let problem = authorizeSSHKey(line, device: call.body.title) { return HTTPResponse(400, Envelope.error(problem).encoded()) }
+        return .json(Envelope(type: "ssh").encoded())
+    }
+
+    /// `POST /api/ssh/keys/forget {text}`: "Forget this device", its key
+    /// (`text`) taken out of the authorized keys where Visor added it.
+    private func restForgetSSHKey(_ call: RESTCall) -> HTTPResponse {
+        guard let line = call.body.text, !line.isEmpty else { return HTTPResponse(400, Envelope.error("A public key line is required").encoded()) }
+        if let problem = forgetSSHKey(line) { return HTTPResponse(400, Envelope.error(problem).encoded()) }
         return .json(Envelope(type: "ssh").encoded())
     }
 

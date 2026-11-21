@@ -47,7 +47,7 @@ import VisorProtocol
             }
         }
 
-        var layout: ContainerLayout { ContainerLayout(root: root.appendingPathComponent("Containers/Visor", isDirectory: true)) }
+        var layout: ContainerLayout { ContainerLayout(root: root.appendingPathComponent("Visor/Containers", isDirectory: true)) }
 
         func engine(sessions: String = "/Volumes/Sessions", driverPort: Int = 7434) -> ContainerEngine {
             let layout = layout

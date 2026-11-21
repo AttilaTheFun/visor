@@ -137,7 +137,7 @@ public struct AgentProxySettings: Codable, Equatable, Sendable {
     public var maxConnectionsPerLease: Int?
     /// Where each container connection is logged, a JSON line each; none:
     /// `agent-proxy/egress.log` in the server's data folder (on a Mac,
-    /// ~/Library/Logs/Visor-egress.log).
+    /// Visor-egress.log in Visor's logs: the Visor volume's Logs/, else ~/Library/Logs).
     public var egressLog: String?
     /// Where the GitHub authority's certificate is written for containers
     /// to trust; none: `agent-proxy/ca.pem` in the data folder.

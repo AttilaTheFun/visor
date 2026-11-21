@@ -14,11 +14,11 @@ variant_infoplist(
 )
 
 # Visor Disk Utility: a small app of its own, beside Visor.app (Logan, 19
-# Nov 2026), that makes and adopts the two APFS volumes Visor's container
-# runner uses, Sessions and Containers (libraries/visor_disk_volumes), with
-# macOS's administrator prompt for diskutil, and writes volumes.json for
-# Visor. Its command line (`status`, `create`, `erase-containers`) runs the
-# same code, for scripts and test machines.
+# Nov 2026), that makes and adopts the three APFS volumes Visor keeps what
+# is its own on, Sessions, Sources and Visor (libraries/visor_disk_volumes),
+# with macOS's administrator prompt for diskutil, and writes volumes.json
+# for Visor. Its command line (`status`, `create`, `erase-containers`) runs
+# the same code, for scripts and test machines.
 swift_library(
     name = "disk_utility_lib",
     copts = STRICT_SWIFT,

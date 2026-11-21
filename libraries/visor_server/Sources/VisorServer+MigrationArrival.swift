@@ -12,14 +12,17 @@ import VisorSystem
 
 extension VisorServer {
     /// Where a session moved here works when the server keeps no folder for
-    /// each session (VISOR_SESSIONS_DIR): a folder of its own under Visor's
-    /// data folder, <data>/Sessions/<agent>/<id>, as SessionFolders makes
-    /// them.
+    /// each session (VISOR_SESSIONS_DIR) and is given no `arrivalRoot` (the
+    /// Sessions volume): a folder of its own under Visor's data folder,
+    /// <data>/Sessions/<agent>/<id>, as SessionFolders makes them.
     static var movedSessionsFolder: URL { HostFolders.dataFolder.appendingPathComponent("Sessions", isDirectory: true) }
 
     /// The folders sessions moved here are made in: the server's own for
-    /// each session, else under movedSessionsFolder.
-    var arrivalFolders: SessionFolders { sessionFolders ?? SessionFolders(sessions: Self.movedSessionsFolder.path) }
+    /// each session, else under `arrivalRoot` (`/Volumes/Sessions/Claude/<id>`
+    /// on a Mac with the Sessions volume), else under movedSessionsFolder.
+    var arrivalFolders: SessionFolders {
+        sessionFolders ?? SessionFolders(sessions: arrivalRoot ?? Self.movedSessionsFolder.path)
+    }
 
     /// What this server will do with the session offered (`offer`): the
     /// session's id here, and its new, empty folder made of it (`cwd`),

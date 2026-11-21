@@ -40,6 +40,7 @@ swift_binary(
         "//libraries/visor_container",
         "//libraries/visor_container:visor_container_core",
         "//libraries/visor_container:visor_container_runner",
+        "//libraries/visor_disk_volumes",
         "//libraries/claude_transcript",
         "//libraries/visor_agent",
         "//libraries/visor_driver",

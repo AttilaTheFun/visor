@@ -22,7 +22,13 @@ public struct AppRelauncher: ServerLifecycle {
     /// How long a new build has to answer the first time while it runs.
     public static let firstAnswer = 600
 
-    public init() {}
+    /// Where the relauncher's shell writes: Visor's logs' folder
+    /// (VisorFolders.logs, on the Visor volume once it's there).
+    public let logPath: String
+
+    public init(logPath: String = "/tmp/visor-relaunch.log") {
+        self.logPath = logPath
+    }
 
     @MainActor
     public func relaunch(installing build: String?, carrying sessions: String) -> String? {
@@ -94,7 +100,7 @@ public struct AppRelauncher: ServerLifecycle {
         process.executableURL = URL(fileURLWithPath: "/bin/sh")
         process.arguments = ["-c", script]
         // Somewhere to look when a relaunch does not come back.
-        let logPath = "/tmp/visor-relaunch.log"
+        try? FileManager.default.createDirectory(atPath: (logPath as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
         if !FileManager.default.fileExists(atPath: logPath) { FileManager.default.createFile(atPath: logPath, contents: nil) }
         if let log = FileHandle(forWritingAtPath: logPath) {
             log.seekToEndOfFile()

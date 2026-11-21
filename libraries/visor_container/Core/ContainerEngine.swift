@@ -1,6 +1,6 @@
 // The Sessions container's engine (docs/containers.md), in Visor's
 // background server: one long-lived container per Mac, booted from the
-// assets on the Containers volume (Kata's kernel, vminit, a clone of the
+// assets in the Visor volume's Containers/ (Kata's kernel, vminit, a clone of the
 // agent image's template), with no network interface, Sessions shared at
 // the same path, Visor's Linux programs read-only at /opt/visor/bin, and
 // agent-proxy's relay carried in as its only way out (HostRelay).

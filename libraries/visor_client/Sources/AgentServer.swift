@@ -247,6 +247,9 @@ public protocol AgentServer: AnyObject {
     /// Puts this device's SSH public key among the server's user's
     /// authorized keys, so this device comes in over SSH from now on.
     func authorizeSSHKey(_ line: String) async throws
+    /// "Forget this device": its SSH public key taken out of the server's
+    /// user's authorized keys, where Visor put it.
+    func forgetSSHKey(_ line: String) async throws
 }
 
 public extension AgentServer {
@@ -313,4 +316,5 @@ public extension AgentServer {
     }
     var identity: ServerIdentity? { nil }
     func authorizeSSHKey(_ line: String) async throws { throw AgentServerError.unsupported }
+    func forgetSSHKey(_ line: String) async throws { throw AgentServerError.unsupported }
 }

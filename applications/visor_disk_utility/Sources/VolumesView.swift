@@ -1,16 +1,16 @@
-// The window: Sessions, then Containers.
+// The window: Sessions, Sources, then Visor.
 
 import DiskVolumes
 import SwiftUI
 
-/// Both volumes, a refresh, and where Visor reads them from.
+/// The three volumes, a refresh, and where Visor reads them from.
 struct VolumesView: View {
     @Bindable var model: VolumesModel
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text("Visor's container runner keeps its sessions on the Sessions volume and its container on the Containers volume, both on this Mac's disk.")
+                Text("Visor keeps everything of its own on three volumes of this Mac's disk: its sessions on Sessions, their checkouts on Sources, and its data, logs and container on Visor.")
                     .foregroundStyle(.secondary)
                 ForEach(VolumeRole.allCases, id: \.self) { role in
                     VolumeCard(model: model, role: role)

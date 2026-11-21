@@ -12,7 +12,7 @@ public struct ContainerExec: Equatable, Sendable {
     /// Nil: the image's working folder.
     public var workingDirectory: String?
     /// Where its standard output and error go (appended); nil:
-    /// `sessions/logs/<id>.log` on the Containers volume.
+    /// `sessions/logs/<id>.log` on the Visor volume (Containers/).
     public var log: URL?
 
     public init(id: String, arguments: [String], environment: [String: String] = [:], workingDirectory: String? = nil, log: URL? = nil) {

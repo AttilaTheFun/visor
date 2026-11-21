@@ -173,14 +173,29 @@ import Testing
         #expect(!FileManager.default.fileExists(atPath: scene.note), "nothing was put back")
     }
 
-    @Test func theLaunchdWatchStartsWithKickstartUnlessThePlistChanged() {
+    @Test func theLaunchdWatchKickstartsARestartAndRegistersAfreshAfterAnUpdateOrARollback() {
         let job = ServerAgentJob.job(bundleID: "com.LoganShire.Visor", home: "/Users/me")
-        let same = ServerAgentWatch.launchd(job: job, serverPID: 1, destination: "/Applications/Visor.app", source: nil, backup: nil,
-                                            previousPlist: nil, reloads: false, note: "/n", newVersion: "1", oldVersion: "1")
-        #expect(same.start == "launchctl kickstart -k gui/$(id -u)/com.LoganShire.Visor.server")
-        let changed = ServerAgentWatch.launchd(job: job, serverPID: 1, destination: "/Applications/Visor.app", source: nil, backup: nil,
-                                               previousPlist: nil, reloads: true, note: "/n", newVersion: "2", oldVersion: "1")
-        #expect(changed.start.hasSuffix("launchctl bootstrap gui/$(id -u) '/Users/me/Library/LaunchAgents/com.LoganShire.Visor.server.plist'"))
-        #expect(changed.script().contains("while kill -0 1 2>/dev/null"), "it waits for the server to go first")
+        let register = "'/Applications/Visor.app/Contents/MacOS/Visor' server-agent register"
+        #expect(ServerAgentWatch.registerCommand(destination: "/Applications/Visor.app", executable: "Visor") == register)
+        let restart = ServerAgentWatch.launchd(job: job, serverPID: 1, destination: "/Applications/Visor.app", executable: "Visor",
+                                               source: nil, backup: nil, note: "/n", newVersion: "1", oldVersion: "1")
+        #expect(restart.start == "launchctl kickstart -k gui/$(id -u)/com.LoganShire.Visor.server 2>/dev/null || " + register)
+        // Another build in place, or the one before put back: booted out and
+        // registered again (`server-agent register`), never a kickstart.
+        let update = ServerAgentWatch.launchd(job: job, serverPID: 1, destination: "/Applications/Visor.app", executable: "Visor",
+                                              source: "/tmp/New/Visor.app", backup: "/tmp/Previous/Visor.app", note: "/n",
+                                              newVersion: "2", oldVersion: "1")
+        #expect(update.start == register)
+        #expect(update.reload == register)
+        #expect(restart.reload == register)
+        #expect(update.previousPlist == nil, "the plist is the bundle's: it comes back with it")
+        let script = update.script()
+        #expect(!script.contains("bootstrap"))
+        #expect(script.contains("while kill -0 1 2>/dev/null"), "it waits for the server to go first")
+        // The rollback: the bundle put back before it's registered afresh.
+        let undo = script.components(separatedBy: "rolled back")[0]
+        let putBack = try? #require(undo.range(of: "mv '/tmp/Previous/Visor.app' '/Applications/Visor.app'"))
+        let registered = script.range(of: register, options: .backwards)
+        #expect(putBack != nil && registered != nil && putBack!.lowerBound < registered!.lowerBound)
     }
 }

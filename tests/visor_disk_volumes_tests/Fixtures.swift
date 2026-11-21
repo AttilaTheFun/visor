@@ -3,7 +3,7 @@
 // which writes them as diskutil does); the `info` ones are whole.
 
 enum Fixtures {
-    /// `diskutil apfs list -plist` with a case-insensitive Sessions (disk3s7) made by hand (`diskutil apfs addVolume disk3 APFS Sessions`), and no Containers.
+    /// `diskutil apfs list -plist` with a case-insensitive Sessions (disk3s7) made by hand (`diskutil apfs addVolume disk3 APFS Sessions`), and no Visor.
     static let listWithCaseInsensitiveSessions = #"""
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -301,7 +301,7 @@ enum Fixtures {
 </plist>
 """#
 
-    /// `diskutil apfs list -plist` after Visor Disk Utility made both: Sessions (disk3s7, a 5 GB reserve) and Containers (disk3s8, a 20 GB quota).
+    /// `diskutil apfs list -plist` after Visor Disk Utility made both: Sessions (disk3s7, a 5 GB reserve) and Visor (disk3s8, a 20 GB quota).
     static let listWithBoth = #"""
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -429,7 +429,7 @@ enum Fixtures {
 					<key>Locked</key>
 					<false/>
 					<key>Name</key>
-					<string>Containers</string>
+					<string>Visor</string>
 					<key>Roles</key>
 					<array/>
 				</dict>
@@ -575,8 +575,8 @@ enum Fixtures {
 </plist>
 """#
 
-    /// `diskutil info -plist /Volumes/Containers` of the Containers it made.
-    static let infoContainers = #"""
+    /// `diskutil info -plist /Volumes/Visor` of the Visor volume it made.
+    static let infoVisor = #"""
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -645,7 +645,7 @@ enum Fixtures {
 	<key>IOKitSize</key>
 	<integer>200265433088</integer>
 	<key>IORegistryEntryName</key>
-	<string>Containers</string>
+	<string>Visor</string>
 	<key>Internal</key>
 	<true/>
 	<key>Locked</key>
@@ -655,7 +655,7 @@ enum Fixtures {
 	<key>MediaType</key>
 	<string></string>
 	<key>MountPoint</key>
-	<string>/Volumes/Containers</string>
+	<string>/Volumes/Visor</string>
 	<key>OSInternalMedia</key>
 	<false/>
 	<key>ParentWholeDisk</key>
@@ -693,7 +693,7 @@ enum Fixtures {
 	<key>VolumeAllocationBlockSize</key>
 	<integer>4096</integer>
 	<key>VolumeName</key>
-	<string>Containers</string>
+	<string>Visor</string>
 	<key>VolumeSize</key>
 	<integer>0</integer>
 	<key>VolumeUUID</key>

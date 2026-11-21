@@ -3,8 +3,9 @@
 import Foundation
 
 /// The volumes as Visor Disk Utility last found them, written to Visor's
-/// data folder (`~/Library/Application Support/Visor/volumes.json`) each
-/// time it looks. Visor reads it through DiskVolumes, and checks the mount
+/// data folder (VisorFolders.data: `/Volumes/Visor/Data/volumes.json` once
+/// the Visor volume is there, else `~/Library/Application
+/// Support/Visor/volumes.json`) each time it looks. Visor reads it through DiskVolumes, and checks the mount
 /// points itself too: the file says what the volumes are, the mount points
 /// whether they're there now.
 public struct VolumesStatus: Codable, Equatable, Sendable {
@@ -17,13 +18,13 @@ public struct VolumesStatus: Codable, Equatable, Sendable {
     public var updated: Date
     /// The volumes found; a role with none has no line.
     public var volumes: [VolumeRecord]
-    /// The APFS volume UUIDs of Visor's own volumes, by role (`containers`,
-    /// `sessions`): each found named for its role and mounted at its mount
-    /// point (VolumeState.inPlaceUUID), as Visor Disk Utility makes it, and
-    /// kept across writes until another is found there (Containers erased
-    /// and made again). Only these, or the volume mounted at
-    /// /Volumes/Containers, may be deleted as Containers (VolumeGuard): a
-    /// volume someone else named Containers, mounted elsewhere, never is.
+    /// The APFS volume UUIDs of Visor's own volumes, by role (`sessions`,
+    /// `sources`, `visor`): each found named for its role and mounted at its
+    /// mount point (VolumeState.inPlaceUUID), as Visor Disk Utility makes
+    /// it, and kept across writes until another is found there. Only these,
+    /// or the volume mounted at the role's mount point, may ever be deleted
+    /// as that role (VolumeGuard, for Uninstall…): a volume someone else
+    /// gave the name, mounted elsewhere, never is.
     public var ownVolumes: [String: String]
 
     public init(version: Int = Self.currentVersion, updated: Date, volumes: [VolumeRecord], ownVolumes: [String: String] = [:]) {
@@ -49,12 +50,23 @@ public struct VolumesStatus: Codable, Equatable, Sendable {
     }
 
     /// A file written before ownVolumes was has none: it decodes as empty.
+    /// One of 0.64's has the Containers volume as `containers`: its line
+    /// and its UUID read as the Visor volume's (VolumeRole.named), as it
+    /// replaced Containers; the Visor volume's own, if the file has one,
+    /// stands.
     public init(from decoder: any Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         version = try values.decode(Int.self, forKey: .version)
         updated = try values.decode(Date.self, forKey: .updated)
-        volumes = try values.decode([VolumeRecord].self, forKey: .volumes)
-        ownVolumes = try values.decodeIfPresent([String: String].self, forKey: .ownVolumes) ?? [:]
+        let lines = try values.decode([VolumeRecord].self, forKey: .volumes)
+        volumes = lines.enumerated().filter { index, line in
+            !lines[..<index].contains { $0.role == line.role }
+        }.map(\.element)
+        var own = try values.decodeIfPresent([String: String].self, forKey: .ownVolumes) ?? [:]
+        if let retired = own.removeValue(forKey: VolumeRole.retiredContainers), own[VolumeRole.visor.rawValue] == nil {
+            own[VolumeRole.visor.rawValue] = retired
+        }
+        ownVolumes = own
     }
 
     /// The UUID recorded as Visor's own volume of the role, if any.

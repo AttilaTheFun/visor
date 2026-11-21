@@ -4,10 +4,11 @@
 import DiskVolumes
 import Foundation
 
-/// `Visor Disk Utility status`, `… create sessions|containers`, `…
-/// erase-containers --yes`; options `--reserve-gb <n>`, `--quota-gb <n>`
-/// (the role's defaults otherwise) and `--sudo` (`sudo -n` instead of the
-/// administrator prompt). Each writes volumes.json after.
+/// `Visor Disk Utility status`, `… create sessions|sources|visor`, `…
+/// erase-containers --yes` (the container's folder on Visor emptied);
+/// options `--reserve-gb <n>`, `--quota-gb <n>` (the role's defaults
+/// otherwise) and `--sudo` (`sudo -n` instead of the administrator prompt).
+/// Each writes volumes.json after.
 enum DiskUtilityCLI {
     static let verbs: Set<String> = ["status", "create", "erase-containers"]
 
@@ -30,7 +31,7 @@ enum DiskUtilityCLI {
         switch arguments[0] {
         case "create":
             guard arguments.count > 1, let role = VolumeRole(rawValue: arguments[1]) else {
-                throw DiskVolumesError.blocked("create sessions|containers")
+                throw DiskVolumesError.blocked("create sessions|sources|visor")
             }
             let commands = try survey.state(for: role).createCommands(
                 reserve: try size(arguments, "--reserve-gb") ?? role.defaultReserve,
@@ -38,14 +39,10 @@ enum DiskUtilityCLI {
             commands.forEach { print("running: \($0)") }
             survey = try DiskTool.change(commands, route: route)
         case "erase-containers":
-            guard arguments.contains("--yes") else { throw DiskVolumesError.blocked("erase-containers erases everything on Containers: add --yes.") }
-            let role = VolumeRole.containers
-            let state = survey.state(for: role)
-            let commands = try state.eraseCommands(
-                reserve: try size(arguments, "--reserve-gb") ?? state.volume?.reserve ?? role.defaultReserve,
-                quota: try size(arguments, "--quota-gb") ?? state.volume?.quota ?? role.defaultQuota)
-            commands.forEach { print("running: \($0)") }
-            survey = try DiskTool.change(commands, route: route)
+            guard arguments.contains("--yes") else {
+                throw DiskVolumesError.blocked("erase-containers deletes the container's image, root filesystem, caches and logs: add --yes.")
+            }
+            print(try DiskTool.clearContainers().map { "emptied \($0)" } ?? "the container's folder was empty already")
         default:
             break
         }

@@ -36,10 +36,11 @@ final class VolumesModel {
         }
     }
 
+    /// The container's folder on Visor emptied (Erase Containers…).
     func eraseContainers() async {
-        guard let state = states[.containers], let sizes = sizes(for: .containers) else { return }
         await perform {
-            try DiskTool.change(state.eraseCommands(reserve: sizes.reserve, quota: sizes.quota), route: .administratorPrompt)
+            _ = try DiskTool.clearContainers()
+            return try DiskTool.survey()
         }
     }
 
@@ -72,7 +73,7 @@ final class VolumesModel {
         for role in VolumeRole.allCases {
             let state = survey.state(for: role)
             states[role] = state
-            // An existing volume's own sizes, as Erase Containers… keeps them.
+            // An existing volume's own sizes, as they are.
             if let volume = state.volume {
                 reserve[role] = Self.gigabytes(volume.reserve)
                 quota[role] = Self.gigabytes(volume.quota)

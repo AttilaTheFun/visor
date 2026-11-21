@@ -9,7 +9,7 @@
 // - Its label is the app's bundle id's, `<bundle id>.agent-proxy`
 //   (`com.LoganShire.Visor.agent-proxy`), its plist
 //   `~/Library/LaunchAgents/<label>.plist`, its output and errors to
-//   `~/Library/Logs/Visor-agent-proxy.log`, which it moves aside itself past
+//   `Visor-agent-proxy.log` in Visor's logs (VisorFolders), which it moves aside itself past
 //   about 8 MB (LogRotation).
 // - The plist carries the app's version and a digest of `agentProxy`
 //   (`VISOR_VERSION`, `VISOR_AGENT_PROXY_SETTINGS`). At each start of the
@@ -38,14 +38,19 @@ public enum AgentProxyJob {
     public static func plistPath(label: String, home: String = NSHomeDirectory()) -> String {
         LaunchAgentJob.plistPath(label: label, home: home)
     }
-    /// `~/Library/Logs/Visor-agent-proxy.log`.
-    public static func logPath(home: String = NSHomeDirectory()) -> String { "\(home)/Library/Logs/Visor-agent-proxy.log" }
-    /// `~/Library/Logs/Visor-egress.log`: the egress log's on a Mac.
-    public static func egressLogPath(home: String = NSHomeDirectory()) -> String { "\(home)/Library/Logs/Visor-egress.log" }
+    /// `<logs>/Visor-agent-proxy.log`: Visor's logs' folder (the Visor
+    /// volume's `Logs/` once it's there: VisorFolders), else ~/Library/Logs.
+    public static func logPath(home: String = NSHomeDirectory(), logs: String? = nil) -> String {
+        "\(logs ?? home + "/Library/Logs")/Visor-agent-proxy.log"
+    }
+    /// `<logs>/Visor-egress.log`: the egress log's on a Mac.
+    public static func egressLogPath(home: String = NSHomeDirectory(), logs: String? = nil) -> String {
+        "\(logs ?? home + "/Library/Logs")/Visor-egress.log"
+    }
 
-    /// The job for the app with `bundleID`.
-    public static func job(bundleID: String, home: String = NSHomeDirectory()) -> LaunchAgentJob {
-        LaunchAgentJob(label: label(bundleID: bundleID), argument: argument, name: "agent-proxy", log: logPath(home: home),
+    /// The job for the app with `bundleID`, logging in `logs` (nil: ~/Library/Logs).
+    public static func job(bundleID: String, home: String = NSHomeDirectory(), logs: String? = nil) -> LaunchAgentJob {
+        LaunchAgentJob(label: label(bundleID: bundleID), argument: argument, name: "agent-proxy", log: logPath(home: home, logs: logs),
                        settingsVariable: settingsVariable, settingsName: "agentProxy", home: home)
     }
 

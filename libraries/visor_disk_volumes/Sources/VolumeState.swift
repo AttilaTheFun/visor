@@ -1,6 +1,6 @@
 // A role's volume as it is now, and what's to be done.
 
-/// One of the two volumes: found or not, its plan, and what it holds.
+/// One of the three volumes: found or not, its plan, and what it holds.
 public struct VolumeState: Equatable, Sendable {
     public var role: VolumeRole
     public var plan: VolumePlan
@@ -74,16 +74,12 @@ public struct VolumeState: Equatable, Sendable {
         return [try DiskCommand.addVolume(role, container: container, reserve: reserve, quota: quota)]
     }
 
-    /// The commands that erase it: Containers alone, deleted (by its APFS
-    /// volume UUID) and made again
-    /// in its container, case-sensitive, with the reserve and quota given
-    /// (an erase in place would keep its case and lose both). Sessions
-    /// throws: it's never erased.
-    public func eraseCommands(reserve: Int64, quota: Int64) throws -> [DiskCommand] {
-        guard role.isErasable else { throw DiskVolumesError.sessionsNeverErased("Erase \(role.volumeName)") }
-        guard let volume, let container else { throw DiskVolumesError.blocked("There's no \(role.volumeName) volume to erase.") }
-        return [try DiskCommand.deleteVolume(role, uuid: volume.uuid),
-                try DiskCommand.addVolume(role, container: container.reference, reserve: reserve, quota: quota)]
+    /// The commands that delete it, by its APFS volume UUID: for
+    /// Uninstall…, which VolumeGuard lets through only when the volume's
+    /// deletion is asked for.
+    public func deleteCommands() throws -> [DiskCommand] {
+        guard let volume else { throw DiskVolumesError.blocked("There's no \(role.volumeName) volume to delete.") }
+        return [try DiskCommand.deleteVolume(role, uuid: volume.uuid)]
     }
 
     /// Its APFS volume UUID when it's Visor's own as found now: named for

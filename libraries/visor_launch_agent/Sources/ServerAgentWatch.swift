@@ -1,13 +1,13 @@
 // The server agent's restart and its watch (ServerAgentRestart): a plain
 // shell, started detached by the server as it goes, which waits for it to
 // end, installs the new bundle over the running one if there is one (that
-// one kept aside), starts the job again from its rewritten plist, and
+// one kept aside, the job's plist inside each), starts the job again, and
 // watches it as AppRelauncher watches the app it reopens: up to
 // `firstAnswer` seconds for it to answer `/api/hello` on the server's port
 // the first time, from the job's own process, then `seconds` more. If the
 // job's process goes (it quit, crashed, or launchd started another) or
-// never answers, the job is stopped, the previous bundle and plist are put
-// back, the rollback note says why (VisorServer+Rollback), and the job is
+// never answers, the job is stopped, the previous bundle is put back, the
+// rollback note says why (VisorServer+Rollback), and the job is
 // started again. A plain restart that doesn't come up is started once more.
 // Once the new build has stayed up, the one it replaced is removed.
 //
@@ -27,14 +27,14 @@ public struct ServerAgentWatch: Sendable {
     public var source: String?
     /// Where the running bundle is kept meanwhile.
     public var backup: String?
-    /// The job's plist, rewritten by the server, and the one it replaced,
-    /// put back with the previous bundle (nil: the plist was the same).
+    /// A plist put back with the previous bundle, and the one it replaced
+    /// (nil: none; the server agent's plist is in its bundle, which comes
+    /// back with it).
     public var plist: String
     public var previousPlist: String?
-    /// Shell: starts the job once the server has gone (with the plist
-    /// rewritten, launchd loads it anew).
+    /// Shell: starts the job once the server has gone.
     public var start: String
-    /// Shell: loads the job's plist anew and starts it (after a rollback).
+    /// Shell: starts the job again (after a rollback).
     public var reload: String
     /// Shell: stops the job.
     public var stop: String
@@ -81,20 +81,34 @@ public struct ServerAgentWatch: Sendable {
         self.settle = settle
     }
 
-    /// The watcher for `job` on this user's launchd.
-    public static func launchd(job: LaunchAgentJob, serverPID: Int32, destination: String, source: String?, backup: String?,
-                               previousPlist: String?, reloads: Bool, note: String, newVersion: String, oldVersion: String,
+    /// The watcher for `job` on this user's launchd. A plain restart (no
+    /// `source`) is started with `kickstart -k`, or registered again if
+    /// launchd no longer has it. After an update to another build, and
+    /// after a rollback to the one before, it's registered afresh from the
+    /// bundle in place (`<executable> server-agent register`: unregistered,
+    /// booted out, then registered, ServerAgentService.reregister), as SMAppService's
+    /// launch constraint is the bundle it was registered from, and launchd
+    /// won't spawn the job from another put in its place. Stopped with a
+    /// KILL, which its KeepAlive would answer only after the bundle is back.
+    public static func launchd(job: LaunchAgentJob, serverPID: Int32, destination: String, executable: String, source: String?,
+                               backup: String?, note: String, newVersion: String, oldVersion: String,
                                port: UInt16 = Envelope.defaultPort) -> ServerAgentWatch {
         let target = "gui/$(id -u)/\(job.label)"
-        let gone = "for _ in $(seq 1 120); do launchctl print \(target) >/dev/null 2>&1 || break; sleep 0.25; done"
-        let stop = "launchctl bootout \(target) 2>/dev/null; \(gone)"
-        let reload = "\(stop); launchctl bootstrap gui/$(id -u) \(quoted(job.plistPath))"
+        let register = registerCommand(destination: destination, executable: executable)
+        let start = source == nil ? "launchctl kickstart -k \(target) 2>/dev/null || \(register)" : register
         return ServerAgentWatch(serverPID: serverPID, destination: destination, source: source, backup: backup, plist: job.plistPath,
-                                previousPlist: previousPlist, start: reloads ? reload : "launchctl kickstart -k \(target)", reload: reload,
-                                stop: stop, pid: "launchctl print \(target) 2>/dev/null | awk '$1==\"pid\" && $2==\"=\" {print $3; exit}'",
+                                previousPlist: nil, start: start, reload: register,
+                                stop: "launchctl kill SIGKILL \(target) 2>/dev/null; sleep 0.5",
+                                pid: "launchctl print \(target) 2>/dev/null | awk '$1==\"pid\" && $2==\"=\" {print $3; exit}'",
                                 answers: answers(port: port),
                                 accept: "spctl --assess --type execute \(quoted(destination)) >/dev/null 2>&1 && xattr -rd com.apple.quarantine \(quoted(destination)) 2>/dev/null",
                                 note: note, newVersion: newVersion, oldVersion: oldVersion, port: port)
+    }
+
+    /// Shell: the agent registered afresh from the bundle at `destination`
+    /// (`<its executable> server-agent register`).
+    public static func registerCommand(destination: String, executable: String) -> String {
+        quoted((destination as NSString).appendingPathComponent("Contents/MacOS/" + executable)) + " \(ServerAgentJob.command) register"
     }
 
     /// Shell: succeeds when the server's port answers `/api/hello` (any

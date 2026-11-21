@@ -70,7 +70,7 @@ mkdir -p "$HOME/e2e-native"
 say "Visor.app started"
 desktop open -a /Applications/Visor.app
 for _ in $(seq 1 60); do
-    if [ -S "$HOME/.visor/server.sock" ] && lsof -nP -iTCP:7434 -sTCP:LISTEN > /dev/null 2>&1 \
+    if { [ -S /Volumes/Visor/run/server.sock ] || [ -S "$HOME/.visor/server.sock" ]; } && lsof -nP -iTCP:7434 -sTCP:LISTEN > /dev/null 2>&1 \
         && lsof -nP -iTCP:7470 -sTCP:LISTEN > /dev/null 2>&1; then
         say "ready: Visor's socket, its driver and dispatcher on 7434, MultiPass's relay on 7470"
         exit 0

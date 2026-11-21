@@ -1,6 +1,7 @@
 // //tools/e2e/container's command line.
 
 import Foundation
+import DiskVolumes
 import VisorContainerCore
 
 struct ContainerCheckOptions {
@@ -12,10 +13,10 @@ struct ContainerCheckOptions {
                       as Visor.app/Contents/Resources/Linux has them, of a build with `relay-client run --forward`
                       and agent-wrapper (container-driver-link's, or later).
           --image     The agent image, by digest (default: /Applications/Visor.app's container.json).
-          --sessions  The Sessions volume, shared at the same path (/Volumes/Sessions); a scratch folder is made
-                      in it and deleted.
+          --sessions  The Sessions volume, shared at the same path (where volumes.json says, else
+                      /Volumes/Sessions); a scratch folder is made in it and deleted.
           --cpus      2.  --memory  4 (GiB).
-          --cache     A folder kept between runs for the Containers layout's assets (the kernel, the image
+          --cache     A folder kept between runs for the container's layout's assets (the kernel, the image
                       store, the unpacked template), so a rerun skips the fetch and the ~4-minute unpack. Each run's
                       root filesystem clone, logs and staged programs in it are deleted before and after the run.
                       Without it, everything is in the run's /tmp folder and deleted. One run at a time per cache.
@@ -24,7 +25,7 @@ struct ContainerCheckOptions {
 
     var linux: URL
     var image: ImageDigest
-    var sessions = "/Volumes/Sessions"
+    var sessions = DiskVolumes.locate(dataDirectory: VisorFolders.locate().data).sessions.path
     var cpus = 2
     var memoryGiB = 4
     var cache: URL?
