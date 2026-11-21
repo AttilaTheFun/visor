@@ -273,7 +273,7 @@ public enum VisorFixture {
                                     TurnWait(kind: .subagent, id: "toolu_b", label: "Check the banner's copy", work: .subagent)]),
         TurnState(.responding),
     ]
-    static let turnStep: UInt64 = 3_000_000_000
+    static let turnStep: UInt64 = 1_500_000_000
     static let turnReply = TranscriptEntry(id: "msg_fixture_reply", role: .assistant,
                                            text: "All 42 sync tests pass, offline rows included, and the banner shows how many are still waiting.")
 

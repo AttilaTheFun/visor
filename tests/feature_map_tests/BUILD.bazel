@@ -10,18 +10,11 @@ load("//tools/swift:defs.bzl", "STRICT_SWIFT")
 #
 # Without the flag it is skipped (incompatible), so `bazel build //...`
 # and `bazel test //...` pass it by.
-swift_test(
-    name = "feature_map_tests",
-    srcs = glob(["*.swift"]),
-    copts = STRICT_SWIFT,
-    data = ["//applications/visor_headless"],
-    module_name = "VisorFeatureMapTests",
-    target_compatible_with = select({
-        "@isomer//headless:on": [],
-        "//conditions:default": ["@platforms//:incompatible"],
-    }),
-    deps = ["@isomer//headless/isomer_headless"],
-)
+#
+# In two targets, which run side by side, each within a moderate test's
+# five minutes on GitHub's runner: the session's chat and Super Compact
+# (feature_map_chat_tests), and the rest (21 Nov 2026: the one target had
+# grown to 300 s there).
 
 # What the suite and the proof share: how a test launches Visor, finds an
 # element and tells which screen it is on.
@@ -30,6 +23,31 @@ _SUPPORT = [
     "HeadlessApp+FeatureMap.swift",
     "HeadlessScreen+FeatureMap.swift",
     "VisorLaunch.swift",
+]
+
+# The suites the second target takes.
+_CHAT = [
+    "FeatureMapTests+Chat.swift",
+    "FeatureMapTests+SuperCompact.swift",
+]
+
+[
+    swift_test(
+        name = name,
+        srcs = srcs,
+        copts = STRICT_SWIFT,
+        data = ["//applications/visor_headless"],
+        module_name = module,
+        target_compatible_with = select({
+            "@isomer//headless:on": [],
+            "//conditions:default": ["@platforms//:incompatible"],
+        }),
+        deps = ["@isomer//headless/isomer_headless"],
+    )
+    for name, srcs, module in [
+        ("feature_map_tests", glob(["*.swift"], exclude = _CHAT), "VisorFeatureMapTests"),
+        ("feature_map_chat_tests", _SUPPORT + ["FeatureMapTests.swift"] + _CHAT, "VisorFeatureMapChatTests"),
+    ]
 ]
 
 # Headful: each platform's app built with --config=drive, started by
