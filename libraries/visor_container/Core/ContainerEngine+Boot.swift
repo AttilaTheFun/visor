@@ -14,6 +14,8 @@ extension ContainerEngine {
     func ensureStarted() async throws {
         if machine != nil, state == .running || state == .noEgress { return }
         if let starting { return try await starting.value }
+        // Started again (an exec, Start, a server's start): no longer held.
+        held = nil
         let task = Task { try await self.boot() }
         starting = task
         defer { starting = nil }

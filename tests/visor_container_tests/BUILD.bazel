@@ -11,13 +11,16 @@ load("//tools/swift:defs.bzl", "STRICT_SWIFT")
 # a fake agent-proxy relay (the header's bytes, the splice) and agent-proxy's
 # own relay listener (relay-client check's health answer); the driver link
 # (carried in, no header, no agent-proxy needed) and startWrapper's argv and
-# environment. No VM: on Linux, in //tests:linux, and on a Mac.
+# environment; a stop on purpose held, a restart, and the container
+# runner's agent exec'd (VisorContainerRunner). No VM: on Linux, in
+# //tests:linux, and on a Mac.
 swift_test(
     name = "visor_container_tests",
     copts = STRICT_SWIFT,
     srcs = [
         "AssetsTests.swift",
         "EngineTests.swift",
+        "EngineTests+Runner.swift",
         "EngineTests+Wrapper.swift",
         "FakeBackend.swift",
         "FakeMachines.swift",
@@ -31,9 +34,12 @@ swift_test(
         "//:foundation",
         "//libraries/visor_agent_proxy",
         "//libraries/visor_agent_proxy:agent_proxy_c",
+        "//libraries/visor_agent_proxy:visor_agent_proxy_host",
         "//libraries/visor_container:visor_container_core",
+        "//libraries/visor_container:visor_container_runner",
         "//libraries/visor_disk_volumes",
         "//libraries/visor_protocol",
+        "//libraries/visor_server",
         "@swiftpkg_swift_crypto//:Crypto",
     ],
 )

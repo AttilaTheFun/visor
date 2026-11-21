@@ -23,7 +23,13 @@
 //    http://127.0.0.1:7434: it completes Connect (its hello naming the
 //    agent, protocol 2, its token as the bearer), answers the driver's
 //    message, is stopped by it, and ends 0.
-// 6. Stopped, and everything made deleted.
+// 6. Stopped; then the real session check (SessionCheck): agent-proxy
+//    started again, the container booted again with its driver link to a
+//    Visor server of this run's own (its driver on a free port), a session
+//    started in it through the server's container runner, answered, its
+//    conversation on Sessions, carried on across a restart of the
+//    container, and moved back with its conversation handed back.
+// 7. Stopped, and everything made deleted.
 //
 // Exits 0 when every check passed, 1 when one failed (each is said).
 
@@ -119,6 +125,7 @@ struct ContainerCheck {
         let stopped = await engine.stop()
         checks.record("it stops", stopped.state == .stopped && !FileManager.default.fileExists(atPath: scratch.relaySocket.path)
                       && !FileManager.default.fileExists(atPath: engine.context.driverSocket.path))
+        await sessionChecks(relayPort: port, secrets: secrets, places: places, token: token, images: images, configuration: configuration, &checks)
         let egressLog = places.egressLog
         if let text = try? String(contentsOfFile: egressLog, encoding: .utf8) {
             Self.say("agent-proxy's egress log:\n" + text.split(separator: "\n").suffix(10).joined(separator: "\n"))
@@ -196,6 +203,54 @@ struct ContainerCheck {
         checks.record("stopped by the driver, agent-wrapper ends 0 (\(status.map { "\($0)" } ?? "still running after 120 s"); "
                       + "ended: \(heard.ended ?? "-"))", status == 0)
         if status != 0, let log { Self.say("agent-wrapper's log:\n" + Self.tail(log)) }
+    }
+
+    /// The real session check (SessionCheck): agent-proxy again, the
+    /// container booted again with its driver link to this run's own Visor
+    /// server, and a session placed in it carried through.
+    private func sessionChecks(relayPort: Int, secrets: MemorySecrets, places: AgentProxyHost.Places, token: String?,
+                               images: ContainerizationBackend, configuration: ContainerEngineConfiguration, _ checks: inout Checks) async {
+        guard let running = AgentProxyHost.start(AgentProxySettings(relayPort: relayPort), places: places, secrets: secrets, version: "e2e",
+                                                 log: { Self.say("agent-proxy: \($0)") }), running.relay != nil else {
+            checks.fail("the session check", "agent-proxy's relay listener didn't start again on port \(relayPort)")
+            return
+        }
+        defer { running.stop() }
+        guard let driverPort = (47_100..<47_400).first(where: { LoopbackPort.isFree($0) && LoopbackPort.isFree($0 + 1) }) else {
+            checks.fail("the session check", "no loopback port is free for its driver")
+            return
+        }
+        let claude = scratch.sessions.appendingPathComponent("fake-claude.py")
+        do {
+            try Data(FakeClaude.script.utf8).write(to: claude)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: claude.path)
+        } catch {
+            checks.fail("the stand-in claude", "\(error)")
+            return
+        }
+        let layout = scratch.layout
+        let engine = ContainerEngine(context: ContainerEngine.Context(
+            host: .current, locate: { layout }, linuxPrograms: options.linux, version: "e2e-\(scratch.id)", sessions: options.sessions,
+            relaySocket: scratch.relaySocket, relayToken: { token }, driverPort: driverPort, assets: images,
+            backend: ContainerizationMachines(images: images), configuration: { configuration }, log: { Self.say($0) }))
+        let container = E2EContainer(engine: engine, scratch: scratch.sessions.path, claude: claude.path)
+        Self.say("the session check: this run's Visor server, its driver on 127.0.0.1:\(driverPort)")
+        let results = await Self.sessionCheck(scratch, port: driverPort, container)
+        for (name, ok) in results { checks.record(name, ok) }
+        if results.contains(where: { !$0.1 }) {
+            for log in (try? FileManager.default.contentsOfDirectory(at: layout.logs, includingPropertiesForKeys: nil)) ?? []
+            where log.lastPathComponent.count > 30 {
+                Self.say("\(log.lastPathComponent):\n" + Self.tail(log))
+            }
+        }
+        let stopped = await engine.stop()
+        checks.record("it stops again", stopped.state == .stopped)
+    }
+
+    /// SessionCheck's results, on the main actor (its server's).
+    @MainActor
+    private static func sessionCheck(_ scratch: Scratch, port: Int, _ container: E2EContainer) async -> [(String, Bool)] {
+        await SessionCheck.make(scratch: scratch, port: port).run(container)
     }
 
     /// A process's status, or nil if it ran past `seconds` (then killed).

@@ -17,6 +17,13 @@
 // shown, its runner's claim held, its places held to a move's rules and
 // put under this computer's key for the folder the session comes back to;
 // ReturnedConversationIntake, VisorServer+HandBack).
+// Two hold the agents it drives (DrivenAgentDirectory): the container
+// runner, for the agents Visor starts itself in its Sessions container
+// (VisorServer+ContainerRunner), and the dispatcher's queue, for a runner's
+// that claimed a job (deprecated). Each says whether a token is its agent's,
+// which session the agent carries on, and the conversation it was moved
+// with. The session id its wrapper says (its hello's, and each change) is
+// kept with the session's move: what its next agent resumes.
 
 import AgentProtocol
 import Foundation
@@ -60,16 +67,17 @@ struct DriverService: AgentProtocol_V1_AgentDriver.ServiceProtocol {
         guard !agent.isEmpty else { throw RPCError(code: .invalidArgument, message: "The hello names no agent.") }
         // Its tokens are the server's to verify: once it is served.
         let server = await listening.ready()
+        let agents = await directory(for: agent, server)
         // The token says which agent it is: the one the hello names, or the
         // wrapper is refused before anything of the session is touched.
-        switch await jobs.access(agent, bearer: bearer) {
+        switch await agents.access(agent, bearers: bearer.map { [$0] } ?? [], withinGrace: false, now: Date()) {
         case .granted:
             break
         case .unknown:
             VisorServer.log("driver: \(agent) dialled in, but this dispatcher holds no job of that agent: refused")
             throw AgentBearer.refusal("This dispatcher holds no job of that agent.")
         case .expired:
-            let session = await jobs.session(of: agent)
+            let session = await agents.session(of: agent)
             // Its wrapper's stream still live: this isn't that wrapper back
             // after a long absence (whose stream has gone), but someone
             // else's copy of an old token. Refused, and nothing restarted.
@@ -87,7 +95,7 @@ struct DriverService: AgentProtocol_V1_AgentDriver.ServiceProtocol {
         }
         // The session is the agent's id as the dispatcher issued it, however
         // the wrapper spells it; a moved session's agent, the session's own.
-        said.agent.uuid = await jobs.session(of: agent)
+        said.agent.uuid = await agents.session(of: agent)
         let hello = said
         // An earlier agent of a session since restarted or stopped, on its
         // way out, isn't taken for the session's.
@@ -96,17 +104,20 @@ struct DriverService: AgentProtocol_V1_AgentDriver.ServiceProtocol {
             throw RPCError(code: .failedPrecondition, message: "This agent no longer carries its session on.")
         }
         // Alive: a job queued again for it meanwhile is its own.
-        await jobs.heard(agent)
+        if agents === jobs { await jobs.heard(agent) }
         let (outgoing, sending) = AsyncStream<AgentProtocol_V1_DriverMessage>.makeStream()
-        // In a container (its job's kind, or its runner's), or on a native
-        // runner: which MCP servers its session gets.
-        let inContainer = await jobs.runsInContainer(agent)
+        // In a container (its job's kind, or its runner's; the Sessions
+        // container's), or on a native runner: which MCP servers its
+        // session gets.
+        let inContainer = await agents.runsInContainer(agent)
         let (process, connection) = await MainActor.run { () -> (DrivenProcess, UUID) in
             let process = (server.session(hello.agent.uuid)?.process as? DrivenProcess) ?? DrivenProcess()
             process.wrapperProtocol = hello.protocol
             let record = server.takeDriven(Self.info(hello), process: process)
             record.runsInContainer = inContainer
             let connection = process.attach { sending.yield($0) }
+            // Its harness's session, which its next agent resumes.
+            server.drivenAgentStarted(hello.agent.uuid, agent: agent, conversation: hello.sessionID)
             return (process, connection)
         }
         // The agent's MCP server ("visor", through its wrapper), as its
@@ -122,7 +133,7 @@ struct DriverService: AgentProtocol_V1_AgentDriver.ServiceProtocol {
         }
         // A fresh token before the one it holds ends, for as long as it is
         // connected: shown on its next connection and every other call.
-        let refreshing = Task { await refreshTokens(of: agent, from: bearer) { sending.yield($0) } }
+        let refreshing = Task { await refreshTokens(of: agent, in: agents, from: bearer) { sending.yield($0) } }
         defer {
             refreshing.cancel()
             sending.finish()
@@ -132,6 +143,9 @@ struct DriverService: AgentProtocol_V1_AgentDriver.ServiceProtocol {
             while let message = try await messages.next() {
                 if case .mcp(let asked) = message.message {
                     await mcp.take(asked)
+                } else if case .sessionID(let conversation) = message.message {
+                    let session = hello.agent.uuid
+                    await MainActor.run { server.drivenAgentStarted(session, agent: agent, conversation: conversation) }
                 } else {
                     await MainActor.run { process.take(message) }
                 }
@@ -147,17 +161,18 @@ struct DriverService: AgentProtocol_V1_AgentDriver.ServiceProtocol {
     /// Sends the agent a fresh token (DriverMessage.token) a sixth of its
     /// life before each it holds ends (ten minutes of an hour), starting
     /// from the one it dialled in with, until cancelled.
-    private func refreshTokens(of agent: String, from shown: String?, send: @escaping @Sendable (AgentProtocol_V1_DriverMessage) -> Void) async {
+    private func refreshTokens(of agent: String, in agents: any DrivenAgentDirectory, from shown: String?,
+                               send: @escaping @Sendable (AgentProtocol_V1_DriverMessage) -> Void) async {
         var ends: Date?
-        if let shown { ends = await jobs.expiry(of: shown) }
+        if let shown { ends = await agents.expiry(of: shown) }
         while !Task.isCancelled {
-            let lead = await jobs.tokenRefreshLead
+            let lead = await agents.tokenRefreshLead
             let wait = max(0.05, (ends ?? Date()).timeIntervalSinceNow - lead)
             try? await Task.sleep(for: .milliseconds(Int(wait * 1000)))
-            guard !Task.isCancelled, await jobs.holds(agent) else { return }
-            let fresh = await jobs.token(for: agent)
+            guard !Task.isCancelled, await agents.holds(agent) else { return }
+            let fresh = await agents.token(for: agent)
             send(.with { $0.token = fresh })
-            ends = await jobs.expiry(of: fresh)
+            ends = await agents.expiry(of: fresh)
             VisorServer.log("driver: \(agent) sent a fresh token")
         }
     }
@@ -168,8 +183,9 @@ struct DriverService: AgentProtocol_V1_AgentDriver.ServiceProtocol {
     func conversation(request: ServerRequest<AgentProtocol_V1_ConversationRequest>,
                       context: ServerContext) async throws -> StreamingServerResponse<AgentProtocol_V1_ConversationFile> {
         let agent = request.message.agent.uuid
-        _ = await listening.ready()
-        switch await jobs.access(agent, bearer: AgentBearer.token(in: request.metadata)) {
+        let server = await listening.ready()
+        let agents = await directory(for: agent, server)
+        switch await agents.access(agent, bearers: AgentBearer.token(in: request.metadata).map { [$0] } ?? [], withinGrace: false, now: Date()) {
         case .granted:
             break
         case .unknown:
@@ -184,15 +200,14 @@ struct DriverService: AgentProtocol_V1_AgentDriver.ServiceProtocol {
         }
         let asked = request.message
         return StreamingServerResponse { response in
-            try await send(conversationOf: asked, to: response)
+            try await send(conversationOf: asked, from: agents, to: response)
             return [:]
         }
     }
 
-    private func send(conversationOf request: AgentProtocol_V1_ConversationRequest,
+    private func send(conversationOf request: AgentProtocol_V1_ConversationRequest, from agents: any DrivenAgentDirectory,
                       to response: RPCWriter<AgentProtocol_V1_ConversationFile>) async throws {
-        _ = await listening.ready()
-        guard let move = await jobs.move(of: request.agent) else {
+        guard let move = await agents.conversation(of: request.agent.uuid) else {
             VisorServer.log("driver: \(request.agent.uuid) asked for a conversation, but it wasn't moved here")
             return
         }
@@ -230,8 +245,9 @@ struct DriverService: AgentProtocol_V1_AgentDriver.ServiceProtocol {
             return ServerResponse(error: RPCError(code: .failedPrecondition, message: "A returned conversation's first message is its header."))
         }
         let agent = header.agent.uuid
-        if let refusal = await admitReturn(of: agent, bearers: bearers, server) { return ServerResponse(error: refusal) }
-        let session = await jobs.session(of: agent)
+        let agents = await directory(for: agent, server)
+        if let refusal = await admitReturn(of: agent, bearers: bearers, agents, server) { return ServerResponse(error: refusal) }
+        let session = await agents.session(of: agent)
         guard let target = await MainActor.run(body: { server.handBackArriving(session, agent: agent) }) else {
             VisorServer.log("driver: \(agent) returned a conversation, but \(session) isn't moving back for it: refused")
             return ServerResponse(error: RPCError(code: .failedPrecondition, message: "This agent's session isn't moving back for its conversation here."))
@@ -267,10 +283,11 @@ struct DriverService: AgentProtocol_V1_AgentDriver.ServiceProtocol {
     }
 
     /// Why a ReturnConversation for `agent` showing `bearers` isn't let in:
-    /// nil when its token is the agent's own, live, its runner holds its
-    /// claim, and any runner token beside it is that runner's.
-    private func admitReturn(of agent: String, bearers: [String], _ server: VisorServer) async -> RPCError? {
-        switch await jobs.access(agent, bearers: bearers) {
+    /// nil when its token is the agent's own, live, and (a runner's agent)
+    /// its runner holds its claim, and any runner token beside it is that
+    /// runner's. The container runner's agents have no runner but Visor.
+    private func admitReturn(of agent: String, bearers: [String], _ agents: any DrivenAgentDirectory, _ server: VisorServer) async -> RPCError? {
+        switch await agents.access(agent, bearers: bearers, withinGrace: false, now: Date()) {
         case .granted:
             break
         case .unknown:
@@ -283,6 +300,7 @@ struct DriverService: AgentProtocol_V1_AgentDriver.ServiceProtocol {
             VisorServer.log("driver: \(agent) returned a conversation: refused: \(why)")
             return AgentBearer.refusal(why)
         }
+        guard agents === jobs else { return nil }
         guard let holder = await jobs.holder(of: agent) else {
             VisorServer.log("driver: \(agent) returned a conversation, but no runner holds its claim: refused")
             return RPCError(code: .permissionDenied, message: "No runner holds this agent's claim.")
@@ -292,6 +310,15 @@ struct DriverService: AgentProtocol_V1_AgentDriver.ServiceProtocol {
             return refusal
         }
         return nil
+    }
+
+    /// Who holds `agent`: the container runner, for one Visor started in
+    /// its Sessions container; else the dispatcher's queue.
+    private func directory(for agent: String, _ server: VisorServer) async -> any DrivenAgentDirectory {
+        let jobs = self.jobs
+        return await MainActor.run { () -> any DrivenAgentDirectory in
+            server.containerRunner.holds(agent) ? server.containerRunner : jobs
+        }
     }
 
     /// What a returned conversation that isn't taken is refused with.

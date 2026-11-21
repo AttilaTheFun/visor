@@ -22,17 +22,15 @@ import Foundation
 import VisorServer
 
 extension JobQueue {
-    /// What a call shown a bearer for `agent` may do.
-    enum Access: Equatable {
-        /// The agent's own token.
-        case granted
-        /// This dispatcher holds no job of the agent (its job is gone, or
-        /// was never here).
-        case unknown
-        /// The agent's own token, but past its end.
-        case expired
-        /// A token missing, or not the agent's: why.
-        case refused(String)
+    /// What a call shown a bearer for `agent` may do: `unknown` when this
+    /// dispatcher holds no job of the agent (its job is gone, or was never
+    /// here).
+    typealias Access = DrivenAgentAccess
+
+    /// The conversation a moved session's agent carries on, and where it
+    /// was here.
+    func conversation(of agent: String) -> (resume: String, cwd: String)? {
+        moves[Self.key(agent)]
     }
 
     /// A new token for the agent: an hour's, as the session it carries on.

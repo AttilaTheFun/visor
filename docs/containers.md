@@ -17,8 +17,11 @@ agent-proxy, the egress check, processes exec'd in it, the idle stop, and
 its status in the API and Settings), and **PR 3, the driver link and the
 Linux agent-wrapper** (Visor's driver carried in on a socket of its own,
 relay-client's loopback forward to it, agent-wrapper in Visor's Linux
-programs, and `ContainerEngine.startWrapper`). No session is placed in it
-yet: that's step 4's.
+programs, and `ContainerEngine.startWrapper`), and **step 4's server half,
+the container runner** (sessions placed in it, Move to Container and Move
+Back, a new session there, their agents started again across restarts:
+"Placing sessions", below). The clients' half (the Migrate… menu cut down to
+these places, the placement shown on each session) is next.
 
 ## Requirements
 
@@ -273,7 +276,7 @@ its prompts then go to the driver as `mcp__visor__approve`), as Shireworks'
 container runner does. Its working folder, when it's under Sessions or the
 checkouts' folder, is made on the Mac first (the guest sees it at the same
 path); otherwise the exec starts in the image's folder and the wrapper makes
-its own. Placing sessions, and the UI, are step 4's.
+its own. The container runner, below, is what starts it for a session.
 
 ### Its status
 
@@ -281,10 +284,86 @@ its own. Placing sessions, and the UI, are step 4's.
 (`off`, `starting`, `running`, `no-egress`, `stopped`), whether it's on and
 whether this server can run it, its CPUs, memory and idle minutes, the
 image's digest, the processes in it, the relay port, what the egress check
-said, and the latest errors. `POST /api/container/start` and `/stop` answer
-the same after. A server without the engine (Linux, the app's own server)
+said, the latest errors, and, when it was stopped on purpose (Stop, or
+turned off), why it's `held` stopped. `POST /api/container/start`, `/stop`
+and `/restart` (stopped and started again, taking a new image if one is
+pinned: what an image's update needs while sessions are in it) answer the
+same after. A server without the engine (Linux, the app's own server)
 answers `off`, saying why. Settings › Sessions Container shows it, with
 Start, Stop and Check Again.
+
+## Placing sessions (the container runner)
+
+A session is **on this Mac** or **in this Mac's Sessions container**; another
+Mac is another server, reached by Migrate…. `SessionInfo.placement` says
+which (`host`, `container`, or `runner` for one a dispatcher's runner
+claimed, deprecated), from a 0.64 server. The runner is the server's
+(VisorServer+ContainerRunner, ContainerRunner): Visor starts each session's
+agent in the container itself, so nothing claims a job, and the dispatcher's
+queue isn't used. The driven-session code a runner's agent had is the same:
+its process is the wrapper's stream (DrivenProcess: rows, mail as `@@from`
+turns, approvals, interrupts), its MCP is Visor's own tools alone, and a
+move back is a hand-back (agent_protocol 0.5.0's `ReturnConversation`, the
+intake's containment and caps).
+
+- **Move to Container** (`POST /api/sessions/<id>/moveToContainer`):
+  refused while the container can't take sessions (off, no egress), for a
+  session that's archived, mid-turn, not Claude Code's, has no conversation
+  yet, or works in a repository outside the container's folders with work
+  not pushed. Otherwise its agent here is ended and one is started in the
+  container on the same conversation (the driver's `Conversation` sends it
+  down). A session working under a folder the container shares (Sessions,
+  the checkouts' folder) keeps its folder; any other works in
+  `<Sessions>/Claude/<agent>`, the repositories it worked in cloned there.
+  Its prompts are skipped (the container is its sandbox), and asked again
+  once it's back. One whose agent can't start there comes straight back,
+  saying why. Answered once its agent has started.
+- **A new session in the container** (`POST /api/container/sessions {title,
+  model, effort, text}`): a Claude Code session in a folder of its own,
+  `<Sessions>/Claude/<id>`, its first message `text`.
+- **Its agent:** `agent-wrapper` exec'd by the engine (startWrapper, with
+  VisorContainerRunner's `ContainerSession(agent:)`), a new agent id each
+  time, with a token of its own (a JWT for `visor.runner-agent` naming the
+  session and the agent, refreshed over its stream) that the driver checks
+  on every call (DrivenAgentDirectory: the runner's agents, else the
+  dispatcher's), its conversation (`resumeSessionID`: the one its wrapper
+  last said, kept with the session's move), and `CLAUDE_CONFIG_DIR`
+  `<Sessions>/.claude`: what it says survives the container, and the host
+  reads it.
+- **Its end**, unless it was let go (Stop Agent, Restart Agent, Move Back,
+  archived or removed), starts its next agent there: the container
+  restarted under it (a crash, `/restart` for an image's update) or its
+  wrapper ended. Three quick ends in a row (within a minute of starting)
+  stop it instead, and so does a container held stopped or unable to take
+  it, each saying why; Start Agent tries again. An agent let go that hasn't
+  ended within 10 seconds (30 after a hand-back) is sent TERM, then KILL.
+- **Migrating it to another computer** is refused while it's in the
+  container (`POST /api/migration/offer` answers 409: move it back first),
+  as the offer reads this Mac's Claude folder and would leave its turns
+  there behind.
+- **Move Back** hands its conversation back into this Mac's Claude folder,
+  under the folder it comes back to, and it carries on from it here. A
+  session whose agent isn't running there (stopped) has one started to hand
+  back. Nothing returned in time, it carries on from where it was before it
+  moved, saying so.
+- **A server's start** (its update, a crash) takes the container down with
+  it: once the engine is given, each session placed there whose agent ran
+  has its next agent started, on its latest conversation, and one whose turn
+  was cut short is told to pick it up, as a host session is. The sessions
+  placed there keep it from its idle stop, and start it with the server
+  (`placedInContainer`).
+
+**Its token in the agent's environment** (agent_protocol#17): the wrapper
+reads `AGENT_TOKEN` and unsets it, and keeps it from its harness's
+environment, but `/proc/<wrapper>/environ` still shows the environment the
+process began with, and the harness runs as the same user (root, in the
+container), so it can read the token there. The token is the session's
+alone, for an hour, and only for the driver (never the REST side), so it
+lets the agent act as its own session and nothing more; still, it's a
+credential its harness shouldn't hold. The fix is agent_protocol#17's: the
+token handed over on a descriptor (`AGENT_TOKEN_FD`) or in a 0600 file the
+wrapper deletes once read, with `hidepid=2` or a uid of the harness's own
+as a defence beside it. Visor adopts it once #17 lands in a release.
 
 ## Still open
 
@@ -298,9 +377,10 @@ Start, Stop and Check Again.
 
 ## What's next
 
-- **Step 4, the container runner:** sessions placed in the container, each
-  its agent-wrapper started (`ContainerEngine.startWrapper`), counted as
-  placed for the idle stop and the start with the server, and the UI.
+- **Step 4's clients' half:** Migrate… as one menu cut down to these places
+  (this Mac, its container, the other Macs), the placement shown on each
+  session, New Session in the container, and their feature-map screens.
+- **agent_protocol#17:** the token handed over on a descriptor, above.
 
 ## Testing
 
@@ -316,14 +396,27 @@ Start, Stop and Check Again.
   another token); the driver link (carried in beside the relay, the
   guest's bytes reaching a fake driver with nothing before them, with no
   agent-proxy there, and closed when no driver answers) and
-  `startWrapper`'s argv, environment, folder and log.
+  `startWrapper`'s argv, environment, folder and log; a stop on purpose
+  held and a restart not, and the container runner's agent exec'd
+  (VisorContainerRunner: its conversation, folder, repositories and Claude
+  folder).
   `//tests/visor_agent_proxy_tests:relay_client_tests`: `--forward`'s
   loopback listener joined to a Unix socket, what `--forward` takes, and
   loopback never redirected (`isRedirected`, the mask, the rule's order);
   and, where namespaces can be made, a forward inside relay-client's
   network that the relay never hears of. `//tests/visor_server_tests`: `/api/container` (an
-  admin's; off without an engine) and the relay port given when it's turned
-  on (never 7499).
+  admin's; off without an engine; restart) and the relay port given when
+  it's turned on (never 7499); and the container runner
+  (ContainerRunnerTests, over gRPC as the wrappers reach the driver, with a
+  container that runs no VM), the pilot's seven checks among them: its MCP
+  Visor's own tools; mail both ways; approvals answered from Visor; an
+  interrupt; a server's start starting its agent again on its latest
+  conversation; the move and its token's enforcement (its own token in, no
+  other, no job); and Move Back with its conversation handed back. And its
+  lifecycle: an end started again, three quick ends stopping it, a container
+  held stopped, a restart under it uncounted, Stop and Start Agent, a move
+  refused or coming straight back, a folder of its own outside the shared
+  ones, and a new session there.
   `//tests/visor_container_tests:visor_container_mac_tests` (macOS): this
   Mac's readiness and memory, and the Containerization backend's archive
   reading. The settings' decoding is in `//tests/visor_server_tests`.
@@ -343,8 +436,17 @@ Start, Stop and Check Again.
   free port, never the real 7434), and that `startWrapper`'s agent-wrapper,
   with a stand-in claude, completes Connect through it (its hello naming
   the agent, protocol 2, its token the bearer), answers the driver's
-  message, is stopped by it, and ends 0. Then it stops and deletes
-  everything. It signs a copy of itself ad hoc with the
+  message, is stopped by it, and ends 0. Then **a real session**:
+  agent-proxy started again, the container booted again with its driver
+  link to a Visor server of the run's own (its data and Claude folders in
+  /tmp, its secrets in memory, never listening for clients, its driver on a
+  free port, its harness unable to start an agent on the Mac), whose
+  container runner starts a new session in the container: its agent (the
+  stand-in claude) connects with its own token and answers its first
+  message, its conversation is on Sessions where the host reads it, a
+  restart of the container starts its next agent on the same conversation,
+  and Move Back hands the conversation back into the run's Claude folder,
+  its agent there ending. Then it stops and deletes everything. It signs a copy of itself ad hoc with the
   virtualization entitlement and runs that. `--linux` is a build's
   `Contents/Resources/Linux` with `relay-client run --forward` and
   agent-wrapper (0.64 or later), or `tools/linux_programs.sh <folder>`'s

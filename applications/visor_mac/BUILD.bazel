@@ -66,6 +66,7 @@ swift_library(
         # Containerization (the Mac's alone).
         "//libraries/visor_container",
         "//libraries/visor_container:visor_container_core",
+        "//libraries/visor_container:visor_container_runner",
         "//libraries/visor_disk_volumes",
         "//libraries/visor_driver",
         "//libraries/visor_launch_agent",

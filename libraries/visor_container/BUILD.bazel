@@ -31,6 +31,22 @@ swift_library(
     ],
 )
 
+# The engine as Visor's server reaches it for the sessions placed in the
+# container (the container runner: VisorServer's ContainerAgent and
+# ContainerAgentRun): a session's agent-wrapper started from the server's
+# request, and the folders it shares. Linux too, so its tests run in
+# //tests:linux.
+swift_library(
+    name = "visor_container_runner",
+    copts = STRICT_SWIFT,
+    srcs = glob(["Runner/*.swift"]),
+    module_name = "VisorContainerRunner",
+    deps = [
+        ":visor_container_core",
+        "//libraries/visor_server",
+    ],
+)
+
 # The Mac's half, on Apple's Containerization: the backend that downloads
 # the kernel's archive and takes it apart, pulls images into the image
 # store, and unpacks the init filesystem and the agent image's root
