@@ -50,6 +50,21 @@ by Visor Disk Utility, which records them in `volumes.json`:
 | **Sources** | `/Volumes/Sources` | The sessions' checkouts: the container's checkouts' folder unless `container.checkouts` names another. |
 | **Visor** | `/Volumes/Visor` (not shared, but for `Containers/`'s parts below) | Everything else of Visor's: `Data/` (the server's data folder: sessions.json, settings, push, relay, jobs, images, backups, migrations, super-compact, agent-proxy, `run/`, `hosts/`, and `volumes.json`), `Caches/Server` and `Caches/Client` (the two `messages.sqlite`), `Logs/` (Visor-server, agent-proxy and egress, and the relaunch log), `tmp/` (an export before it's saved; emptied at the app's start), `run/server.sock` (the server's socket file) and `Containers/` (below). It replaced 0.64's Containers volume: a `volumes.json` that says `containers` reads as `visor`. |
 
+The Visor volume is left out of Time Machine and Spotlight, as Nimbus
+leaves its own (Logan, 21 Nov 2026): Visor's data, caches, logs and
+container aren't the person's work, and a container's root filesystem
+would fill a backup disk. Sessions and Sources stay in both: they're what
+is worth backing up. Visor Disk Utility turns Spotlight off on it
+(`mdutil -i off /Volumes/Visor`, in the same administrator prompt as its
+creation; VolumeGuard lets it run at Visor's own volume alone), and its
+card says how it stands ("Not backed up by Time Machine · Not indexed by
+Spotlight", from `tmutil isexcluded` and `mdutil -s`), with Leave Out of
+Backups… to put back what's missing. macOS 27 lets no app leave a whole
+volume out of Time Machine (`tmutil addexclusion -v` is refused to
+anything an app starts, root or not: Nimbus found it so), so that part is
+the person's, in Time Machine's settings (Options… › + › Visor), which the
+button opens.
+
 The engine and the container runner take Sessions' and Sources' paths from
 `volumes.json` (DiskVolumes), never a path assumed. Once the Visor volume is
 there, the process about to run the server moves what was in the home

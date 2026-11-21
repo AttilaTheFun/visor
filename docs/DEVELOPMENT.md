@@ -659,6 +659,16 @@ removed (still only when `agentProxy` is set).
   the ports (7433, 7434), the socket file, `tailscale serve`'s target
   (127.0.0.1:7433) and the admin token are the same, so they reconnect to
   the same address and identity, with no re-pairing.
+- **The Visor volume out of backups and search (0.65):** Visor Disk
+  Utility makes Visor with Spotlight off (`mdutil -i off /Volumes/Visor`
+  after `diskutil apfs addVolume`, one administrator prompt; VolumeGuard
+  passes `mdutil` only so, at Visor's own volume), reads back both
+  exclusions (`tmutil isexcluded`, `mdutil -s`, as the user) for the
+  volume's card and `status`, and turns Spotlight off again where it's
+  found on (Leave Out of Backups…, `exclude-visor`). Time Machine's
+  exclusion of a whole volume is the person's on macOS 27 (no app may, as
+  Nimbus found), in Time Machine's settings, which the button opens.
+  Sessions and Sources are left in both.
 - **The socket file's move (0.65):** with the Visor volume, the server
   listens at `/Volumes/Visor/run/server.sock` (VisorServer.placedSocketPath,
   set by MacServer) and makes `~/.visor/server.sock` a link to it, for SSH

@@ -66,12 +66,25 @@ public struct VolumeState: Equatable, Sendable {
     }
 
     /// The commands that make it: `diskutil apfs addVolume` in the boot
-    /// container, case-sensitive, with its reserve and quota (0: none).
+    /// container, case-sensitive, with its reserve and quota (0: none); for
+    /// Visor, Spotlight turned off on it after, in the same administrator
+    /// prompt (VolumeExclusions).
     public func createCommands(reserve: Int64, quota: Int64) throws -> [DiskCommand] {
         guard case let .create(container) = plan else {
             throw DiskVolumesError.blocked("\(role.volumeName) already exists or can't be made here; it's never made twice.")
         }
-        return [try DiskCommand.addVolume(role, container: container, reserve: reserve, quota: quota)]
+        let add = try DiskCommand.addVolume(role, container: container, reserve: reserve, quota: quota)
+        return role == .visor ? [add, try DiskCommand.spotlightOff(role)] : [add]
+    }
+
+    /// The commands that put back what an adopted volume should have: for
+    /// Visor's own (mounted in place), Spotlight turned off when it's found
+    /// indexing (`exclusions`); nothing for Sessions and Sources, which are
+    /// backed up and indexed as any folder of the person's is. Time
+    /// Machine's exclusion is the person's to make (VolumeExclusions).
+    public func exclusionCommands(_ exclusions: VolumeExclusions) throws -> [DiskCommand] {
+        guard role == .visor, inPlaceUUID != nil, exclusions.spotlightIndexed != false else { return [] }
+        return [try DiskCommand.spotlightOff(role)]
     }
 
     /// The commands that delete it, by its APFS volume UUID: for

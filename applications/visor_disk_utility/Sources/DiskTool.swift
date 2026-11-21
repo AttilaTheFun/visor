@@ -51,6 +51,20 @@ enum DiskTool {
         return try survey()
     }
 
+    /// Whether the Visor volume at `path` is left out of Time Machine and
+    /// Spotlight, as tmutil and mdutil say (as the user: they only read).
+    static func exclusions(at path: String = VolumeRole.visor.mountPoint) -> VolumeExclusions {
+        func said(_ argv: [String]) -> String {
+            (try? run(argv)).map { String(decoding: $0, as: UTF8.self) } ?? ""
+        }
+        return VolumeExclusions(timeMachineExcluded: VolumeExclusions.timeMachineExcluded(isexcluded: said(["/usr/bin/tmutil", "isexcluded", path])),
+                                spotlightIndexed: VolumeExclusions.spotlightIndexed(mdutilStatus: said([DiskCommand.mdutil, "-s", path])))
+    }
+
+    /// Time Machine's settings, where the person leaves the Visor volume
+    /// out (Options… › + › Visor): no app may (VolumeExclusions).
+    static let timeMachineSettings = URL(string: "x-apple.systempreferences:com.apple.Time-Machine-Settings.extension")
+
     /// volumes.json in Visor's data folder: on the Visor volume once it's
     /// there (VisorFolders), else in Application Support, as before.
     static var statusURL: URL { VolumesStatus.url(inDataDirectory: VisorFolders.locate().data) }

@@ -24,6 +24,9 @@ struct VolumeCard: View {
                         row("Used", used)
                     }
                     row("Free", state?.available.map(ByteSize.describe) ?? "—")
+                    if role == .visor, let exclusions = model.visorExclusions {
+                        row("Backups", exclusions.summary)
+                    }
                     sizeRow("Reserve", text: binding(\.reserve), help: "Space set aside for it alone. Empty for none.")
                     sizeRow("Quota", text: binding(\.quota), help: "The most it may hold. Empty for no limit.")
                 }
@@ -40,6 +43,12 @@ struct VolumeCard: View {
                 HStack {
                     Spacer()
                     if role == .visor {
+                        // Left out of Time Machine and Spotlight again, where it isn't.
+                        if let exclusions = model.visorExclusions, !exclusions.isComplete {
+                            Button("Leave Out of Backups…") { Task { await model.excludeVisor() } }
+                                .disabled(model.isBusy)
+                                .help("Spotlight is turned off on it; Time Machine's settings open, to add it under Options… › +.")
+                        }
                         Button("Erase Containers…", role: .destructive) { confirmingErase = true }
                             .disabled(model.isBusy || state?.isMountedInPlace != true)
                     }

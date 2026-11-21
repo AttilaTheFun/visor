@@ -28,7 +28,8 @@ import Testing
         #expect(state.available == 126_925_406_208)
         let commands = try state.createCommands(reserve: 0, quota: 200 * ByteSize.gigabyte)
         #expect(commands.map(\.argv) == [["/usr/sbin/diskutil", "apfs", "addVolume", "disk3", "Case-sensitive APFS", "Visor",
-                                          "-quota", "200000000000b"]])
+                                          "-quota", "200000000000b"],
+                                         ["/usr/bin/mdutil", "-i", "off", "/Volumes/Visor"]])
     }
 
     @Test func aFreshMacMakesBoth() throws {

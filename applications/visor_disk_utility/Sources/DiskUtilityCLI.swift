@@ -9,6 +9,8 @@ import VisorUninstall
 /// erase-containers --yes` (the container's folder on Visor emptied);
 /// options `--reserve-gb <n>`, `--quota-gb <n>` (the role's defaults
 /// otherwise) and `--sudo` (`sudo -n` instead of the administrator prompt).
+/// `… exclude-visor`: Spotlight turned off on the Visor volume where it's
+/// found indexing (Time Machine's exclusion is the person's: it says how).
 /// Each writes volumes.json after.
 ///
 /// `… uninstall`: Uninstall…'s dry run, printed, and nothing done; `…
@@ -17,7 +19,7 @@ import VisorUninstall
 /// are typed on standard input as the dry run asks (or given with
 /// `--confirm "<that>"`).
 enum DiskUtilityCLI {
-    static let verbs: Set<String> = ["status", "create", "erase-containers", "uninstall"]
+    static let verbs: Set<String> = ["status", "create", "erase-containers", "exclude-visor", "uninstall"]
 
     /// Runs and exits when the arguments are a command; else returns, for
     /// the app.
@@ -46,6 +48,10 @@ enum DiskUtilityCLI {
                 quota: try size(arguments, "--quota-gb") ?? role.defaultQuota)
             commands.forEach { print("running: \($0)") }
             survey = try DiskTool.change(commands, route: route)
+        case "exclude-visor":
+            let commands = try survey.state(for: .visor).exclusionCommands(DiskTool.exclusions())
+            commands.forEach { print("running: \($0)") }
+            if !commands.isEmpty { survey = try DiskTool.change(commands, route: route) }
         case "erase-containers":
             guard arguments.contains("--yes") else {
                 throw DiskVolumesError.blocked("erase-containers deletes the container's image, root filesystem, caches and logs: add --yes.")
@@ -55,6 +61,13 @@ enum DiskUtilityCLI {
             break
         }
         for role in VolumeRole.allCases { print(describe(survey.state(for: role))) }
+        if survey.state(for: .visor).isMountedInPlace {
+            let exclusions = DiskTool.exclusions()
+            print("Visor: \(exclusions.summary)")
+            if exclusions.timeMachineExcluded == false {
+                print("  note: leave it out in System Settings › General › Time Machine › Options… › + › Visor (no app may: macOS 27)")
+            }
+        }
         print("wrote \(try DiskTool.writeStatus(survey).path)")
     }
 
