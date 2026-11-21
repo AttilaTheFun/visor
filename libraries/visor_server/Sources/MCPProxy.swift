@@ -45,18 +45,18 @@ final class MCPProxy {
     /// its retry isn't asked.
     func tools(of endpoints: [MCPEndpoint], session: String, title: String, repository: String, secrets: any SecretStore) async -> [JSONValue] {
         let asked = now()
-        let fresh = await withTaskGroup(of: (Int, [JSONValue]?).self) { group in
-            for (index, endpoint) in endpoints.enumerated() {
-                let key = endpoint.name + "\u{0}" + session
-                if let listing = listings[key], listing.url == endpoint.url, asked < listing.retryAt { continue }
-                let connection = connection(endpoint, session: session, title: title, repository: repository, secrets: secrets)
-                let timeout = listTimeout
-                group.addTask { @MainActor in (index, await Self.list(endpoint, on: connection, timeout: timeout)) }
-            }
-            var fresh: [Int: [JSONValue]?] = [:]
-            for await (index, tools) in group { fresh.updateValue(tools, forKey: index) }
-            return fresh
+        // A task of the main actor's for each endpoint asked, begun before
+        // any is waited on: they wait on their endpoints together.
+        var asking: [(index: Int, list: Task<[JSONValue]?, Never>)] = []
+        for (index, endpoint) in endpoints.enumerated() {
+            let key = endpoint.name + "\u{0}" + session
+            if let listing = listings[key], listing.url == endpoint.url, asked < listing.retryAt { continue }
+            let connection = connection(endpoint, session: session, title: title, repository: repository, secrets: secrets)
+            let timeout = listTimeout
+            asking.append((index, Task { await Self.list(endpoint, on: connection, timeout: timeout) }))
         }
+        var fresh: [Int: [JSONValue]?] = [:]
+        for (index, list) in asking { fresh.updateValue(await list.value, forKey: index) }
         let answered = now()
         var listed: [JSONValue] = []
         for (index, endpoint) in endpoints.enumerated() {
