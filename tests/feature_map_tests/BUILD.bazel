@@ -12,8 +12,9 @@ load("//tools/swift:defs.bzl", "STRICT_SWIFT")
 # and `bazel test //...` pass it by.
 #
 # In two targets, which run side by side, each within a moderate test's
-# five minutes on GitHub's runner: the session's chat and Super Compact
-# (feature_map_chat_tests), and the rest (21 Nov 2026: the one target had
+# five minutes on GitHub's runner: the session's chat, Super Compact and
+# the archives it shares a helper with (feature_map_chat_tests), and the
+# rest (21 Nov 2026: the one target had
 # grown to 300 s there).
 
 # What the suite and the proof share: how a test launches Visor, finds an
@@ -27,6 +28,7 @@ _SUPPORT = [
 
 # The suites the second target takes.
 _CHAT = [
+    "FeatureMapTests+Archives.swift",
     "FeatureMapTests+Chat.swift",
     "FeatureMapTests+SuperCompact.swift",
 ]
