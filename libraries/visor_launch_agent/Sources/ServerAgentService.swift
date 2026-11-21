@@ -53,14 +53,17 @@ public enum ServerAgentService {
     /// Registered afresh (ServerAgentJob.reregister): the bundle told to
     /// LaunchServices again, unregistered, out of launchd, then registered,
     /// which starts it from the bundle in place now, its launch constraint
-    /// that bundle's. What `Visor server-agent register` runs (the update's
+    /// that bundle's; again while launchd has no process of it. What `Visor server-agent register` runs (the update's
     /// watcher, after an update or a rollback), and how the hand-over starts
     /// one that isn't running.
     public static func reregister(bundleID: String, bundle: String = Bundle.main.bundlePath) async -> String? {
-        await ServerAgentJob.reregister(refresh: { await launchServices(bundle) },
-                                        unregister: { try? await service(bundleID: bundleID).unregister() },
-                                        stop: { await Launchctl.stop(label: ServerAgentJob.label(bundleID: bundleID)) },
-                                        register: { register(bundleID: bundleID) })
+        let label = ServerAgentJob.label(bundleID: bundleID)
+        return await ServerAgentJob.reregister(refresh: { await launchServices(bundle) },
+                                               unregister: { try? await service(bundleID: bundleID).unregister() },
+                                               stop: { await Launchctl.stop(label: label) },
+                                               register: { register(bundleID: bundleID) },
+                                               running: { await Launchctl.pid(label: label) != nil },
+                                               pause: { try? await Task.sleep(for: .seconds(3)) })
     }
 
     /// LaunchServices' own tool, which Background Items reads the app's

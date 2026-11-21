@@ -128,23 +128,34 @@ public enum ServerAgentJob {
     /// LaunchServices again (`refresh`: `lsregister -f`), unregistered
     /// (`unregister`: SMAppService's), out of launchd (`stop`: launchctl
     /// bootout, waited for), then registered (`register`: SMAppService,
-    /// which starts it); what went wrong, or nil. The one way it's started
-    /// once its bundle may have changed (ServerAgentService.reregister): an
-    /// update to another build, a rollback to the one before, a start of a
-    /// registered job that isn't running. Background Items keeps a record
-    /// of the job with its executable's checksum, the job's launch
-    /// constraint, and launchd won't spawn it from another build put in its
-    /// place (`spawn failed`, "Launch Constraint Violation", exit 78, "needs
-    /// LWCR update": NCH's check of #491, and an update between two ad hoc
-    /// builds on macOS 27.0.1). A bootout and a register, or an unregister
-    /// and a register, keep that record; only once LaunchServices has the
-    /// bundle again does the unregister and register make a new one, of the
-    /// build in place (checked there).
-    public static func reregister(refresh: () async -> Void, unregister: () async -> Void, stop: () async -> Void,
-                                  register: () async -> String?) async -> String? {
-        await refresh()
-        await unregister()
-        await stop()
-        return await register()
+    /// which starts it), and, if launchd hasn't it running a moment later
+    /// (`running`, after `pause`), all of it again, up to `attempts` times;
+    /// what went wrong, or nil. The one way it's started once its bundle
+    /// may have changed (ServerAgentService.reregister): an update to
+    /// another build, a rollback to the one before, a start of a registered
+    /// job that isn't running.
+    ///
+    /// Background Items keeps a record of the job with its executable's
+    /// checksum as the job's launch constraint, and launchd won't spawn it
+    /// from another build put in its place (`spawn failed`, "Launch
+    /// Constraint Violation", exit 78, "needs LWCR update": NCH's check of
+    /// #491). On macOS 27.0.1, between two ad hoc builds, the first
+    /// registration after the bundle changed was refused so, whatever came
+    /// before it (a bootout, an unregister, `lsregister -f`); launchd then
+    /// asks for the constraint to be updated on the next spawn, and the
+    /// next registration ran the new build. So it's tried again rather
+    /// than left down.
+    public static func reregister(attempts: Int = 3, refresh: () async -> Void, unregister: () async -> Void, stop: () async -> Void,
+                                  register: () async -> String?, running: () async -> Bool,
+                                  pause: () async -> Void) async -> String? {
+        for _ in 0..<max(attempts, 1) {
+            await refresh()
+            await unregister()
+            await stop()
+            if let problem = await register() { return problem }
+            await pause()
+            if await running() { return nil }
+        }
+        return "launchd didn't start it after \(max(attempts, 1)) registrations (its launch constraint: the build registered isn't the one in place)"
     }
 }

@@ -151,20 +151,29 @@ private actor FakeSteps: ServerHandOverSteps {
     }
 
     /// Registering afresh is LaunchServices told of the bundle again, an
-    /// unregister and a bootout first, then the registration: Background
-    /// Items' record holds the launch constraint of the build registered,
-    /// and only so is it made again for the build in place (after an update
-    /// or a rollback, a bootout and a register, or an unregister and a
-    /// register, left launchd unable to spawn it).
-    @Test func reregisteringRefreshesUnregistersAndBootsOutFirstThenRegisters() async {
+    /// unregister and a bootout, then the registration; and, while launchd
+    /// has no process of it a moment later, all of it again (on macOS
+    /// 27.0.1 the first registration after the bundle changed was refused
+    /// for its launch constraint, the next one ran the new build).
+    @Test func reregisteringRefreshesUnregistersAndBootsOutThenRegistersUntilItRuns() async {
         let calls = Calls()
+        let runs = Calls()
         let problem = await ServerAgentJob.reregister(refresh: { await calls.add("lsregister") }, unregister: { await calls.add("unregister") },
                                                       stop: { await calls.add("bootout") },
-                                                      register: { await calls.add("register"); return nil })
+                                                      register: { await calls.add("register"); return nil },
+                                                      running: { await runs.add("look"); return await runs.all.count > 1 },
+                                                      pause: { await calls.add("pause") })
         #expect(problem == nil)
-        #expect(await calls.all == ["lsregister", "unregister", "bootout", "register"])
-        let refused = await ServerAgentJob.reregister(refresh: {}, unregister: {}, stop: {}, register: { "Operation not permitted" })
+        let once = ["lsregister", "unregister", "bootout", "register", "pause"]
+        #expect(await calls.all == once + once, "refused once (the constraint), then running")
+        let refused = await ServerAgentJob.reregister(refresh: {}, unregister: {}, stop: {}, register: { "Operation not permitted" },
+                                                      running: { true }, pause: {})
         #expect(refused == "Operation not permitted")
+        let never = Calls()
+        let down = await ServerAgentJob.reregister(attempts: 3, refresh: {}, unregister: {}, stop: {},
+                                                   register: { await never.add("register"); return nil }, running: { false }, pause: {})
+        #expect(down?.contains("after 3 registrations") == true)
+        #expect(await never.all.count == 3)
     }
 }
 
