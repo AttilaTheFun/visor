@@ -232,6 +232,8 @@ extension ServerTests {
     private var savedHome: URL!
     private let port = Int(ServerTestCase.freePort())
     private let conversation = "11111111-2222-4333-8444-555555555555"
+    /// The conversation its agent says it carries on in the container.
+    private let inContainer = "22222222-3333-4444-8555-666666666666"
 
     init() async throws {
         TestPlatform.install()
@@ -295,10 +297,10 @@ extension ServerTests {
     }
 
     /// The wrapper of `started` dialled in, saying it carries on `session`.
-    private func dial(_ started: FakeContainer.Started, session: String = "c-in-container") -> Wrapper {
+    private func dial(_ started: FakeContainer.Started, session: String? = nil) -> Wrapper {
         let wrapper = Wrapper()
         wrapper.connect(port: port, token: started.agent.token)
-        wrapper.send(hello(started.agent.agent, folder: started.agent.workingDirectory, session: session))
+        wrapper.send(hello(started.agent.agent, folder: started.agent.workingDirectory, session: session ?? inContainer))
         return wrapper
     }
 
@@ -331,7 +333,7 @@ extension ServerTests {
         }
         #expect(claims.sub == "m1")
         #expect(listening.jobs?.holds(agent.agent) == false, "no job: nothing claims it")
-        #expect(await eventually { record.move?.conversation == "c-in-container" ? true : nil } == true, "the session its hello said is kept")
+        #expect(await eventually { record.move?.conversation == inContainer ? true : nil } == true, "the session its hello said is kept")
 
         // Another agent's token, or none, isn't let in as it.
         for token in [nil, "not-a-token", server.agentTokens.mint(.runnerAgent, session: "m1", agent: UUID().uuidString)] {
@@ -439,7 +441,7 @@ extension ServerTests {
     /// is given, on its latest conversation, a turn cut short picked up.
     @Test func aServerStartStartsItsAgentAgainOnItsLatestConversation() async throws {
         let (started, wrapper, record) = try await placed("survives")
-        #expect(await eventually { record.move?.conversation == "c-in-container" ? true : nil } == true)
+        #expect(await eventually { record.move?.conversation == inContainer ? true : nil } == true)
         record.interrupted = true
         server.saveArchiveNow()
         wrapper.finish()
@@ -457,7 +459,7 @@ extension ServerTests {
         again.sessionsContainer = engine
         let restarted = try #require(await eventually { engine.all.first })
         #expect(restarted.agent.agent != started.agent.agent, "a new agent")
-        #expect(restarted.agent.resumeSessionID == "c-in-container", "on the conversation it had there")
+        #expect(restarted.agent.resumeSessionID == inContainer, "on the conversation it had there")
         #expect(restarted.agent.workingDirectory == started.agent.workingDirectory)
         #expect(back.info.queued.first?.contains("The Visor server restarted while you were working") == true, "its cut-short turn picked up")
         #expect(again.placedInContainer == 1, "keeping the container up")
@@ -478,9 +480,9 @@ extension ServerTests {
                 $0.agent = .with { $0.uuid = started.agent.agent }
                 $0.harness = "claude"
                 $0.workingDirectory = folder
-                $0.sessionID = "c-in-container"
+                $0.sessionID = inContainer
             } },
-            .with { $0.file = .with { $0.place = "projects/\(key)/c-in-container.jsonl"; $0.data = Data(transcript.utf8); $0.last = true } },
+            .with { $0.file = .with { $0.place = "projects/\(key)/\(inContainer).jsonl"; $0.data = Data(transcript.utf8); $0.last = true } },
         ]
         let transport = try HTTP2ClientTransport.Posix(target: .dns(host: "127.0.0.1", port: port), transportSecurity: .plaintext)
         let ack = try await withGRPCClient(transport: transport) { client in
@@ -489,13 +491,13 @@ extension ServerTests {
                 for part in parts { try await writer.write(part) }
             })
         }
-        #expect(ack.files == 1 && ack.sessionID == "c-in-container")
+        #expect(ack.files == 1 && ack.sessionID == inContainer)
         #expect(await eventually { record.driven ? nil : true } == true, "back on this computer")
         #expect(record.info.placement == .host && record.move == nil)
         let here = ClaudeSessionFiles.projectsRoot().appendingPathComponent(ClaudeSessionFiles.projectDirectoryName(for: record.info.cwd))
-        let returned = try String(contentsOf: here.appendingPathComponent("c-in-container.jsonl"), encoding: .utf8)
+        let returned = try String(contentsOf: here.appendingPathComponent("\(inContainer).jsonl"), encoding: .utf8)
         #expect(returned.contains("said in the container"))
-        #expect(record.process.resumeID == "c-in-container" || record.notice?.contains("with its turns on the runner") == true)
+        #expect(record.process.resumeID == inContainer || record.notice?.contains("with its turns on the runner") == true)
         // Its agent there let go: ended if it doesn't by itself.
         #expect(await eventually { started.run.hasEnded ? true : nil } == true)
         wrapper.finish()
@@ -506,7 +508,7 @@ extension ServerTests {
         wrapper.finish()
         first.run.end(0)
         let second = try #require(await eventually { self.container.all.count == 2 ? self.container.all[1] : nil })
-        #expect(second.agent.agent != first.agent.agent && second.agent.resumeSessionID == "c-in-container")
+        #expect(second.agent.agent != first.agent.agent && second.agent.resumeSessionID == inContainer)
         second.run.end(1)
         let third = try #require(await eventually { self.container.all.count == 3 ? self.container.all[2] : nil }, "after a pause")
         third.run.end(1)
@@ -537,7 +539,7 @@ extension ServerTests {
         wrapper.finish()
         started.run.end(137)
         let next = try #require(await eventually { self.container.all.count == 2 ? self.container.all[1] : nil })
-        #expect(next.agent.resumeSessionID == "c-in-container")
+        #expect(next.agent.resumeSessionID == inContainer)
         #expect(server.containerRunner.quickEnds["restart"] == 0, "not a quick end")
     }
 
@@ -576,6 +578,29 @@ extension ServerTests {
         #expect(agent.ended, "its agent here had gone first")
         #expect(!record.driven && record.info.placement == .host, "back on this computer")
         #expect(record.notice?.contains("it couldn't start in the Sessions container: no egress") == true, "\(record.notice ?? "")")
+    }
+
+    @Test func aNewSessionStartsInTheContainerWithItsFirstMessage() async throws {
+        let result = await server.startSessionInContainer(title: "Born there", prompt: "hello from the start")
+        guard case .success(let id) = result else {
+            Issue.record("refused: \(refusal(result.map { _ in () }) ?? "")")
+            return
+        }
+        let record = try #require(server.session(id))
+        #expect(record.info.placement == .container && record.info.title == "Born there")
+        let started = try #require(container.all.first)
+        #expect(started.agent.resumeSessionID.isEmpty, "nothing to resume")
+        #expect(started.agent.workingDirectory == sessions.path + "/Claude/" + id)
+        let wrapper = dial(started)
+        #expect(await eventually { wrapper.sent.contains("hello from the start") ? true : nil } == true, "its first message, once it's in")
+        #expect(await eventually { record.move?.conversation == inContainer ? true : nil } == true)
+        #expect(server.knownConversation(of: record) == inContainer, "what Move Back carries on from")
+        wrapper.finish()
+
+        container.refusing.withLock { $0 = "no egress" }
+        let refused = await server.startSessionInContainer(title: "Never")
+        #expect(refusal(refused.map { _ in () })?.contains("no egress") == true)
+        #expect(!server.sessions.contains { $0.info.title == "Never" }, "removed")
     }
 
     @Test func aSessionOutsideTheSharedFoldersWorksInAFolderOfItsOwnThere() async throws {

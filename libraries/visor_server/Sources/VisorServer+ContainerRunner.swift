@@ -98,6 +98,54 @@ extension VisorServer {
         return await startInContainer(record, first: true)
     }
 
+    /// New Session in the Sessions container: a Claude Code session whose
+    /// agent starts there, in a folder of its own on Sessions
+    /// (`<Sessions>/Claude/<id>`, as this computer's sessions have), with
+    /// `prompt` its first message if one is given. Its id, once its agent
+    /// has started there; refused while the container can't take
+    /// sessions, and, if its agent can't start, the session is removed.
+    package func startSessionInContainer(title: String = "", model: String? = nil, effort: String? = nil,
+                                         prompt: String? = nil) async -> Result<String, AgentJobRefusal> {
+        guard let container = sessionsContainer, let drivenProcess else { return .failure(AgentJobRefusal(Self.noContainerEngine)) }
+        let status = await container.status()
+        guard status.takesSessions else { return .failure(AgentJobRefusal(Self.containerRefusal(status))) }
+        let id = UUID().uuidString.lowercased()
+        let folder = "\(container.sharedFolders.first ?? "/Volumes/Sessions")/Claude/\(id)"
+        let named = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        var info = SessionInfo(id: id, agent: .claude, cwd: folder, title: named.isEmpty ? "Claude Code (container)" : String(named.prefix(60)),
+                               skipPermissions: true, model: model, effort: effort, created: Date().timeIntervalSince1970)
+        info.agentState = .starting
+        let record = SessionRecord(info: info, process: drivenProcess(info))
+        record.driven = true
+        record.runsInContainer = true
+        record.move = AgentJobMove(agent: UUID().uuidString.lowercased(), session: id, title: info.title, model: model ?? "", effort: effort ?? "",
+                                   resume: "", cwd: folder, runsOn: ContainerRunner.runsOn, workingDirectory: folder, skipPermissions: true)
+        if let prompt, !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { record.enqueue(prompt) }
+        sessions.append(record)
+        Self.log("session started in the Sessions container: \(info.title) (\(id)) in \(folder)")
+        saveArchiveNow()
+        broadcastSessions()
+        if case .failure(let refusal) = await startInContainer(record, first: false) {
+            sessions.removeAll { $0 === record }
+            saveArchiveNow()
+            broadcastSessions()
+            return .failure(refusal)
+        }
+        return .success(id)
+    }
+
+    /// `POST /api/container/sessions {title, model, effort, text}`: a new
+    /// session in the container, once its agent has started there.
+    func restStartSessionInContainer(_ call: RESTCall) async -> HTTPResponse {
+        let body = call.body
+        switch await startSessionInContainer(title: body.title ?? "", model: body.model, effort: body.effort, prompt: body.text) {
+        case .success(let id):
+            return .json(Envelope.sessions(session(id).map { [$0.info] } ?? []).encoded())
+        case .failure(let refusal):
+            return HTTPResponse(400, Envelope.error(refusal.reason).encoded())
+        }
+    }
+
     /// Why `record` can't move into the container now, if it can't.
     private func containerMoveRefusal(_ record: SessionRecord) -> AgentJobRefusal? {
         let title = record.info.title

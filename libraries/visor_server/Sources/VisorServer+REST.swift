@@ -63,6 +63,12 @@ extension VisorServer {
         if request.method == "POST", parts.first == "import", parts.count <= 2, authorized(request) {
             return routeImport(request, parts: parts, respond: respond)
         }
+        // A new session in the Sessions container (VisorServer+ContainerRunner).
+        if request.method == "POST", parts == ["container", "sessions"], authorized(request) {
+            let call = RESTCall(request: request, parts: parts, query: Self.query(request.path), body: Envelope.decodeBody(request.body))
+            Task { respond(await restStartSessionInContainer(call)) }
+            return
+        }
         // The Sessions container (VisorServer+Container).
         if parts.first == "container", authorized(request) {
             return routeContainer(request, parts: parts, respond: respond)
