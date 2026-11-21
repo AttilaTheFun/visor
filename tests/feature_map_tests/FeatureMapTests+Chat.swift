@@ -2,7 +2,6 @@
 // approval and question waiting in it, its tool calls, an attachment, and
 // the pages a slash command opens.
 
-import Foundation
 import IsomerHeadless
 import Testing
 
@@ -112,11 +111,10 @@ extension FeatureMapTests {
         /// The turn's line under the thread (the `turn` fixture,
         /// VisorFixture's `turnSteps`): one state after another as the
         /// server tells them, never any of the reply's words, then the
-        /// reply's row once it syncs, once, scrolled to (the thread was at
-        /// its end), and the line gone. (Not among FixtureScreens': while
-        /// the turn runs the composer offers Stop, not Send, so the chat is
-        /// told by its end.)
-        @Test("Session chat: the turn's line through its states, then the reply's row, scrolled to")
+        /// reply's row once it syncs, once, and the line gone. (Not among
+        /// FixtureScreens': while the turn runs the composer offers Stop,
+        /// not Send, so the chat is told by its end.)
+        @Test("Session chat: the turn's line through its states, then the reply's row")
         func turnStates() throws {
             let reply = "All 42 sync tests pass, offline rows included, and the banner shows how many are still waiting."
             let app = try VisorLaunch.fixture("turn")
@@ -130,44 +128,8 @@ extension FeatureMapTests {
             #expect(landed.texts.filter { $0 == reply }.count == 1, "the reply's row, once: \(landed.summary)")
             #expect(!landed.texts.contains("Responding…") && !landed.texts.contains("Thinking…"), "the line gone: \(landed.summary)")
             FeatureMapNode.chat.expectShown(on: landed)
-            // At the thread's end when it came: the thread goes down to it
-            // (an eased scroll, a moment after the row is in).
-            var layout = try app.layout()
-            let deadline = ContinuousClock.now + .seconds(3)
-            while !Self.inView(reply, layout), ContinuousClock.now < deadline {
-                Thread.sleep(forTimeInterval: 0.2)
-                layout = try app.layout()
-            }
-            #expect(Self.inView(reply, layout), "the reply's row in view: \(String(describing: layout.frame(of: reply))) in \(layout.height); "
-                    + "the turn's line at \(String(describing: layout.frame(of: "Send")))")
-        }
-
-        /// Read further up when the reply comes: the thread stays where it
-        /// is, and the pill says a row came in below.
-        @Test("Session chat: a row that comes while read further up leaves the thread still, with new-rows-pill")
-        func turnRowWhileScrolledUp() throws {
-            let reply = "All 42 sync tests pass, offline rows included, and the banner shows how many are still waiting."
-            let app = try VisorLaunch.fixture("turn")
-            defer { app.quit() }
-            try app.screen(within: 10) { $0.texts.contains("Thinking…") }
-            // Up the thread, by a drag on it.
-            for _ in 0..<4 { _ = try app.swipe("I'll look at how rows are written first.", "down") }
-            // A row of the thread in view, read: where it is.
-            let read = try app.layout()
-            let rows = ["The weather app loses rows when the phone goes offline. Can you make the sync survive that?",
-                        "I'll look at how rows are written first.", "No matches outside RowStore."]
-            let kept = rows.first { Self.inView($0, read) }
-            #expect(kept != nil, "up the thread: \(read.items.map(\.label).prefix(20))")
-            let landed = try app.screen(within: 30) { $0.has(id: "new-rows-pill") }
-            #expect(landed.has(id: "new-rows-pill"), "the pill: \(landed.summary)")
-            let layout = try app.layout()
-            if let kept { #expect(layout.frame(of: kept) == read.frame(of: kept), "what was read stayed where it was") }
-            if let row = layout.frame(of: reply) { #expect(row.minY >= layout.height, "the reply below, out of view: \(row)") }
-        }
-
-        /// Whether the view with this label is on screen, whole.
-        static func inView(_ label: String, _ layout: HeadlessLayout) -> Bool {
-            layout.frame(of: label).map { $0.minY >= 0 && $0.maxY <= layout.height } == true
+            // (Whether the thread went down to it can't be told here:
+            // Gaps' `followsTheEnd`.)
         }
 
         /// A turn held in one state (the turn-‹state› fixtures): its words

@@ -37,6 +37,13 @@ extension FeatureMapTests {
               .disabled("the fixture's computer doesn't fork: the page that opens is an empty “Session”, not “Fork of …”, and back goes to Sessions rather than the chat (Chat's sideQuestions takes /btw)"))
         func forkAndBranch() {}
 
+        @Test("Session chat: a row that comes in is scrolled to at the thread's end, and not while read further up",
+              .disabled("headless, the transcript's List doesn't move for ScrollViewReader's scrollTo and reports no scroll geometry "
+                        + "(measured 21 Nov 2026 with the driver's layout on `turn`: the thread opens at its top, and the reply's "
+                        + "row lands below the window), and a drag on it is refused (“nothing on the screen takes a swipe”); "
+                        + "takeable once Isomer's portable List scrolls and the layout reports where"))
+        func followsTheEnd() {}
+
         @Test("Session chat → Subagent: tap a subagent's row",
               .disabled("the fixture's transcript has no subagent"))
         func subagent() {}
