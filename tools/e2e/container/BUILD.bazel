@@ -1,5 +1,4 @@
-load("@rules_apple//apple:macos.bzl", "macos_command_line_application")
-load("@rules_swift//swift:swift.bzl", "swift_library")
+load("@rules_swift//swift:swift.bzl", "swift_binary")
 load("//tools/swift:defs.bzl", "STRICT_SWIFT")
 
 # The Sessions container booted for real (docs/containers.md), end to end,
@@ -11,12 +10,14 @@ load("//tools/swift:defs.bzl", "STRICT_SWIFT")
 # both ways, no LAN from the guest; then stopped and everything deleted.
 #
 # Bare metal only: a Mac with Apple silicon and macOS 26 or later where
-# Virtualization can make a VM (never a macOS VM lease, which can't nest),
-# signed ad hoc with the virtualization entitlement (container.entitlements).
+# Virtualization can make a VM (never a macOS VM lease, which can't nest).
+# It needs the virtualization entitlement, which a command-line program of
+# Bazel's can't be given (rules_apple's have none), so it signs a copy of
+# itself ad hoc with it, in /tmp, and runs that (SelfSigning).
 #
 #   bazel run //tools/e2e/container --config=apple_cross_mac -- --linux <Linux programs folder> --image <visor-agent@sha256:…>
-swift_library(
-    name = "container_lib",
+swift_binary(
+    name = "container",
     srcs = glob(["Sources/*.swift"]),
     copts = STRICT_SWIFT,
     module_name = "ContainerEndToEnd",
@@ -30,12 +31,4 @@ swift_library(
         "//libraries/visor_protocol",
         "//libraries/visor_server",
     ],
-)
-
-macos_command_line_application(
-    name = "container",
-    bundle_id = "com.LoganShire.Visor.e2e.container",
-    entitlements = "container.entitlements",
-    minimum_os_version = "15.0",
-    deps = [":container_lib"],
 )

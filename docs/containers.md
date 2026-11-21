@@ -256,6 +256,7 @@ Start, Stop and Check Again.
   free port, it checks the boot and `relay-client check`, `uname`, a file
   each way through `/Volumes/Sessions/.visor-e2e-container-<id>`, and no
   LAN (only `lo`, and this Mac's addresses and a private one refused), then
-  stops and deletes everything. `--linux` is a build's
+  stops and deletes everything. It signs a copy of itself ad hoc with the
+  virtualization entitlement and runs that. `--linux` is a build's
   `Contents/Resources/Linux` with `relay-client check`'s health answer
   (0.64 or later).

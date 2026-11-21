@@ -3,5 +3,6 @@
 
 import Foundation
 
+SelfSigning.ensure()
 let options = ContainerCheckOptions.parse(Array(CommandLine.arguments.dropFirst()))
 exit(await ContainerCheck(options: options).run())
