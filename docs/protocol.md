@@ -748,7 +748,26 @@ and passes a call on (`"mode":"mcp_call"`, `text` the JSON
 server makes the request with the session's headers, under an MCP session
 of its own for each session and endpoint, begun again if the endpoint
 forgets it. The script looks again every 30 s and sends
-`notifications/tools/list_changed` when the tools changed. Each endpoint is
+`notifications/tools/list_changed` only when the tools really changed:
+each one's name, description and schema held, as values, against what the
+agent was last given (0.64 compared their JSON as text, whose objects' keys
+come in no set order, and so told the agent on every look). `tools/list` is
+answered at once from the last look: Visor's own tools always, and the
+passed-on ones as last listed; a look the server doesn't answer within 15 s
+(restarting, say) keeps them, and is tried again after 2 s, doubling up to
+the 30 s. The server asks every endpoint at once, each within 5 s, and
+lists the last good tools of one that fails or is slow (a call to it fails
+with why), asking it again after 2 s, doubling up to a minute; only once it
+has failed for 15 minutes are its tools left out (one `list_changed`), and
+they are back when it answers (one more). `visor-agent-host mcp` holds no
+connection between calls: each dials the server's port afresh with the
+token file as it is then, so a server restarted or updated in place, or a
+token re-minted, is simply reached again; a dial the server doesn't answer
+is tried again for about 8 s (0.25 s, doubling) before a call says Visor is
+not reachable, and a request is never sent twice. It reaches the server on
+loopback TCP (`VISOR_PORT`), never its socket file, so the socket's place
+(`~/.visor/server.sock`, or the Visor volume's `run/server.sock`) is no
+matter to it. Each endpoint is
 on for a session unless it, or its `onByDefault`, says otherwise (`mcp`).
 They are the computer's native sessions' only: a runner's agent (a driven
 session) gets none of them (`mcp_tools` answered `[]`, `mcp_call` refused),

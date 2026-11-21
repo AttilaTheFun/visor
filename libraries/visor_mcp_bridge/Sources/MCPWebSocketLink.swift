@@ -5,6 +5,14 @@ import VisorProtocol
 /// agent's session: an `agent` request answered by its `agent_result`, an
 /// `approval_request` by its `approval_result`. Closing the socket of an
 /// `approve` the person hasn't answered withdraws the prompt.
+///
+/// Nothing is held between calls, so a server that restarted, was updated
+/// in place or re-minted the token is simply reached again: each call
+/// connects afresh (to the port, which an update keeps) with the token
+/// file as it is then. A server that isn't answering yet (one restarting)
+/// is dialled again a few times, waiting longer each time (`redials`),
+/// before the call says Visor is not reachable. Only the connection is
+/// tried again, never a request once sent: a message isn't sent twice.
 struct MCPWebSocketLink: MCPServerLink {
     /// `ws://host:port`: this computer's server, or the computer a
     /// container's agent runs on.
@@ -18,6 +26,9 @@ struct MCPWebSocketLink: MCPServerLink {
     /// Where the server keeps the session's token fresh (VISOR_TOKEN_FILE):
     /// read on each call, since it is re-minted hourly.
     var tokenFile: String? = nil
+    /// The waits before each dial after the first fails: 0.25 s doubling,
+    /// about 8 s in all, the time a server agent takes to come back.
+    var redials: [Duration] = [.milliseconds(250), .milliseconds(500), .seconds(1), .seconds(2), .seconds(4)]
 
     /// The token to show now: the file's, else VISOR_TOKEN.
     var currentToken: String {
@@ -28,7 +39,7 @@ struct MCPWebSocketLink: MCPServerLink {
 
     func call(_ fields: [String: JSONValue]) async -> MCPReply {
         let unreachable = MCPReply(ok: false, text: "Visor is not reachable.")
-        guard let socket = await MCPWebSocket.open(url) else { return unreachable }
+        guard let socket = await open() else { return unreachable }
         defer { socket.shut() }
         let id = Self.requestID()
         var message = fields
@@ -46,7 +57,7 @@ struct MCPWebSocketLink: MCPServerLink {
     }
 
     func ask(_ request: [String: JSONValue], _ asking: MCPAsking) async -> MCPAnswer {
-        guard let socket = await MCPWebSocket.open(url) else { return .no }
+        guard let socket = await open() else { return .no }
         defer { socket.shut() }
         guard asking.whenCancelled({ socket.shut() }) else { return MCPAnswer(allow: false, answers: nil, reason: asking.reason) }
         let id = Self.requestID()
@@ -66,6 +77,19 @@ struct MCPWebSocketLink: MCPServerLink {
         }
         // Closed: by the server, or by giving up on the call.
         return MCPAnswer(allow: false, answers: nil, reason: asking.reason)
+    }
+
+    /// A WebSocket to the server, dialled again after each wait in
+    /// `redials` while it doesn't answer; nil once they are spent, or the
+    /// call is given up on.
+    private func open() async -> MCPWebSocket? {
+        if let socket = await MCPWebSocket.open(url) { return socket }
+        for wait in redials {
+            try? await Task.sleep(for: wait)
+            if Task.isCancelled { return nil }
+            if let socket = await MCPWebSocket.open(url) { return socket }
+        }
+        return nil
     }
 
     /// An id for one request: the time and six random letters or digits.
