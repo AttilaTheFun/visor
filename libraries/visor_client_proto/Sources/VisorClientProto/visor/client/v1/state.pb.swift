@@ -10,10 +10,10 @@
 
 /// A session's ephemeral state: everything about it that is not the record.
 /// Sessions.Watch sends it whole, then its changes, for as long as the
-/// client follows the session. The client joins it with the rows it has
-/// synced (rows.proto): the reply being written ("responding") is drawn
-/// until its row is synced, then the row in its place (docs/protocol.md,
-/// The reply being written).
+/// client follows the session. Where the turn stands (sending, thinking,
+/// responding, waiting on something, idle) is part of it; the reply's words
+/// are not: they come with its row, synced (rows.proto; docs/protocol.md,
+/// The turn's state).
 
 import SwiftProtobuf
 
@@ -40,15 +40,11 @@ public nonisolated struct Visor_Client_V1_WatchSessionRequest: Sendable {
   public init() {}
 }
 
-/// The state whole: on watching, and again when the client's words of a
-/// reply don't meet an append.
+/// The state whole: on watching.
 public nonisolated struct Visor_Client_V1_SessionState: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
-
-  /// The replies being written that the record doesn't carry yet.
-  public var responding: [Visor_Client_V1_Responding] = []
 
   /// The turn's status lines so far: tool calls, subagents, shells, thinking.
   public var status: [Visor_Client_V1_StatusItem] = []
@@ -78,67 +74,170 @@ public nonisolated struct Visor_Client_V1_SessionState: Sendable {
   /// A sign-in waiting for its code (`/login`): the page to sign in at.
   public var signIn: String = String()
 
-  /// The record's revision when the state was read: a reply the client's
-  /// rows carry by then is settled.
+  /// The record's revision when the state was read.
   public var recordRevision: Int64 = 0
+
+  /// Where the turn stands.
+  public var turn: Visor_Client_V1_TurnState {
+    get {_turn ?? Visor_Client_V1_TurnState()}
+    set {_turn = newValue}
+  }
+  /// Returns true if `turn` has been explicitly set.
+  public var hasTurn: Bool {self._turn != nil}
+  /// Clears the value of `turn`. Subsequent reads from it will return its default value.
+  public mutating func clearTurn() {self._turn = nil}
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
 
   fileprivate var _approval: Visor_Client_V1_Approval? = nil
+  fileprivate var _turn: Visor_Client_V1_TurnState? = nil
 }
 
-/// A reply being written: its message's id (which its first row on the
-/// record has too) and its words so far.
-public nonisolated struct Visor_Client_V1_Responding: Sendable {
+/// Where a session's turn stands, one state at a time. When several things
+/// are true, the most pressing: an approval, a question or a sign-in; a
+/// tool call or a subagent running; the reply being written; thinking; the
+/// person's message on its way; between turns, work left in the background.
+public nonisolated struct Visor_Client_V1_TurnState: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var id: String = String()
+  public var phase: Visor_Client_V1_TurnState.Phase = .unspecified
 
-  public var text: String = String()
+  /// For waiting: what it waits on, in the order the agent began them.
+  public var waits: [Visor_Client_V1_TurnWait] = []
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public nonisolated enum Phase: SwiftProtobuf.Enum, Swift.CaseIterable {
+    public typealias RawValue = Int
+    case unspecified // = 0
+    case sending // = 1
+    case thinking // = 2
+    case responding // = 3
+    case waiting // = 4
+    case idle // = 5
+    case UNRECOGNIZED(Int)
+
+    public init() {
+      self = .unspecified
+    }
+
+    public init?(rawValue: Int) {
+      switch rawValue {
+      case 0: self = .unspecified
+      case 1: self = .sending
+      case 2: self = .thinking
+      case 3: self = .responding
+      case 4: self = .waiting
+      case 5: self = .idle
+      default: self = .UNRECOGNIZED(rawValue)
+      }
+    }
+
+    public var rawValue: Int {
+      switch self {
+      case .unspecified: return 0
+      case .sending: return 1
+      case .thinking: return 2
+      case .responding: return 3
+      case .waiting: return 4
+      case .idle: return 5
+      case .UNRECOGNIZED(let i): return i
+      }
+    }
+
+    // The compiler won't synthesize support with the UNRECOGNIZED case.
+    public static let allCases: [Visor_Client_V1_TurnState.Phase] = [
+      .unspecified,
+      .sending,
+      .thinking,
+      .responding,
+      .waiting,
+      .idle,
+    ]
+
+  }
 
   public init() {}
 }
 
-/// More words of a reply being written: where they go (`from`, the length
-/// in UTF-8 bytes of the words before them) and what they are. The server
-/// sends one per message at most every 200 ms. Words that don't meet what
-/// the client holds mean some were missed: it watches again, for the state
-/// whole.
-public nonisolated struct Visor_Client_V1_Append: Sendable {
+/// One thing a waiting turn waits on.
+public nonisolated struct Visor_Client_V1_TurnWait: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
+  public var kind: Visor_Client_V1_TurnWait.Kind = .unspecified
+
+  /// The tool call's, the approval's or the background task's id.
   public var id: String = String()
 
-  public var from: Int64 = 0
+  /// What it is, in a line ("Bash: bazel test //tests:linux", a subagent's
+  /// description, an approval's summary).
+  public var label: String = String()
 
-  public var text: String = String()
+  /// What sort of work, for its symbol; unspecified for an approval, a
+  /// question or a sign-in.
+  public var work: Visor_Client_V1_StatusItem.Kind = .unspecified
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
-  public init() {}
-}
+  public nonisolated enum Kind: SwiftProtobuf.Enum, Swift.CaseIterable {
+    public typealias RawValue = Int
+    case unspecified // = 0
+    case approval // = 1
+    case question // = 2
+    case signIn // = 3
+    case tool // = 4
+    case subagent // = 5
+    case background // = 6
+    case UNRECOGNIZED(Int)
 
-/// The record carries a reply: its row is on the record from
-/// `record_revision` on. The client lets its words go once its own rows
-/// have it.
-public nonisolated struct Visor_Client_V1_Settled: Sendable {
-  // SwiftProtobuf.Message conformance is added in an extension below. See the
-  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
-  // methods supported on all messages.
+    public init() {
+      self = .unspecified
+    }
 
-  public var id: String = String()
+    public init?(rawValue: Int) {
+      switch rawValue {
+      case 0: self = .unspecified
+      case 1: self = .approval
+      case 2: self = .question
+      case 3: self = .signIn
+      case 4: self = .tool
+      case 5: self = .subagent
+      case 6: self = .background
+      default: self = .UNRECOGNIZED(rawValue)
+      }
+    }
 
-  public var recordRevision: Int64 = 0
+    public var rawValue: Int {
+      switch self {
+      case .unspecified: return 0
+      case .approval: return 1
+      case .question: return 2
+      case .signIn: return 3
+      case .tool: return 4
+      case .subagent: return 5
+      case .background: return 6
+      case .UNRECOGNIZED(let i): return i
+      }
+    }
 
-  public var unknownFields = SwiftProtobuf.UnknownStorage()
+    // The compiler won't synthesize support with the UNRECOGNIZED case.
+    public static let allCases: [Visor_Client_V1_TurnWait.Kind] = [
+      .unspecified,
+      .approval,
+      .question,
+      .signIn,
+      .tool,
+      .subagent,
+      .background,
+    ]
+
+  }
 
   public init() {}
 }
@@ -347,22 +446,6 @@ public nonisolated struct Visor_Client_V1_SessionChange: Sendable {
     set {change = .state(newValue)}
   }
 
-  public var append: Visor_Client_V1_Append {
-    get {
-      if case .append(let v)? = change {return v}
-      return Visor_Client_V1_Append()
-    }
-    set {change = .append(newValue)}
-  }
-
-  public var settled: Visor_Client_V1_Settled {
-    get {
-      if case .settled(let v)? = change {return v}
-      return Visor_Client_V1_Settled()
-    }
-    set {change = .settled(newValue)}
-  }
-
   /// The turn's status lines, whole, whenever they change.
   public var status: Visor_Client_V1_StatusList {
     get {
@@ -426,13 +509,20 @@ public nonisolated struct Visor_Client_V1_SessionChange: Sendable {
     set {change = .queued(newValue)}
   }
 
+  /// Where the turn stands, whenever that changes.
+  public var turn: Visor_Client_V1_TurnState {
+    get {
+      if case .turn(let v)? = change {return v}
+      return Visor_Client_V1_TurnState()
+    }
+    set {change = .turn(newValue)}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public nonisolated enum OneOf_Change: Equatable, Sendable {
     /// The state whole, in place of what the client holds.
     case state(Visor_Client_V1_SessionState)
-    case append(Visor_Client_V1_Append)
-    case settled(Visor_Client_V1_Settled)
     /// The turn's status lines, whole, whenever they change.
     case status(Visor_Client_V1_StatusList)
     /// What the agent is doing; empty for nothing.
@@ -447,6 +537,8 @@ public nonisolated struct Visor_Client_V1_SessionChange: Sendable {
     case failure(String)
     /// What waits for the turn's end.
     case queued(Visor_Client_V1_QueuedList)
+    /// Where the turn stands, whenever that changes.
+    case turn(Visor_Client_V1_TurnState)
 
   }
 
@@ -534,7 +626,7 @@ nonisolated extension Visor_Client_V1_WatchSessionRequest: SwiftProtobuf.Message
 
 nonisolated extension Visor_Client_V1_SessionState: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".SessionState"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}responding\0\u{1}status\0\u{1}activity\0\u{1}busy\0\u{1}approval\0\u{1}queued\0\u{1}notice\0\u{3}sign_in\0\u{3}record_revision\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\u{2}status\0\u{1}activity\0\u{1}busy\0\u{1}approval\0\u{1}queued\0\u{1}notice\0\u{3}sign_in\0\u{3}record_revision\0\u{1}turn\0\u{b}responding\0\u{c}\u{1}\u{1}")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -542,7 +634,6 @@ nonisolated extension Visor_Client_V1_SessionState: SwiftProtobuf.Message, Swift
       // allocates stack space for every case branch when no optimizations are
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try { try decoder.decodeRepeatedMessageField(value: &self.responding) }()
       case 2: try { try decoder.decodeRepeatedMessageField(value: &self.status) }()
       case 3: try { try decoder.decodeSingularStringField(value: &self.activity) }()
       case 4: try { try decoder.decodeSingularBoolField(value: &self.busy) }()
@@ -551,6 +642,7 @@ nonisolated extension Visor_Client_V1_SessionState: SwiftProtobuf.Message, Swift
       case 7: try { try decoder.decodeSingularStringField(value: &self.notice) }()
       case 8: try { try decoder.decodeSingularStringField(value: &self.signIn) }()
       case 9: try { try decoder.decodeSingularInt64Field(value: &self.recordRevision) }()
+      case 10: try { try decoder.decodeSingularMessageField(value: &self._turn) }()
       default: break
       }
     }
@@ -561,9 +653,6 @@ nonisolated extension Visor_Client_V1_SessionState: SwiftProtobuf.Message, Swift
     // allocates stack space for every if/case branch local when no optimizations
     // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
     // https://github.com/apple/swift-protobuf/issues/1182
-    if !self.responding.isEmpty {
-      try visitor.visitRepeatedMessageField(value: self.responding, fieldNumber: 1)
-    }
     if !self.status.isEmpty {
       try visitor.visitRepeatedMessageField(value: self.status, fieldNumber: 2)
     }
@@ -588,11 +677,13 @@ nonisolated extension Visor_Client_V1_SessionState: SwiftProtobuf.Message, Swift
     if self.recordRevision != 0 {
       try visitor.visitSingularInt64Field(value: self.recordRevision, fieldNumber: 9)
     }
+    try { if let v = self._turn {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 10)
+    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Visor_Client_V1_SessionState, rhs: Visor_Client_V1_SessionState) -> Bool {
-    if lhs.responding != rhs.responding {return false}
     if lhs.status != rhs.status {return false}
     if lhs.activity != rhs.activity {return false}
     if lhs.busy != rhs.busy {return false}
@@ -601,14 +692,15 @@ nonisolated extension Visor_Client_V1_SessionState: SwiftProtobuf.Message, Swift
     if lhs.notice != rhs.notice {return false}
     if lhs.signIn != rhs.signIn {return false}
     if lhs.recordRevision != rhs.recordRevision {return false}
+    if lhs._turn != rhs._turn {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
 }
 
-nonisolated extension Visor_Client_V1_Responding: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = _protobuf_package + ".Responding"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}text\0")
+nonisolated extension Visor_Client_V1_TurnState: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".TurnState"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}phase\0\u{1}waits\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -616,34 +708,38 @@ nonisolated extension Visor_Client_V1_Responding: SwiftProtobuf.Message, SwiftPr
       // allocates stack space for every case branch when no optimizations are
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try { try decoder.decodeSingularStringField(value: &self.id) }()
-      case 2: try { try decoder.decodeSingularStringField(value: &self.text) }()
+      case 1: try { try decoder.decodeSingularEnumField(value: &self.phase) }()
+      case 2: try { try decoder.decodeRepeatedMessageField(value: &self.waits) }()
       default: break
       }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    if !self.id.isEmpty {
-      try visitor.visitSingularStringField(value: self.id, fieldNumber: 1)
+    if self.phase != .unspecified {
+      try visitor.visitSingularEnumField(value: self.phase, fieldNumber: 1)
     }
-    if !self.text.isEmpty {
-      try visitor.visitSingularStringField(value: self.text, fieldNumber: 2)
+    if !self.waits.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.waits, fieldNumber: 2)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: Visor_Client_V1_Responding, rhs: Visor_Client_V1_Responding) -> Bool {
-    if lhs.id != rhs.id {return false}
-    if lhs.text != rhs.text {return false}
+  public static func ==(lhs: Visor_Client_V1_TurnState, rhs: Visor_Client_V1_TurnState) -> Bool {
+    if lhs.phase != rhs.phase {return false}
+    if lhs.waits != rhs.waits {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
 }
 
-nonisolated extension Visor_Client_V1_Append: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = _protobuf_package + ".Append"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}from\0\u{1}text\0")
+nonisolated extension Visor_Client_V1_TurnState.Phase: SwiftProtobuf._ProtoNameProviding {
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0PHASE_UNSPECIFIED\0\u{1}PHASE_SENDING\0\u{1}PHASE_THINKING\0\u{1}PHASE_RESPONDING\0\u{1}PHASE_WAITING\0\u{1}PHASE_IDLE\0")
+}
+
+nonisolated extension Visor_Client_V1_TurnWait: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".TurnWait"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}kind\0\u{1}id\0\u{1}label\0\u{1}work\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -651,69 +747,43 @@ nonisolated extension Visor_Client_V1_Append: SwiftProtobuf.Message, SwiftProtob
       // allocates stack space for every case branch when no optimizations are
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try { try decoder.decodeSingularStringField(value: &self.id) }()
-      case 2: try { try decoder.decodeSingularInt64Field(value: &self.from) }()
-      case 3: try { try decoder.decodeSingularStringField(value: &self.text) }()
+      case 1: try { try decoder.decodeSingularEnumField(value: &self.kind) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.id) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.label) }()
+      case 4: try { try decoder.decodeSingularEnumField(value: &self.work) }()
       default: break
       }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.kind != .unspecified {
+      try visitor.visitSingularEnumField(value: self.kind, fieldNumber: 1)
+    }
     if !self.id.isEmpty {
-      try visitor.visitSingularStringField(value: self.id, fieldNumber: 1)
+      try visitor.visitSingularStringField(value: self.id, fieldNumber: 2)
     }
-    if self.from != 0 {
-      try visitor.visitSingularInt64Field(value: self.from, fieldNumber: 2)
+    if !self.label.isEmpty {
+      try visitor.visitSingularStringField(value: self.label, fieldNumber: 3)
     }
-    if !self.text.isEmpty {
-      try visitor.visitSingularStringField(value: self.text, fieldNumber: 3)
+    if self.work != .unspecified {
+      try visitor.visitSingularEnumField(value: self.work, fieldNumber: 4)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: Visor_Client_V1_Append, rhs: Visor_Client_V1_Append) -> Bool {
+  public static func ==(lhs: Visor_Client_V1_TurnWait, rhs: Visor_Client_V1_TurnWait) -> Bool {
+    if lhs.kind != rhs.kind {return false}
     if lhs.id != rhs.id {return false}
-    if lhs.from != rhs.from {return false}
-    if lhs.text != rhs.text {return false}
+    if lhs.label != rhs.label {return false}
+    if lhs.work != rhs.work {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
 }
 
-nonisolated extension Visor_Client_V1_Settled: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = _protobuf_package + ".Settled"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{3}record_revision\0")
-
-  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    while let fieldNumber = try decoder.nextFieldNumber() {
-      // The use of inline closures is to circumvent an issue where the compiler
-      // allocates stack space for every case branch when no optimizations are
-      // enabled. https://github.com/apple/swift-protobuf/issues/1034
-      switch fieldNumber {
-      case 1: try { try decoder.decodeSingularStringField(value: &self.id) }()
-      case 2: try { try decoder.decodeSingularInt64Field(value: &self.recordRevision) }()
-      default: break
-      }
-    }
-  }
-
-  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    if !self.id.isEmpty {
-      try visitor.visitSingularStringField(value: self.id, fieldNumber: 1)
-    }
-    if self.recordRevision != 0 {
-      try visitor.visitSingularInt64Field(value: self.recordRevision, fieldNumber: 2)
-    }
-    try unknownFields.traverse(visitor: &visitor)
-  }
-
-  public static func ==(lhs: Visor_Client_V1_Settled, rhs: Visor_Client_V1_Settled) -> Bool {
-    if lhs.id != rhs.id {return false}
-    if lhs.recordRevision != rhs.recordRevision {return false}
-    if lhs.unknownFields != rhs.unknownFields {return false}
-    return true
-  }
+nonisolated extension Visor_Client_V1_TurnWait.Kind: SwiftProtobuf._ProtoNameProviding {
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0KIND_UNSPECIFIED\0\u{1}KIND_APPROVAL\0\u{1}KIND_QUESTION\0\u{1}KIND_SIGN_IN\0\u{1}KIND_TOOL\0\u{1}KIND_SUBAGENT\0\u{1}KIND_BACKGROUND\0")
 }
 
 nonisolated extension Visor_Client_V1_StatusItem: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
@@ -936,7 +1006,7 @@ nonisolated extension Visor_Client_V1_Question.Option: SwiftProtobuf.Message, Sw
 
 nonisolated extension Visor_Client_V1_SessionChange: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".SessionChange"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}state\0\u{1}append\0\u{1}settled\0\u{1}status\0\u{1}activity\0\u{1}busy\0\u{1}approval\0\u{1}notice\0\u{1}failure\0\u{1}queued\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}state\0\u{2}\u{3}status\0\u{1}activity\0\u{1}busy\0\u{1}approval\0\u{1}notice\0\u{1}failure\0\u{1}queued\0\u{1}turn\0\u{b}append\0\u{b}settled\0\u{c}\u{2}\u{1}\u{c}\u{3}\u{1}")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -955,32 +1025,6 @@ nonisolated extension Visor_Client_V1_SessionChange: SwiftProtobuf.Message, Swif
         if let v = v {
           if hadOneofValue {try decoder.handleConflictingOneOf()}
           self.change = .state(v)
-        }
-      }()
-      case 2: try {
-        var v: Visor_Client_V1_Append?
-        var hadOneofValue = false
-        if let current = self.change {
-          hadOneofValue = true
-          if case .append(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.change = .append(v)
-        }
-      }()
-      case 3: try {
-        var v: Visor_Client_V1_Settled?
-        var hadOneofValue = false
-        if let current = self.change {
-          hadOneofValue = true
-          if case .settled(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.change = .settled(v)
         }
       }()
       case 4: try {
@@ -1054,6 +1098,19 @@ nonisolated extension Visor_Client_V1_SessionChange: SwiftProtobuf.Message, Swif
           self.change = .queued(v)
         }
       }()
+      case 11: try {
+        var v: Visor_Client_V1_TurnState?
+        var hadOneofValue = false
+        if let current = self.change {
+          hadOneofValue = true
+          if case .turn(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.change = .turn(v)
+        }
+      }()
       default: break
       }
     }
@@ -1068,14 +1125,6 @@ nonisolated extension Visor_Client_V1_SessionChange: SwiftProtobuf.Message, Swif
     case .state?: try {
       guard case .state(let v)? = self.change else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
-    }()
-    case .append?: try {
-      guard case .append(let v)? = self.change else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
-    }()
-    case .settled?: try {
-      guard case .settled(let v)? = self.change else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 3)
     }()
     case .status?: try {
       guard case .status(let v)? = self.change else { preconditionFailure() }
@@ -1104,6 +1153,10 @@ nonisolated extension Visor_Client_V1_SessionChange: SwiftProtobuf.Message, Swif
     case .queued?: try {
       guard case .queued(let v)? = self.change else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 10)
+    }()
+    case .turn?: try {
+      guard case .turn(let v)? = self.change else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 11)
     }()
     case nil: break
     }
