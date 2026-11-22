@@ -9,8 +9,8 @@ ws.onmessage = ev => {
   const e = JSON.parse(ev.data);
   if (e.type === 'welcome') { ws.send(JSON.stringify({ type: 'subscribe', session: id })); return; }
   if (e.type === 'ephemeral') {
-    console.log('busy', e.busy, 'activity', JSON.stringify(e.activity), 'status', (e.status ?? []).length, 'streams', (e.streams ?? []).length);
-    for (const s of e.streams ?? []) console.log('  stream', s.id, JSON.stringify(s.text.slice(0, 80)), 'len', s.text.length);
+    console.log('busy', e.busy, 'activity', JSON.stringify(e.activity), 'status', (e.status ?? []).length, 'turn', e.turn?.phase ?? '(none: 0.64.1 or before)');
+    for (const w of e.turn?.waits ?? []) console.log('  waits on', w.kind, JSON.stringify(w.label));
     ws.close(); process.exit(0);
   }
 };

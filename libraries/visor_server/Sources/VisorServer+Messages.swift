@@ -67,7 +67,6 @@ extension VisorServer {
         case "acknowledge": performAcknowledge(envelope)
         case "earlier": performEarlier(envelope, from: client)
         case "subscribe": performSubscribe(envelope, from: client)
-        case "state": performState(envelope, from: client)
         case "unsubscribe": performUnsubscribe(envelope, from: client)
         case "signIn": performSignIn(envelope)
         case "permissions": performPermissions(envelope)
@@ -189,9 +188,6 @@ extension VisorServer {
 
     private func performSubscribe(_ envelope: Envelope, from client: ClientConnection?) {
         guard let client, let record = session(envelope.session) else { return }
-        // What streamed is told to those already here, so the state this
-        // one gets is where the next `delta` starts.
-        flushStreams(record)
         record.subscribers.insert(ObjectIdentifier(client))
         // Bound before any turn: what the file says reaches subscribers
         // whether or not an agent of ours has run.

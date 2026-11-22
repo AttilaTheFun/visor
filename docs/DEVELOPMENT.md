@@ -168,13 +168,15 @@ another generation: a first sync, a server that started again (each run
 starts at a random generation), a fork found in the log (a new branch,
 with a notice to the user), or a server that let go of its tombstones
 (after 2000). Clients get the ephemeral state over the WebSocket (`ephemeral`
-snapshot on subscribe: streams, status items, activity, busy, approval,
-queue, notice; then `delta`, `status`, `activity`, `busy`, … envelopes).
+snapshot on subscribe: the turn's state, status items, activity, busy,
+approval, queue, notice; then `turn`, `status`, `activity`, `busy`, …
+envelopes). The reply's words are not streamed to clients: the turn's
+state says `responding`, and the reply comes with its row.
 The archive `~/Library/Application Support/Visor/sessions.json` keeps the
 session list and a suffix of rows; the queue is NOT archived (ephemeral).
 
 **Claude's transcript comes from the file.** For tool "claude" the process
-emits deltas, status and busy only; rows come from Claude Code's own
+emits deltas (taken only as `responding`), status and busy only; rows come from Claude Code's own
 `~/.claude/projects/<cwd-slug>/<session>.jsonl`, read by a `SessionIndexer`
 (an actor) into the **message cache**; the record reads its events in order.
 The file is a tree (uuid/parentUuid); `ClaudeBranch.current` keeps to

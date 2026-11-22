@@ -62,9 +62,11 @@ struct SessionCardRow: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
-            // Between turns, what the agent is waiting on in the
-            // background: a monitor, a command, an agent of its own.
-            if !session.busy, let waiting = Self.waitingLine(session.background) {
+            // Where its turn stands while it works ("Running Bash: …",
+            // "Responding…"), and between turns what the agent is waiting
+            // on in the background: a monitor, a command, an agent of its
+            // own.
+            if let waiting = Self.turnLine(session) {
                 Text(waiting)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -128,10 +130,13 @@ struct SessionCardRow: View {
     /// the selection.
     private var mark: AnyShapeStyle { selected ? AnyShapeStyle(.primary) : AnyShapeStyle(Color.accentColor) }
 
-    /// "Waiting on CI checks on PR #92" — the first, and how many more.
-    static func waitingLine(_ background: [StatusItem]) -> String? {
-        guard let first = background.first else { return nil }
-        let more = background.count - 1
-        return "Waiting on " + first.label + (more > 0 ? " and \(more) more" : "")
+    /// The line under a session at work or waiting: its turn's words
+    /// ("Thinking…", "Running Bash: bazel test …", "Waiting on CI checks
+    /// on PR #92 and 1 more"), as its server says them, or, from a server
+    /// before turn states, as its busy, approval and background say.
+    static func turnLine(_ session: SessionInfo) -> String? {
+        let turn = session.turn ?? TurnState.of(approval: session.pendingApproval, signIn: false, busy: session.busy, sending: false,
+                                                responding: false, status: [], background: session.background)
+        return turn.words
     }
 }

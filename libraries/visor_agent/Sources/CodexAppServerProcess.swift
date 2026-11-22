@@ -129,6 +129,8 @@ public final class CodexAppServerProcess: AgentProcess, HostableProcess {
         turnStarting = false
         if let id = reply.turn {
             turnID = id
+            // Codex has the message and has begun.
+            emit.yield(.turnBegan)
             if stopWhenStarted { interrupt() }
         } else if let error = reply.error {
             stopWhenStarted = false
@@ -392,6 +394,7 @@ public final class CodexAppServerProcess: AgentProcess, HostableProcess {
             if stopWhenStarted { interrupt() }
             emit.yield(.busy(true))
             emit.yield(.activity("Thinking…"))
+            emit.yield(.turnBegan)
         case .goal(let goal):
             emit.yield(.goal(goal.flatMap { $0.met ? nil : $0.objective }, met: goal?.met ?? false))
         case .questions(let id, let asked):

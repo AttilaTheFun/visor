@@ -31,6 +31,7 @@ import Testing
         case .activity(let label): "activity \(label ?? "-")"
         case .model(let model): "model \(model)"
         case .failure(let text): "failure \(text)"
+        case .turnBegan: "began"
         default: "other"
         }
     }
@@ -47,8 +48,9 @@ import Testing
             .with { $0.entries = .with { $0.entries = [.with { $0.id = "r1"; $0.role = .assistant; $0.text = "Hello" }] } },
             .with { $0.state = .init() },
         ]
-        let said = await events(of: process, after: messages, count: 8)
-        #expect(said == ["tool Bash", "activity Bash: ls", "model claude-opus", "busy true", "rows assistant:Hello",
+        // A turn the wrapper says is running has begun: no longer sending.
+        let said = await events(of: process, after: messages, count: 9)
+        #expect(said == ["tool Bash", "activity Bash: ls", "model claude-opus", "busy true", "began", "rows assistant:Hello",
                               "tool done", "activity -", "busy false"])
     }
 
@@ -169,8 +171,8 @@ import Testing
         _ = process.attach { down.append($0) }
         #expect(down.count == 1 && { if case .handBack = down[0].message { true } else { false } }(), "held for its wrapper, then sent")
         let said = await events(of: process, after: [.with { $0.state = .with { $0.busy = true } }, .with { $0.ended = "the harness ended" },
-                                                     .with { $0.state = .with { $0.busy = true } }], count: 3)
-        #expect(said == ["busy true", "busy false", "busy true"], "its end told as idle, never as a failure")
+                                                     .with { $0.state = .with { $0.busy = true } }], count: 5)
+        #expect(said == ["busy true", "began", "busy false", "busy true", "began"], "its end told as idle, never as a failure")
     }
 
     @Test func testAWrappersRowBecomesVisorsRow() {

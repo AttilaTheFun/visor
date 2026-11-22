@@ -108,29 +108,48 @@ extension FeatureMapTests {
             FeatureMapNode.chat.expectShown(on: try app.screen { FeatureMapNode.chat.isShown(on: $0) })
         }
 
-        /// A reply being written (the `responding` fixture, VisorFixture's
-        /// `responding`): its words so far as the chat opens, more as they
-        /// stream, then the record's row in its place, once: the stream
-        /// gone, no second copy. (Not among FixtureScreens': while the turn
-        /// runs the composer offers Stop, not Send, so the chat is told by
-        /// its end.)
-        @Test("Session chat: a reply drawn as it is written, then its row in its place")
-        func responding() throws {
-            let start = "Running the sync tests now."
-            let final = "Running the sync tests now. All 42 sync tests pass, offline rows included, and the banner shows how many are still waiting."
-            let app = try chat("responding")
+        /// The turn's line under the thread (the `turn` fixture,
+        /// VisorFixture's `turnSteps`): one state after another as the
+        /// server tells them, never any of the reply's words, then the
+        /// reply's row once it syncs, once, and the line gone. (Not among
+        /// FixtureScreens': while the turn runs the composer offers Stop,
+        /// not Send, so the chat is told by its end.)
+        @Test("Session chat: the turn's line through its states, then the reply's row")
+        func turnStates() throws {
+            let reply = "All 42 sync tests pass, offline rows included, and the banner shows how many are still waiting."
+            let app = try VisorLaunch.fixture("turn")
             defer { app.quit() }
-            // The words so far, from the snapshot.
-            let opened = try app.screen(within: 10) { $0.texts.contains { $0.hasPrefix(start) } }
-            #expect(opened.texts.contains { $0.hasPrefix(start) && $0 != final }, "the partial reply: \(opened.summary)")
-            // More of it, as it streams, before its row.
-            let growing = try app.screen(within: 15) { $0.texts.contains { $0.hasPrefix(start) && $0.contains("pass,") && $0 != final } }
-            #expect(growing.texts.contains { $0.hasPrefix(start) && $0.contains("pass,") && $0 != final }, "the reply growing: \(growing.summary)")
-            // The record's row, in its place: the reply once, whole.
-            let landed = try app.screen(within: 30) { $0.texts.contains(final) }
-            #expect(landed.texts.contains(final), "the reply's row: \(landed.summary)")
-            #expect(landed.texts.filter { $0.hasPrefix(start) } == [final], "one row, the record's: \(landed.summary)")
+            for words in ["Thinking…", "Responding…", "Running Bash: swift test --filter SyncTests", "Waiting for 2 subagents"] {
+                let screen = try app.screen(within: 15) { $0.texts.contains(words) }
+                #expect(screen.texts.contains(words), "the line says \(words): \(screen.summary)")
+                #expect(!screen.texts.contains { $0.hasPrefix("All 42") }, "none of the reply before its row: \(screen.summary)")
+            }
+            let landed = try app.screen(within: 20) { $0.texts.contains(reply) }
+            #expect(landed.texts.filter { $0 == reply }.count == 1, "the reply's row, once: \(landed.summary)")
+            #expect(!landed.texts.contains("Responding…") && !landed.texts.contains("Thinking…"), "the line gone: \(landed.summary)")
             FeatureMapNode.chat.expectShown(on: landed)
+            // (Whether the thread went down to it can't be told here:
+            // Gaps' `followsTheEnd`.)
+        }
+
+        /// A turn held in one state (the turn-‹state› fixtures): its words
+        /// under the thread, and on the iPhone's Sessions page under the
+        /// session's row (`waiting-‹id›`).
+        @Test("Session chat: a waiting turn's line, in the chat and in the list", arguments: [
+            ("turn-tool", "Running Bash: swift test --filter SyncTests"),
+            ("turn-subagents", "Waiting for 2 subagents"),
+            ("turn-background", "Waiting on CI checks on PR #92"),
+        ])
+        func turnWaiting(screen: String, words: String) throws {
+            let app = try VisorLaunch.fixture(screen)
+            defer { app.quit() }
+            let chat = try app.screen(within: 10) { $0.texts.contains(words) }
+            #expect(chat.texts.contains(words), "the chat's line: \(chat.summary)")
+            #expect(chat.has(id: "session-title"), "the chat: \(chat.summary)")
+            let list = try app.back()
+            let listed = try app.screen { $0.has(id: "waiting-fixture-chat") }
+            #expect(listed.element("waiting-fixture-chat")?.label == words || listed.texts.contains(words),
+                    "the list's line: \(list.summary)")
         }
 
         @Test("Session chat → Side Questions: type /btw, tap “Send”; back")

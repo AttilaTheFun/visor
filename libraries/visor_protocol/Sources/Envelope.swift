@@ -2,14 +2,14 @@
 // A client logs in with the host's password, then starts, drives and
 // watches agent sessions — Claude Code or Codex processes the menu bar app
 // spawns on the host. The server normalises each agent's own JSON stream
-// into transcript entries, deltas and activity lines, so a client renders
+// into transcript entries, turn states and activity lines, so a client renders
 // one shape for every agent (AgentUI's TranscriptMessage).
 
 /// Every message, both directions, is one envelope; `type` says which
 /// fields are set. Client → server: login, start, send, stop, subscribe,
 /// permissions, notifications, settings, approve, archive, unarchive, end. Agent side
 /// (the permission MCP shim, with the app's token): approval_request;
-/// the app answers approval_result. Server → client: welcome, error, sessions, transcript, delta,
+/// the app answers approval_result. Server → client: welcome, error, sessions, transcript, turn,
 /// entry, activity, busy, failure.
 public struct Envelope: Codable, Sendable {
     public var type: String
@@ -34,13 +34,9 @@ public struct Envelope: Codable, Sendable {
     /// start / permissions: run the agent without permission prompts (auto)
     /// or with the agent's own guarded mode (manual).
     public var skipPermissions: Bool?
-    // send / stop / subscribe / end / transcript / delta / entry / activity / busy / failure
+    // send / stop / subscribe / end / transcript / turn / entry / activity / busy / failure
     public var session: String?
     public var text: String?
-    /// `delta`: where its words go in the message, the length in UTF-8
-    /// bytes of the words told before them (from 0.64; absent from an
-    /// older server, whose words are appended).
-    public var from: Int?
     // sessions / welcome
     public var sessions: [SessionInfo]?
     // welcome: each provider's models
@@ -144,9 +140,11 @@ public struct Envelope: Codable, Sendable {
     /// The turn's status lines so far — tool calls, subagents, shells,
     /// thinking — as the computer keeps them.
     public var status: [StatusItem]?
-    /// What is streaming, or streamed and not yet on the record, one
-    /// assistant message each, in an ephemeral snapshot.
-    public var streams: [StreamChunk]?
+    /// `ephemeral` and `turn`: where the session's turn stands (sending,
+    /// thinking, responding, waiting on something, idle). Absent from a
+    /// server of 0.64.1 or before, whose client reads it from `busy`, `status`
+    /// and the rest (TurnState+Precedence).
+    public var turn: TurnState?
     public var folders: [String]?
     public var resumable: [ResumableSession]?
     /// The slash commands a session's agent takes (`commands`).
@@ -233,14 +231,19 @@ public struct Envelope: Codable, Sendable {
 extension Envelope {
     /// Everything about a session that is not the record, in one piece,
     /// sent when a client subscribes so nothing ephemeral is missed:
-    /// the streams, the status lines, the activity, busy, the approval
-    /// waiting, the queue, the notice.
-    public static func ephemeral(session: String, streams: [StreamChunk], status: [StatusItem], activity: String?, busy: Bool,
+    /// the turn's state, the status lines, the activity, busy, the
+    /// approval waiting, the queue, the notice.
+    public static func ephemeral(session: String, turn: TurnState, status: [StatusItem], activity: String?, busy: Bool,
                                  approval: ApprovalRequest?, queued: [String], notice: String?, signIn: String? = nil) -> Envelope {
-        var e = Envelope(type: "ephemeral"); e.session = session; e.streams = streams; e.status = status
+        var e = Envelope(type: "ephemeral"); e.session = session; e.turn = turn; e.status = status
         e.activity = activity; e.busy = busy; e.approval = approval; e.notice = notice; e.signIn = signIn
         if !queued.isEmpty { e.folders = queued }
         return e
+    }
+    /// The turn's state changed: one of sending, thinking, responding,
+    /// waiting (on what) and idle.
+    public static func turn(session: String, _ turn: TurnState) -> Envelope {
+        var e = Envelope(type: "turn"); e.session = session; e.turn = turn; return e
     }
     /// The turn's status lines changed.
     public static func status(session: String, items: [StatusItem]) -> Envelope {
@@ -314,11 +317,6 @@ extension Envelope {
     public static func subscribe(session: String) -> Envelope {
         var e = Envelope(type: "subscribe"); e.session = session; return e
     }
-    /// Asks for the session's ephemeral state again, whole (`ephemeral`):
-    /// the words a client holds of a reply don't meet a `delta`'s `from`.
-    public static func state(session: String) -> Envelope {
-        var e = Envelope(type: "state"); e.session = session; return e
-    }
     /// Stops following a session the client has left: its state and
     /// streamed words are sent no more (a server before 0.33 says it does
     /// not know the message, which the client lets pass).
@@ -382,13 +380,6 @@ extension Envelope {
     }
     public static func transcript(session: String, entries: [TranscriptEntry], streaming: String, activity: String?, busy: Bool, error: String?) -> Envelope {
         var e = Envelope(type: "transcript"); e.session = session; e.entries = entries; e.streaming = streaming; e.activity = activity; e.busy = busy; e.error = error; return e
-    }
-    /// Words streamed for one assistant message, named by the message's
-    /// own id, so a client keeps each message as its own row — and keeps
-    /// it, complete, until the transcript carries a row with that id.
-    /// `from` is where they go: the UTF-8 length of the words before them.
-    public static func delta(session: String, message id: String, text: String, from: Int? = nil) -> Envelope {
-        var e = Envelope(type: "delta"); e.session = session; e.id = id; e.text = text; e.from = from; return e
     }
     /// A new entry, or a replacement for the entry with the same id.
     public static func entry(session: String, _ entry: TranscriptEntry) -> Envelope {

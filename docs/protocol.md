@@ -374,7 +374,6 @@ and `subscribe` and stream the rest.
 | `send` | `session`, `text` | A user turn. While the agent works it waits in the session's queue (`queued`); handed to the agent, and until its log has the message (Codex can compact its context for minutes first), it is in the session's `delivered` while the agent works, which a client shows as the user's row until the transcript carries it (handed to an agent that went before its log had it, it never was taken: it leaves `delivered` at once, and a few seconds later the session's `notice` names it, to be sent again); when the turn ends (or `stop` ends it) the queue goes over a message at a time, never joined, each turn but the last stopped as soon as it starts (once the agent says it began: Claude's `system/init`, Codex's turn id — a stop sent before that is taken and ignored), so the agent answers the last. `/goal clear` sent during a turn goes ahead of the queue and stops the turn. |
 | `stop` | `session` | Kill the agent's process; the transcript stays and the next `send` resumes the agent's own session. |
 | `subscribe` | `session` | Replay the transcript, then stream. |
-| `state` | `session` | The session's ephemeral state again, whole: answered with `ephemeral`, after whatever streamed has been told. A client sends it when the words it holds of a reply don't meet a `delta`'s `from` (The reply being written, below). From 0.64; a server before it answers `error` "Unknown message state", and sends no `from`, so a client never asks it. |
 | `signIn` | `session`, `text` | The code the sign-in page showed (`<code>#<state>`), for the session's sign-in (`/login`). `send` of `/login` (with `claude auth login`'s options, `--console`, `--sso`; `/login cancel` to give up) to a Claude session starts one beside the agent, which takes no turn: the session's state (`ephemeral`) carries `signIn`, the page to sign in at, until it ends; signed in, the agent is made again on the new sign-in, and a notice says how it ended. Also `POST /sessions/{id}/signIn`. Visor lists `login` among a Claude session's commands. |
 | `unsubscribe` | `session` | The client left the session: nothing more of it is sent until it subscribes again. A server before 0.33 answers `error` "Unknown message unsubscribe", which a client lets pass. |
 | `permissions` | `session`, `skipPermissions` | Switch the session between auto-approving and manual. On the computer itself auto-approving is Claude Code's own auto mode and Codex in its workspace sandbox, never a bypass; in a container (the server's own, `inContainer`) a session always skips its prompts (Claude's bypassPermissions, Codex's full access), and an ask for manual is refused (from 0.50; before, auto was a bypass everywhere). Codex applies it next turn; Claude's process restarts (resumed by id) once the current turn ends. `sessions` follows. |
@@ -402,8 +401,8 @@ in its store.
 | `pong` | | The answer to `ping`, to that client only. |
 | `sessions` | `sessions` | The session list changed (a start, an end, busy flipped). |
 | `transcript` | `session`, `entries`, `streaming`, `activity`, `busy`, `error` | The whole state, on subscribe. |
-| `delta` | `session`, `id`, `text`, `from` | More of the reply being written; `id` is the message's, which its first row on the record also has. Appended to what the client holds for `id` (The reply being written, below). `from` (from 0.64): where the words go, the length in UTF-8 bytes of the message's words before them. |
-| `ephemeral` | `session`, `streams`, `status`, `activity`, `busy`, `approval`, `queued`, `notice`, `signIn` | Everything about the session that is not the record, whole: on subscribing, after a notice, and as `GET /sessions/<id>/state` answers. `streams`: the replies being written that the record doesn't carry yet, each `id` (the message's) and `text` (its words so far). |
+| `turn` | `session`, `turn` | Where the session's turn stands now, whenever that changes (The turn's state, below). After 0.64.1; a server of 0.64.1 or before sent the reply's words instead (`delta`), which a client now passes over. |
+| `ephemeral` | `session`, `turn`, `status`, `activity`, `busy`, `approval`, `queued`, `notice`, `signIn` | Everything about the session that is not the record, whole: on subscribing, after a notice, and as `GET /sessions/<id>/state` answers. `turn`: where its turn stands (absent from a server of 0.64.1 or before, which sent `streams`, the replies being written, instead). |
 | `entry` | `session`, `entry` | A finished entry, or a replacement for the entry with the same id (an assistant message grows as its tool calls arrive). An assistant entry clears `streaming`. |
 | `activity` | `session`, `activity` | What the agent is doing ("Bash: ls"), or null. |
 | `busy` | `session`, `busy` | The turn started / ended. |
@@ -411,7 +410,7 @@ in its store.
 | `failure` | `session`, `message` | Something went wrong; shown under the transcript until the next user turn. |
 
 `SessionInfo`: `id`, `agent` (`claude`, `codex`, `openrouter`), `cwd`, `title` (given, or the agent's name numbered within the folder),
-`busy`, `ended`, `skipPermissions`, `model`, `effort` (nil: the provider's / model's default; Claude fills `model` with what it actually runs), `archived`, `resumeCommand` (once the agent's own id is known: `cd <cwd> && claude --resume <id>` / `codex resume <id>`), `created`, `agentState` (where its agent is, and so what may be done with it: `starting` and `stopping`, nothing; `running`, `stopAgent` or `restartAgent`; `stopped`, `startAgent`. An archived session's is `stopped`; absent from a server of 0.34 or before, which offers `restartAgent` alone), `contextUsed`/`contextLimit` (the last request's tokens and the model's window), `usage` (what the session has used in all: `input` tokens, cache reads included, `cached`, `output`, and `cost` in dollars where the agent prices its turns — Claude Code at API prices even on a subscription, the openrouter CLI at OpenRouter's), `container` (from a server of 0.49 or before, when its agent ran in a Linux container of its own on the computer: `id`, `image` and `size`; never set by a server of 0.50 or later, which runs a session saved with one on the computer, and still read by clients), `inContainer` (true when its agent runs in a container the server didn't make for it, the server's own, shared by every session there: a co-tenant container), `parent` and `origin` (a fork, a branch or a subagent's conversation gone on with: the session it was made from, and how; a client lists it under that session), `side` (its side questions, each `id`, `question`, `answer` once answered or `failure`, and `asked`), `mcp` (the MCP servers its computer passes on to agents, each `name` and whether this session has it, `on`), `notifications` (false when its notifications are switched off; absent is on, as from a server before 0.61), `turnOrigin` (where its latest turn — the one running, or the last — came from: `user`, a client's `send`; `mail`, another session's message or the inbox's notice; `system`, the server's own nudge or a turn the agent began itself, a goal's or a loop's; absent before its first turn, and from a server before 0.61, which a client takes as `user`), `continuedAs` and `continuedFrom` (Super Compact's cut-over, from 0.64: on the archived session, the session that carries its work on, which its mail goes to from then on; on that session, the one it carries on; absent otherwise), `preview` and `updated` (the start of its latest message, and when it came: the thread's last regular message, the person's or the agent's, whichever is newer, whatever began its turn; never a tool row, the server's own nudge, nor mail — Turns of mail, below). Every session (live or archived) persists in `~/Library/Application Support/Visor/sessions.json` on the host, so a relaunch of the menu bar app brings them back idle, resumable by the agent's own id. `TranscriptEntry`: `id`, `role`
+`busy`, `ended`, `skipPermissions`, `model`, `effort` (nil: the provider's / model's default; Claude fills `model` with what it actually runs), `archived`, `resumeCommand` (once the agent's own id is known: `cd <cwd> && claude --resume <id>` / `codex resume <id>`), `created`, `agentState` (where its agent is, and so what may be done with it: `starting` and `stopping`, nothing; `running`, `stopAgent` or `restartAgent`; `stopped`, `startAgent`. An archived session's is `stopped`; absent from a server of 0.34 or before, which offers `restartAgent` alone), `contextUsed`/`contextLimit` (the last request's tokens and the model's window), `usage` (what the session has used in all: `input` tokens, cache reads included, `cached`, `output`, and `cost` in dollars where the agent prices its turns — Claude Code at API prices even on a subscription, the openrouter CLI at OpenRouter's), `container` (from a server of 0.49 or before, when its agent ran in a Linux container of its own on the computer: `id`, `image` and `size`; never set by a server of 0.50 or later, which runs a session saved with one on the computer, and still read by clients), `inContainer` (true when its agent runs in a container the server didn't make for it, the server's own, shared by every session there: a co-tenant container), `parent` and `origin` (a fork, a branch or a subagent's conversation gone on with: the session it was made from, and how; a client lists it under that session), `side` (its side questions, each `id`, `question`, `answer` once answered or `failure`, and `asked`), `mcp` (the MCP servers its computer passes on to agents, each `name` and whether this session has it, `on`), `notifications` (false when its notifications are switched off; absent is on, as from a server before 0.61), `turnOrigin` (where its latest turn — the one running, or the last — came from: `user`, a client's `send`; `mail`, another session's message or the inbox's notice; `system`, the server's own nudge or a turn the agent began itself, a goal's or a loop's; absent before its first turn, and from a server before 0.61, which a client takes as `user`), `turn` (where its turn stands, as `turn` says it, for the line under a session at work or waiting; absent when idle, and from a server of 0.64.1 or before; never kept in sessions.json), `continuedAs` and `continuedFrom` (Super Compact's cut-over, from 0.64: on the archived session, the session that carries its work on, which its mail goes to from then on; on that session, the one it carries on; absent otherwise), `preview` and `updated` (the start of its latest message, and when it came: the thread's last regular message, the person's or the agent's, whichever is newer, whatever began its turn; never a tool row, the server's own nudge, nor mail — Turns of mail, below). Every session (live or archived) persists in `~/Library/Application Support/Visor/sessions.json` on the host, so a relaunch of the menu bar app brings them back idle, resumable by the agent's own id. `TranscriptEntry`: `id`, `role`
 (`user`/`assistant`/`tool`), `text`, `activities`, `toolName` — the shape of
 AgentUI's `TranscriptMessage`, which the client maps one to one. Tool
 entries (`toolName: "tool_result"`) carry the first 400 characters of a
@@ -420,56 +419,67 @@ tool's output; the transcript view hides them, the assistant's
 
 `AgentAccount` (an agent's, per computer): `plan` in words ("Subscription", "ChatGPT Pro", "API key"), `subscription` (paid for by a plan, so a session's `cost` is what it would have cost), `limits`, `updated` (when an agent last said, seconds since 1970). Each limit: `name` ("5-hour", "Weekly", "Key limit", "Credits"), `used` (the share, 0–1), `resets` (seconds since 1970), and for an amount `left`, `total`, `unit` (`dollars` or `credits`). The server keeps the last of each agent's in `accounts.json` beside the sessions.
 
-### The reply being written
+### The turn's state
 
-A session's thread is its record (the rows, synced) joined with its
-ephemeral state, and the reply being written ("responding") is part of
-that state. The server streams it as it comes (`delta`), and gives what
-it holds unrecorded whole in `ephemeral.streams`. Visor's client
-(libraries/visor_client, SessionTranscript+Responding) draws it so:
+A session's thread is its record (the rows, synced) and one line under
+it, where its turn stands: the ephemeral state's `turn`, a `TurnState`,
+`{phase, waits}`. The reply's words are not streamed: the reply appears
+when its row syncs, like any row.
 
-- **What it holds:** per message id, the words: a snapshot
-  (`ephemeral.streams`, on subscribing or polled from `GET /state`)
-  replaces the words of each it names; a `delta` appends to its id's, or
-  begins one. A message held and missing from a snapshot was recorded
-  there, or lost with a restart: it is kept, finished, as below.
-- **Offsets:** a `delta` from 0.64 says where its words go (`from`, the
-  UTF-8 length of the words before them). Those that meet what the client
-  holds are appended; those it holds already (a snapshot brought them
-  first) are passed over; any other (words missed) is not taken, and the
-  client asks for the state again (`state`), once until it comes, whose
-  `ephemeral.streams` puts the words right. Without `from` (an older
-  server), words are appended.
-- **The join, with the client's own synced rows:** a reply `M` is drawn
-  while those rows have no assistant row `M` or `M#k` (a segment), and a
-  `delta` for a message they have is dropped. It is drawn as the agent's
-  row under the id `M`, which the record's row (whose id is `M`) is shown
-  under too: the row landing is one row changing in place, never a second
-  copy and never a gap.
-- **When it goes:** only once the rows have it. Not when the turn ends
-  (`busy` false) or the message does (`streamEnd`): the row comes with the
-  sync a moment later, and until then the words stay. One whose row never
-  comes (a turn cut short, a server restarted) goes once the next turn
-  has begun (`busy` true) and a sync has answered without it.
-- **Order:** the record's rows; a reply of a turn that has ended (it
-  answers what came before); the user's rows not on the record yet (sent
-  to an idle agent, or `delivered`); the reply of the turn running. The
-  queue is the composer's.
-- **Pace:** Claude Code streams 30–60 pieces a second; the server
-  gathers them per session and sends each message's as one `delta` every
-  200 ms at most (VisorServer+Streams), and anything else it tells of the
-  session first tells what streamed before it, so the order is the
-  agent's. A snapshot (on subscribing, or asked for with `state`) comes
-  after what streamed has been told, so the next `delta` starts where it
-  ends. A turn beginning lets go of what an earlier turn streamed that the
-  record never carried. The client redraws the reply at most four times a second,
-  apart from the thread's own frame (once a second). Its markdown is drawn
-  as the record's is, each paragraph's styles cached by its words, so only
-  the paragraph being written is parsed again. While words are the last
-  thing the agent did, the status line says "Writing…".
-
-Driven sessions (a runner's agent, over agent_protocol) have no streamed
-words yet: their thread moves with the record alone.
+- **Phases:** `sending` (the person's message is on its way: the server
+  has handed it to the agent, which hasn't begun its turn), `thinking`
+  (the agent has it, and is thinking or hasn't said anything yet),
+  `responding` (the reply's words are coming), `waiting` (on `waits`), and
+  `idle`.
+- **What a waiting turn waits on** (`waits`, each `kind`, `id`, `label`,
+  `work`): `approval` or `question` (the person's Allow or answers;
+  `label` the approval's summary), `signIn` (Claude's sign-in, once its
+  page is known), `tool` (a call running, until its result comes, failed
+  or not; `label` its name and the gist of its input, "Bash: bazel test
+  //tests:linux"), `subagent` (an Agent or Task call, or one left in the
+  background; `label` its description), `background` (a command run in
+  the background, a monitor, left running when the turn ended; `label` its
+  description). `work` (`shell`, `monitor`, `subagent`, `tool`) is what
+  sort of work, for its symbol.
+- **Precedence**, when several are true (TurnState+Precedence): an
+  approval, a question or a sign-in; then a tool call or a subagent
+  running; then the reply being written; then thinking; then sending;
+  then, with no turn running, the work in the background; then idle. The
+  background doesn't count while a turn runs: what the turn does then
+  says more.
+- **Where each comes from (Claude Code's stream-json):** `sending` from
+  the server's `send` to the agent until `system/init` begins its turn;
+  `thinking` from then, and from each `thinking` block, until something
+  else; `responding` from the first `stream_event` text delta of a block
+  until the next block begins (`content_block_start`: thinking, a tool's
+  call, more words), a tool starts, or the turn ends; `waiting` on a tool
+  from its `tool_use` to its `tool_result` (the call's `id`; a result with
+  `is_error` ends it the same way); `idle` at `result`. The background is
+  `system/background_tasks_changed`'s list (`local_bash`, `monitor`,
+  `local_agent`), whole, whenever it changes. A subagent's own messages
+  (`parent_tool_use_id`) are its, not the session's. Codex: `turn/start`'s
+  answer or `turn/started` begins a turn, its reply's deltas are
+  `responding`. A driven session (agent_protocol's `EphemeralState`): its
+  `busy` going true begins the turn, `thinking` and `tools` as they are;
+  it has no reply's words, so it is never `responding`, and no background.
+- **What isn't known:** which of the background tasks the agent waits on
+  (every one it lists wakes it when it ends, so every one counts); a
+  background task of an agent a launch picked up past what its host kept
+  of what it said (`background` unknown: none counted).
+- **Pace:** a few changes a turn. The server tells a change as `turn` to
+  the session's subscribers and to those polling `GET /state`, and with
+  the sessions list (`SessionInfo.turn`, at most every 400 ms). The reply's
+  pieces after the first do nothing at all.
+- **The client** (SessionTranscript's `turnState`, TurnState+Words) says
+  it in one line under the thread, and under the session's row in the
+  list: "Sending…", "Thinking…", "Responding…", "Running Bash: bazel
+  test …" (and "and N more"), "Waiting for a subagent: ‹description›",
+  "Waiting for 2 subagents", "Waiting on ‹background work›", "Waiting for
+  approval", "Waiting for your answer", "Waiting for sign-in". A message it
+  has just put in the thread is "Sending…" until the server says the turn
+  has moved on. From a server of 0.64.1 or before (no `turn`), it reads
+  the state from `busy`, `status`, `approval`, `signIn` and the session's
+  `background` by the same precedence, and passes `delta` over.
 
 ## Agents
 
@@ -477,7 +487,8 @@ words yet: their thread moves with the record alone.
   stream-json --verbose --include-partial-messages --permission-mode
   bypassPermissions|acceptEdits [--resume <id>]`, one process per session,
   a `{"type":"user","message":{…}}` line per turn on stdin. `system/init`
-  gives the session id; `stream_event` text deltas become `delta`;
+  gives the session id and begins each turn; `stream_event` text deltas
+  make the turn `responding` (their words are not kept: the row has them);
   `tool_use` blocks become activity labels (`Name: first line of the
   input`); `result` ends the turn, with the process's running totals
   (`modelUsage`, `total_cost_usd`: the server adds up their differences,

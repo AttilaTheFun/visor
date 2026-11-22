@@ -1,5 +1,5 @@
 // One agent session as the server holds it: its process, its transcript as
-// the agent's own log has it, what is streaming and what waits, and who
+// the agent's own log has it, where its turn stands and what waits, and who
 // watches. The server applies an agent's events to a record and tells its
 // subscribers what the record then says.
 
@@ -72,21 +72,17 @@ public final class SessionRecord {
 
     /// The rows changed: whoever is waiting on a revision is answered.
     var onRevision: (() -> Void)?
-    /// What is streaming, or has streamed and is not yet on the record:
-    /// one entry per assistant message, in order, by message id. Each
-
-    /// stays until a row with its id arrives from the file, so a message
-    /// is never lost between the stream's end and the file's catching up.
-    public internal(set) var streams: [(id: String, text: String)] = []
-
-    /// The words streamed since subscribers were last told of them, and
-    /// the flush that tells them (VisorServer+Streams): five times a
-    /// second, not a piece at a time.
-    var unsent = StreamAppends()
-    var streamFlush: Task<Void, Never>?
-
-    /// The words of every stream, for anything that still wants one string.
-    public var streaming: String { streams.map(\.text).joined(separator: "\n\n") }
+    /// The person's message has been handed to the agent, which hasn't
+    /// said anything since (its turn beginning, thinking, a tool): the
+    /// turn is `sending` (TurnState).
+    var sending = false
+    /// The agent's words are the last thing it did: the turn is
+    /// `responding`. Until a block of the message after them begins, or
+    /// the turn ends.
+    var responding = false
+    /// The turn's state as subscribers and the list were last told it
+    /// (VisorServer+Turn); `info.turn` carries it to the list.
+    var toldTurn = TurnState.idle
 
     public internal(set) var activity: String?
     public internal(set) var error: String?
@@ -271,6 +267,8 @@ public final class SessionRecord {
         if info.agentState == nil { self.info.agentState = info.archived ? .stopped : .running }
         // Nothing is on its way to an agent this launch has not handed it.
         self.info.delivered = []
+        // Nor is a turn going that this launch hasn't seen.
+        self.info.turn = nil
         self.info.system = Self.system(of: info)
         self.info.inContainer = Self.inContainer(info)
         self.info.placement = .host
@@ -324,8 +322,8 @@ public final class SessionRecord {
         info.agentState = archived ? .stopped : .running
         info.busy = false
         activity = nil
-        streams = []
-        unsent.clear()
+        sending = false
+        responding = false
     }
 
     func markEnded() {
@@ -440,7 +438,7 @@ public final class SessionRecord {
 
     /// Everything that is not the record, in one piece.
     var ephemeralEnvelope: Envelope {
-        .ephemeral(session: info.id, streams: streams.filter { !carries(messageID: $0.id) }.map { StreamChunk(id: $0.id, text: $0.text) }, status: turnStatus,
+        .ephemeral(session: info.id, turn: currentTurn, status: turnStatus,
                    activity: activity, busy: info.busy, approval: info.pendingApproval, queued: info.queued, notice: notice, signIn: signIn?.url)
     }
 }
