@@ -184,7 +184,7 @@ public enum ServerAgentJob {
     /// What the menu says while macOS refuses the registration for now: a
     /// calm line, no raw error (Logan, 22 Nov: "Operation not permitted"
     /// read as broken). Login Items is named only if it gives up.
-    public static let waitingForLoginItems = "Handing Visor's server to macOS Login Items (this can take up to a minute)…"
+    public static let waitingForLoginItems = "Handing Visor's server to macOS Login Items (this can take a minute or so)…"
 
     /// The pauses between registrations macOS refuses for now: about a
     /// minute and a half in all.

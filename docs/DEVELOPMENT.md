@@ -706,8 +706,8 @@ removed (still only when `agentProxy` is set).
   ("Operation not permitted": the job "is not allowed to bootstrap").
   ServerAgentJob.reregister waits that out, trying again after 2, 4, 8 and
   then 15-second pauses (about a minute and a half), the menu saying
-  calmly "Handing Visor's server to macOS Login Items (this can take up to
-  a minute)…", with no raw error; only then does it give
+  calmly "Handing Visor's server to macOS Login Items (this can take a
+  minute or so)…", with no raw error; only then does it give
   up, saying so, and the app stays the agent's client, never its own
   server.
 - **The socket file's move (0.65):** with the Visor volume, the server
