@@ -180,6 +180,148 @@ extension ServerTests {
         #expect(lines.all.isEmpty)
     }
 
+    // MARK: The client's items (0.66, before Visor.app is sandboxed): copied, the legacy copies kept
+
+    /// Every item under the client's service, protected, the legacy
+    /// store's copies kept for a rollback.
+    private func client(legacy: FakeKeychain, protected: FakeKeychain?) -> ProtectedSecrets {
+        let lines = lines
+        return ProtectedSecrets(legacy: legacy, protected: protected, protecting: { _ in true }, keepsLegacy: true, log: { lines.add($0) })
+    }
+
+    private let clientItems = ["password.s1": "pw1", "password.s2": "pw2", "ssh.key": "k", "computers": "[]"]
+
+    /// What a legacy store was asked: lookups alone, never a set or a delete.
+    private func onlyRead(_ legacy: FakeKeychain) -> Bool { legacy.log.allSatisfy { $0.hasPrefix("lookup ") } }
+
+    /// NCH's review of #503: a build rolled back to reads the login
+    /// keychain alone, so its copies stay; and the protected copies survive,
+    /// though the legacy store's delete would reach them, since there's none.
+    @Test func theClientsItemsAreCopiedTheLegacyCopiesKeptAndTheProtectedOnesSurvive() {
+        let journal = Journal()
+        let protected = FakeKeychain(journal: journal, label: "protected")
+        let legacy = FakeKeychain(holding: clientItems, reaching: protected, journal: journal, label: "legacy")
+        let keys = clientItems.keys.sorted()
+        client(legacy: legacy, protected: protected).moveAll(keys)
+        #expect(protected.kept == clientItems)
+        #expect(legacy.kept == clientItems, "the login keychain's copies kept, for a rollback")
+        #expect(onlyRead(legacy), "no delete or update asked of the legacy store")
+        #expect(journal.all == keys.map { "protected set \($0)" })
+        #expect(Set(lines.all) == Set(keys.map { "\($0): copied to the protected store from the legacy store, which keeps its copy" }))
+        // The sandboxed release, reading the group alone, finds them; a
+        // rollback, reading the login keychain alone, finds them too.
+        let sandboxed = client(legacy: FakeKeychain(), protected: protected)
+        for (key, value) in clientItems {
+            #expect(sandboxed.get(key) == value)
+            #expect(legacy.get(key) == value)
+        }
+    }
+
+    @Test func aClientItemsReadPrefersTheProtectedOne() {
+        let legacy = FakeKeychain(holding: ["password.s1": "stale"])
+        let protected = FakeKeychain(holding: ["password.s1": "pw1"])
+        #expect(client(legacy: legacy, protected: protected).get("password.s1") == "pw1")
+        #expect(legacy.log.isEmpty, "the login keychain isn't asked")
+    }
+
+    @Test func aClientItemLeftBehindIsCopiedWhenRead() {
+        let protected = FakeKeychain()
+        let legacy = FakeKeychain(holding: ["ssh.key": "k"], reaching: protected)
+        let secrets = client(legacy: legacy, protected: protected)
+        #expect(secrets.get("ssh.key") == "k")
+        #expect(protected.kept["ssh.key"] == "k")
+        #expect(legacy.kept["ssh.key"] == "k")
+        #expect(onlyRead(legacy))
+    }
+
+    @Test func aClientItemWrittenGoesToTheProtectedStoreAlone() {
+        let journal = Journal()
+        let protected = FakeKeychain(journal: journal, label: "protected")
+        let legacy = FakeKeychain(holding: ["password.s1": "old"], reaching: protected, journal: journal, label: "legacy")
+        let secrets = client(legacy: legacy, protected: protected)
+        secrets.set("password.s1", "new")
+        #expect(protected.kept["password.s1"] == "new")
+        #expect(legacy.kept["password.s1"] == "old", "left as it was: stale from now on")
+        #expect(journal.all == ["protected set password.s1"])
+        #expect(onlyRead(legacy))
+        #expect(secrets.get("password.s1") == "new")
+    }
+
+    /// A computer forgotten stays forgotten: its legacy copy, kept, isn't
+    /// copied back by the next read.
+    @Test func aClientItemRemovedIsntBroughtBackFromItsLegacyCopy() {
+        let protected = FakeKeychain()
+        let legacy = FakeKeychain(holding: ["password.s1": "pw1"], reaching: protected)
+        let secrets = client(legacy: legacy, protected: protected)
+        #expect(secrets.get("password.s1") == "pw1")
+        secrets.set("password.s1", nil)
+        #expect(protected.kept["password.s1"] == nil)
+        #expect(legacy.kept["password.s1"] == "pw1", "kept for a rollback")
+        #expect(onlyRead(legacy))
+        #expect(secrets.get("password.s1") == nil)
+        #expect(client(legacy: legacy, protected: protected).get("password.s1") == nil, "nor by another process")
+        #expect(protected.kept[ProtectedSecrets.forgottenName]?.contains("pw1") == false, "its hash noted, never the value")
+        // Written again: kept, and no longer forgotten.
+        secrets.set("password.s1", "pw1")
+        #expect(secrets.get("password.s1") == "pw1")
+        secrets.set("password.s1", nil)
+        #expect(secrets.get("password.s1") == nil)
+    }
+
+    /// A build rolled back to wrote another value since (the computer added
+    /// again there): that one is copied.
+    @Test func aDifferentLegacyValueAfterARemovalIsCopied() {
+        let protected = FakeKeychain()
+        let legacy = FakeKeychain(holding: ["password.s1": "pw1"], reaching: protected)
+        let secrets = client(legacy: legacy, protected: protected)
+        secrets.set("password.s1", nil)
+        legacy.set("password.s1", "pw2")
+        #expect(secrets.get("password.s1") == "pw2")
+        #expect(protected.kept["password.s1"] == "pw2")
+    }
+
+    @Test func aCopyThatDoesntReadBackLeavesTheLegacyCopiesAlone() {
+        let protected = FakeKeychain(dropsWrites: true)
+        let legacy = FakeKeychain(holding: clientItems, reaching: protected)
+        let secrets = client(legacy: legacy, protected: protected)
+        secrets.moveAll(clientItems.keys.sorted())
+        #expect(legacy.kept == clientItems)
+        #expect(onlyRead(legacy))
+        #expect(protected.kept.isEmpty)
+        for (key, value) in clientItems { #expect(secrets.get(key) == value) }
+    }
+
+    @Test func withNoProtectedStoreNothingIsCopied() {
+        let legacy = FakeKeychain(holding: clientItems)
+        let secrets = client(legacy: legacy, protected: nil)
+        secrets.moveAll(clientItems.keys.sorted())
+        #expect(legacy.log.isEmpty)
+        #expect(legacy.kept == clientItems)
+        #expect(secrets.get("password.s1") == "pw1")
+    }
+
+    @Test func copyingAgainAsksTheLegacyStoreNothing() {
+        let protected = FakeKeychain()
+        let legacy = FakeKeychain(holding: clientItems, reaching: protected)
+        let secrets = client(legacy: legacy, protected: protected)
+        secrets.moveAll(clientItems.keys.sorted())
+        let calls = legacy.log.count
+        secrets.moveAll(clientItems.keys.sorted() + [ProtectedSecrets.forgottenName])
+        #expect(legacy.log.count == calls, "read from the protected store alone")
+        #expect(protected.kept == clientItems)
+    }
+
+    /// The server's move (#502) is as it was: the legacy copy deleted first.
+    @Test func theServersMoveIsUnchanged() {
+        let journal = Journal()
+        let protected = FakeKeychain(journal: journal, label: "protected")
+        let legacy = FakeKeychain(holding: ["app-key": "k0"], reaching: protected, journal: journal, label: "legacy")
+        store(legacy: legacy, protected: protected).moveAll(["app-key"])
+        #expect(journal.all == ["legacy delete app-key", "protected set app-key"])
+        #expect(protected.kept["app-key"] == "k0")
+        #expect(legacy.kept["app-key"] == nil)
+    }
+
     @Test func twoProcessesMovingTheSameKeyAgree() {
         // The app's process and the server agent's, each with its own view of the same keychains.
         let protected = FakeKeychain()

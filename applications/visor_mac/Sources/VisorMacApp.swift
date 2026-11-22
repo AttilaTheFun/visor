@@ -54,7 +54,7 @@ struct VisorMacApp: App {
         let socketFileChannel = SocketFileSocketService(connect: { await POSIXUnixSocket.connect($0) }, headers: { MacAppKey.headers })
         installVisorServices(socket: SocketFileRoutedSocketService(socketFile: socketFileChannel, other: NativeVisorSocketService()),
                              http: SocketFileRoutedHTTPService(socketFile: socketFile, other: NativeVisorHTTPService()),
-                             settings: NativeVisorSettingsService(keychainService: MacPlaces.clientService),
+                             settings: MacClientSettings(moving: !VisorFixture.active),
                              notifications: NativeVisorNotificationService(), ssh: NativeVisorSSHService(), network: NativeVisorNetworkService(),
                              dictation: NativeVisorDictationService(), deviceName: Host.current().localizedName ?? "",
                              appVersion: Self.bundleVersion, platformName: "macOS")

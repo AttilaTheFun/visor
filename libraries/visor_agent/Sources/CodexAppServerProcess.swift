@@ -273,7 +273,7 @@ public final class CodexAppServerProcess: AgentProcess, HostableProcess {
                                             arguments: ["app-server"] + Self.questionArguments + VisorMCP.codexArguments(approvalEnvironment),
                                             directory: HostFolders.resolve(cwd),
                                             environment: environment,
-                                            session: approvalEnvironment["VISOR_SESSION"])
+                                            session: approvalEnvironment["VISOR_SESSION"], harness: "codex")
         self.child = child
         follow(child)
         Task {

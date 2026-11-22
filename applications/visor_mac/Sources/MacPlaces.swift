@@ -73,6 +73,44 @@ enum MacPlaces {
         return missing
     }
 
+    // MARK: The app group's container (0.66, behind a setting)
+
+    /// The default that puts the sockets in the app group's container
+    /// (VisorPlaces: `r/server.sock`, the Sessions container's relay and
+    /// driver sockets, the agents' hosts' `h-<8 hex>.sock`), as Visor's
+    /// sandboxed release will (docs/DEVELOPMENT.md, "Sandboxed Visor").
+    /// Off unless set (`defaults write com.LoganShire.Visor
+    /// VisorGroupSockets -bool true`, or VISOR_GROUP_SOCKETS=1 in the
+    /// environment) until the Developer ID profiles grant the group.
+    static let groupSocketsKey = "VisorGroupSockets"
+
+    /// Whether the sockets go in the app group's container.
+    static var groupSockets: Bool {
+        if ProcessInfo.processInfo.environment["VISOR_GROUP_SOCKETS"] == "1" { return true }
+        return UserDefaults.standard.bool(forKey: groupSocketsKey)
+    }
+
+    /// The app group's places when the sockets go there and the group has
+    /// a container where every socket fits; nil otherwise (a build without
+    /// the group may have none), when they stay where they were.
+    static var groupPlaces: VisorPlaces? {
+        guard groupSockets else { return nil }
+        let places = VisorPlaces.locate { FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: $0) }
+        return places.socketFolder == nil ? nil : places
+    }
+
+    /// The server's socket file: the app group's container's when the
+    /// sockets go there, else the Visor volume's, else nil (VisorServer's
+    /// own, `~/.visor/server.sock`).
+    static var socket: String? { groupPlaces?.serverSocket ?? folders.socket }
+
+    /// Where the socket file was, linked to the group's for a release: the
+    /// Visor volume's (`~/.visor`'s is VisorServer's own to link).
+    static var socketLinks: [String] {
+        guard groupPlaces != nil, let volume = folders.socket else { return [] }
+        return [volume]
+    }
+
     /// A cache's folder (`Server`, `Client`): on the Visor volume, else
     /// this app's folder of Application Support.
     static func folder(_ part: String) -> URL { folders.caches(part, bundleID: own) }

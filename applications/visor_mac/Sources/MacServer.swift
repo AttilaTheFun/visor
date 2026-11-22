@@ -31,8 +31,14 @@ enum MacServer {
             NSLog("Visor: %@", line)
             log?(line)
         })
-        // The socket file on the Visor volume, when it's there.
-        VisorServer.placedSocketPath = MacPlaces.folders.socket
+        // The socket file on the Visor volume, when it's there; in the app
+        // group's container instead when that's set (MacPlaces'
+        // `groupSockets`), the agents' hosts' beside it, and the volume's
+        // and ~/.visor's links to it for a release.
+        let group = MacPlaces.groupPlaces
+        VisorServer.placedSocketPath = MacPlaces.socket
+        VisorServer.legacySocketLinks = MacPlaces.socketLinks
+        VisorServer.placedHostSocketFolder = group?.socketFolder
         var platform = ServerPlatform.apple(secrets: MacSecrets.make(), lifecycle: lifecycle ?? AppLifecycle(), data: MacPlaces.data)
         if let log {
             let system = platform.log

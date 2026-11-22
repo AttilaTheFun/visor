@@ -23,10 +23,24 @@ package enum AgentChildren {
     /// names another place for them.
     static var folder: URL { HostFolders.dataFolder.appendingPathComponent("hosts", isDirectory: true) }
 
+    /// Where the binary keeps the hosts' sockets instead: the app group's
+    /// container's `r/` (VisorPlaces, 0.66 behind a setting), where they
+    /// have short names (`h-<8 hex>.sock`). Nil: as before.
+    package static var placedSocketFolder: URL?
+
+    /// What starts the hosts: the server's own process (as it always was)
+    /// unless the binary gives another (Visor Agent Utility's, later).
+    package static var spawner: any AgentHostSpawner = ProcessAgentHostSpawner()
+
     /// Where the hosts' sockets are: VISOR_RUNTIME_DIR's `hosts`, else
-    /// beside their log.
+    /// where the binary places them, else beside their log.
     static func socketFolder(environment: [String: String] = ProcessInfo.processInfo.environment) -> URL {
-        HostFolders.runtimeDirectory(in: environment)?.appendingPathComponent("hosts", isDirectory: true) ?? folder
+        HostFolders.runtimeDirectory(in: environment)?.appendingPathComponent("hosts", isDirectory: true) ?? placedSocketFolder ?? folder
+    }
+
+    /// Whether the hosts' sockets have short names: in the folder placed.
+    static func shortSocketNames(environment: [String: String] = ProcessInfo.processInfo.environment) -> Bool {
+        HostFolders.runtimeDirectory(in: environment) == nil && placedSocketFolder != nil
     }
 
     /// Why hosts cannot be started, as found the first time one was
@@ -49,17 +63,18 @@ package enum AgentChildren {
     }
 
     /// `session` is the Visor session the agent is for: an agent with one is
-    /// hosted, when agents are detached.
+    /// hosted, when agents are detached, its host started by `spawner`.
+    /// `harness` is the agent's kind (`claude`, `codex`), for the spawner.
     static func start(executable: String, arguments: [String], directory: String, environment: [String: String],
-                      session: String?) throws -> any AgentChild {
+                      session: String?, harness: String = "", spawner: (any AgentHostSpawner)? = nil) throws -> any AgentChild {
         let command = SystemPlatform.current.tools.command(executable, arguments)
         if detach, let session {
             if let problem = hostProblem() { throw AgentProcessError.spawnFailed(undetachable(problem)) }
             guard let hosting = SystemPlatform.current.agentHosts else { throw AgentProcessError.spawnFailed(undetachable("this system has no agent host")) }
             return try HostedChild.start(executable: command.executable, arguments: command.arguments, directory: directory,
-                                         environment: environment, session: session, in: folder, socketsIn: socketFolder(),
-                                         memoryLimit: memoryLimit,
-                                         hosting: hosting)
+                                         environment: environment, session: session, harness: harness, in: folder,
+                                         socketsIn: socketFolder(), shortNames: shortSocketNames(), memoryLimit: memoryLimit,
+                                         hosting: hosting, spawner: spawner ?? Self.spawner)
         }
         return try PipedChild(executable: command.executable, arguments: command.arguments, directory: directory, environment: environment)
     }

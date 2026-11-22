@@ -16,17 +16,23 @@ public final class KeychainSecrets: SecretStore {
     /// In the data-protection keychain with no group named: every group
     /// this process reaches (KeychainSecrets+DataProtection's `anyGroup`).
     private let everyGroup: Bool
+    /// Whether an item added to the data-protection keychain stays on this
+    /// Mac (the server's: made again on another), or goes with a backup
+    /// to another (the client's: its computers' passwords and SSH key).
+    private let thisDeviceOnly: Bool
 
-    public init(service: String = Bundle.main.bundleIdentifier ?? "Visor Server", accessGroup: String? = nil) {
+    public init(service: String = Bundle.main.bundleIdentifier ?? "Visor Server", accessGroup: String? = nil, thisDeviceOnly: Bool = true) {
         self.service = service
         self.accessGroup = accessGroup
         everyGroup = false
+        self.thisDeviceOnly = thisDeviceOnly
     }
 
     init(service: String, everyGroup: Bool) {
         self.service = service
         accessGroup = nil
         self.everyGroup = everyGroup
+        thisDeviceOnly = true
     }
 
     func query(_ key: String) -> [String: Any] {
@@ -40,6 +46,27 @@ public final class KeychainSecrets: SecretStore {
             query[kSecUseDataProtectionKeychain as String] = true
         }
         return query
+    }
+
+    /// The accounts (the keys) of every item kept under the service here:
+    /// their names alone, never their values, so nothing is asked of the
+    /// user. Empty when there are none, or the keychain won't say.
+    public func accounts() -> [String] {
+        var query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
+                                    kSecReturnAttributes as String: true, kSecMatchLimit as String: kSecMatchLimitAll]
+        if let accessGroup {
+            query[kSecUseDataProtectionKeychain as String] = true
+            query[kSecAttrAccessGroup as String] = accessGroup
+        } else if everyGroup {
+            query[kSecUseDataProtectionKeychain as String] = true
+        }
+        var result: AnyObject?
+        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess, let items = result as? [[String: Any]] else { return [] }
+        var accounts: [String] = []
+        for item in items {
+            if let account = item[kSecAttrAccount as String] as? String, !accounts.contains(account) { accounts.append(account) }
+        }
+        return accounts
     }
 
     public func get(_ key: String) -> String? {
@@ -72,7 +99,7 @@ public final class KeychainSecrets: SecretStore {
             add[kSecValueData as String] = data
             // The data-protection keychain's never leave this Mac (a backup
             // restored elsewhere has none): the next start makes them again.
-            add[kSecAttrAccessible as String] = accessGroup == nil && !everyGroup ? kSecAttrAccessibleAfterFirstUnlock
+            add[kSecAttrAccessible as String] = (accessGroup == nil && !everyGroup) || !thisDeviceOnly ? kSecAttrAccessibleAfterFirstUnlock
                 : kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
             SecItemAdd(add as CFDictionary, nil)
         }

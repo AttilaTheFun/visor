@@ -154,6 +154,10 @@ public struct Envelope: Codable, Sendable {
     public var outbox: [MailMessage]?
     /// `hello`: the server's own addresses, as clients read them.
     public var addresses: [String]?
+    /// `hello`: the server's socket file, which an SSH client reaches it at
+    /// (`nc -U`), while it listens there; its SSH addresses carry it too
+    /// (`?socket=`, SSHAddress). From 0.66.
+    public var socket: String?
     /// An agent's request about a session on another server: that server,
     /// by its id or its name ("" or nil: this one).
     public var server: String?

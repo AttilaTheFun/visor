@@ -3,7 +3,11 @@
 // need be (`?via=user@jump[:port],user@jump2`, nearest first, as
 // OpenSSH's -J lists them). The client opens the connection itself and
 // reaches the server on the computer's loopback through it; everything
-// above that is the wire protocol as over any address.
+// above that is the wire protocol as over any address. Where the server's
+// socket file is (`?socket=<path, percent-encoded>`, 0.66), when the
+// server says: what `nc -U` is run on there (`attachCommand`); without
+// it, the places it has been in turn. An address of a client before 0.66
+// passes over `socket`, as over any other key it doesn't know.
 //
 // By hand, without Foundation's URL: the same code runs in the web client.
 
@@ -43,10 +47,14 @@ public struct SSHAddress: Equatable, Hashable, Sendable {
     public var target: Hop
     /// The jump hosts on the way, nearest first.
     public var via: [Hop]
+    /// The server's socket file on the computer, as the server gave it;
+    /// nil when it gave none.
+    public var socket: String?
 
-    public init(target: Hop, via: [Hop] = []) {
+    public init(target: Hop, via: [Hop] = [], socket: String? = nil) {
         self.target = target
         self.via = via
+        self.socket = socket
     }
 
     /// Every connection to make, in order: the jump hosts, then the target.
@@ -62,21 +70,52 @@ public struct SSHAddress: Equatable, Hashable, Sendable {
         if value.lowercased().hasPrefix("ssh://") { value = value.dropFirst(6) }
         guard !value.contains("://") else { return nil }
         var via: [Hop] = []
+        var socket: String?
         if let question = value.firstIndex(of: "?") {
             let query = value[value.index(after: question)...]
             value = value[..<question]
             for pair in query.split(separator: "&") {
                 guard let equals = pair.firstIndex(of: "=") else { return nil }
+                let given = pair[pair.index(after: equals)...]
+                if pair[..<equals] == "socket" {
+                    guard let path = SocketFileURL.decode(String(given)), !path.isEmpty else { return nil }
+                    socket = path
+                    continue
+                }
                 guard pair[..<equals] == "via" else { continue }
-                for hop in pair[pair.index(after: equals)...].split(separator: ",") {
+                for hop in given.split(separator: ",") {
                     guard let parsed = Hop(hop) else { return nil }
                     via.append(parsed)
                 }
             }
         }
         guard let target = Hop(value) else { return nil }
-        self.init(target: target, via: via)
+        self.init(target: target, via: via, socket: socket)
     }
+
+    /// `socket=<path, percent-encoded>`: the query an address carries the
+    /// server's socket file in.
+    public static func socketQuery(_ path: String) -> String { "socket=" + SocketFileURL.encode(path) }
+
+    /// What reaches the server's socket file on the computer, run there for
+    /// each connection, in `sh` whatever the user's own shell is: `nc -U`
+    /// on the path the server gave, else `defaultAttachCommand`. A path
+    /// `sh` would read more into than a path (a quote, `$`, `\\`, a
+    /// backquote, a line's end) is not run: the default instead.
+    public var attachCommand: String {
+        guard let socket, !socket.isEmpty, !socket.contains(where: { "'\"$`\\\n\r".contains($0) }) else { return Self.defaultAttachCommand }
+        return "sh -c 'exec nc -U \"\(socket)\"'"
+    }
+
+    /// The places the socket file has been, in turn, for a server that
+    /// gave none: the Visor volume's (0.65; a link to the group's in 0.66),
+    /// the app group's container's (0.66, behind a setting; 0.67's), and
+    /// `~/.visor`'s (before the volume; a link to the one placed, for a
+    /// release).
+    public static let defaultAttachCommand = "sh -c 'if [ -S /Volumes/Visor/run/server.sock ]; then exec nc -U /Volumes/Visor/run/server.sock; "
+        + "elif [ -S \"$HOME/Library/Group Containers/group.com.LoganShire.Visor/r/server.sock\" ]; then "
+        + "exec nc -U \"$HOME/Library/Group Containers/group.com.LoganShire.Visor/r/server.sock\"; "
+        + "else exec nc -U \"$HOME/.visor/server.sock\"; fi'"
 
     /// What to show for it: `user@host`, and the way there when there is one.
     public var display: String { target.text + (via.isEmpty ? "" : " via " + via.map(\.text).joined(separator: ", ")) }
