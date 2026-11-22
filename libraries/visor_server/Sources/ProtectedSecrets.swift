@@ -34,21 +34,41 @@ public final class ProtectedSecrets: SecretStore {
     /// Where else a protected secret may have been left, looked in (in
     /// order) when `protected` hasn't it: moved from there.
     private let elsewhere: [any SecretStore]
-    private let names: Set<String>
+    private let protects: @Sendable (String) -> Bool
     private let unprotected: String
     private let log: @Sendable (String) -> Void
     /// The lines said already, so each is said once.
     private let said = Mutex<Set<String>>([])
 
     /// `unprotected`: why there's no protected store, for the log.
-    public init(legacy: any SecretStore, protected: (any SecretStore)?, elsewhere: [any SecretStore] = [], names: Set<String>,
-                unprotected: String = "", log: @escaping @Sendable (String) -> Void) {
+    public convenience init(legacy: any SecretStore, protected: (any SecretStore)?, elsewhere: [any SecretStore] = [], names: Set<String>,
+                            unprotected: String = "", log: @escaping @Sendable (String) -> Void) {
+        self.init(legacy: legacy, protected: protected, elsewhere: elsewhere, protecting: { names.contains($0) },
+                  unprotected: unprotected, log: log)
+    }
+
+    /// The secrets `protecting` says, by name, in `protected`: every one
+    /// of a service's, say (the client's on a Mac, 0.66: its computers'
+    /// passwords, its SSH key and what it keeps with them).
+    public init(legacy: any SecretStore, protected: (any SecretStore)?, elsewhere: [any SecretStore] = [],
+                protecting: @escaping @Sendable (String) -> Bool, unprotected: String = "", log: @escaping @Sendable (String) -> Void) {
         self.legacy = legacy
         self.protected = protected
         self.elsewhere = elsewhere
-        self.names = names
+        self.protects = protecting
         self.unprotected = unprotected
         self.log = log
+    }
+
+    /// Each of `keys` the legacy store holds (as its own list says) moved
+    /// to the protected store now, as a read would move it, rather than
+    /// the first time it's read: what a build that can still read the
+    /// legacy store does for one that won't (0.66, before Visor.app is
+    /// sandboxed: a sandboxed app can't read the login keychain's items).
+    /// Nothing without a protected store.
+    public func moveAll(_ keys: [String]) {
+        guard protected != nil else { return }
+        for key in keys where protects(key) { _ = lookup(key) }
     }
 
     public func get(_ key: String) -> String? {
@@ -57,7 +77,7 @@ public final class ProtectedSecrets: SecretStore {
     }
 
     public func lookup(_ key: String) -> SecretLookup {
-        guard names.contains(key) else { return legacy.lookup(key) }
+        guard protects(key) else { return legacy.lookup(key) }
         guard let protected else {
             say("\(key): in the legacy store (\(unprotected.isEmpty ? "no protected store" : unprotected))")
             return legacy.lookup(key)
@@ -80,7 +100,7 @@ public final class ProtectedSecrets: SecretStore {
     }
 
     public func set(_ key: String, _ value: String?) {
-        guard names.contains(key), let protected else {
+        guard protects(key), let protected else {
             legacy.set(key, value)
             return
         }

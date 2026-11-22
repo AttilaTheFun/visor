@@ -180,6 +180,87 @@ extension ServerTests {
         #expect(lines.all.isEmpty)
     }
 
+    // MARK: The client's items (0.66, before Visor.app is sandboxed)
+
+    /// Every item under the client's service, protected.
+    private func client(legacy: FakeKeychain, protected: FakeKeychain?) -> ProtectedSecrets {
+        let lines = lines
+        return ProtectedSecrets(legacy: legacy, protected: protected, protecting: { _ in true }, log: { lines.add($0) })
+    }
+
+    private let clientItems = ["password.s1": "pw1", "password.s2": "pw2", "ssh.key": "k", "computers": "[]"]
+
+    @Test func theClientsItemsAreAllMovedAtOnceEachDeletedThereFirst() {
+        let journal = Journal()
+        let protected = FakeKeychain(journal: journal, label: "protected")
+        let legacy = FakeKeychain(holding: clientItems, reaching: protected, journal: journal, label: "legacy")
+        let keys = clientItems.keys.sorted()
+        client(legacy: legacy, protected: protected).moveAll(keys)
+        #expect(protected.kept == clientItems, "kept, though each legacy delete reaches the protected store")
+        #expect(legacy.kept.isEmpty)
+        #expect(journal.all == keys.flatMap { ["legacy delete \($0)", "protected set \($0)"] })
+        #expect(Set(lines.all) == Set(keys.map { "\($0): moved to the protected store from the legacy store" }))
+        // Another process (the sandboxed release, reading the group alone) finds them.
+        let later = client(legacy: FakeKeychain(), protected: protected)
+        for (key, value) in clientItems { #expect(later.get(key) == value) }
+    }
+
+    @Test func aClientItemsReadTriesTheProtectedOneFirst() {
+        let legacy = FakeKeychain(holding: ["password.s1": "stale"])
+        let protected = FakeKeychain(holding: ["password.s1": "pw1"])
+        #expect(client(legacy: legacy, protected: protected).get("password.s1") == "pw1")
+        #expect(legacy.log.isEmpty, "the login keychain isn't asked")
+    }
+
+    @Test func aClientItemLeftBehindIsMovedWhenRead() {
+        let protected = FakeKeychain()
+        let legacy = FakeKeychain(holding: ["ssh.key": "k"], reaching: protected)
+        let secrets = client(legacy: legacy, protected: protected)
+        #expect(secrets.get("ssh.key") == "k")
+        #expect(protected.kept["ssh.key"] == "k")
+        #expect(legacy.kept["ssh.key"] == nil)
+    }
+
+    @Test func aClientItemWrittenGoesToTheProtectedStoreAlone() {
+        let journal = Journal()
+        let protected = FakeKeychain(journal: journal, label: "protected")
+        let legacy = FakeKeychain(holding: ["password.s1": "old"], reaching: protected, journal: journal, label: "legacy")
+        client(legacy: legacy, protected: protected).set("password.s1", "new")
+        #expect(protected.kept["password.s1"] == "new")
+        #expect(legacy.kept["password.s1"] == nil)
+        #expect(journal.all == ["legacy delete password.s1", "protected set password.s1"])
+    }
+
+    @Test func aMoveOfTheClientsItemsThatDoesntReadBackPutsThemBack() {
+        let protected = FakeKeychain(dropsWrites: true)
+        let legacy = FakeKeychain(holding: clientItems, reaching: protected)
+        let secrets = client(legacy: legacy, protected: protected)
+        secrets.moveAll(clientItems.keys.sorted())
+        #expect(legacy.kept == clientItems, "every one back where it was")
+        #expect(protected.kept.isEmpty)
+        for (key, value) in clientItems { #expect(secrets.get(key) == value) }
+    }
+
+    @Test func withNoProtectedStoreNothingIsMoved() {
+        let legacy = FakeKeychain(holding: clientItems)
+        let secrets = client(legacy: legacy, protected: nil)
+        secrets.moveAll(clientItems.keys.sorted())
+        #expect(legacy.log.isEmpty)
+        #expect(legacy.kept == clientItems)
+        #expect(secrets.get("password.s1") == "pw1")
+    }
+
+    @Test func movingAgainMovesNothingMore() {
+        let protected = FakeKeychain()
+        let legacy = FakeKeychain(holding: clientItems, reaching: protected)
+        let secrets = client(legacy: legacy, protected: protected)
+        secrets.moveAll(clientItems.keys.sorted())
+        let calls = legacy.log.count
+        secrets.moveAll(clientItems.keys.sorted())
+        #expect(legacy.log.count == calls, "read from the protected store alone")
+        #expect(protected.kept == clientItems)
+    }
+
     @Test func twoProcessesMovingTheSameKeyAgree() {
         // The app's process and the server agent's, each with its own view of the same keychains.
         let protected = FakeKeychain()

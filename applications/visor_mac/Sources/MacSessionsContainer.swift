@@ -35,6 +35,8 @@ final class MacSessionsContainer: SessionsContainer {
         let data = MacPlaces.data
         let status = MacPlaces.folders.data
         let run = data.appendingPathComponent("run", isDirectory: true)
+        // In the app group's container instead, when the sockets go there.
+        let group = MacPlaces.groupPlaces
         let volumes = DiskVolumes.locate(dataDirectory: status)
         let images = ContainerizationBackend()
         let token = KeptSecret(AgentProxySettings.relayTokenName, in: ServerPlatform.current.secrets)
@@ -47,9 +49,9 @@ final class MacSessionsContainer: SessionsContainer {
             linuxPrograms: linux.flatMap { FileManager.default.fileExists(atPath: $0.path) ? $0 : nil },
             version: VisorMacApp.bundleVersion,
             sessions: volumes.sessions.path,
-            relaySocket: run.appendingPathComponent("relay.sock"),
+            relaySocket: group?.relaySocket.map { URL(fileURLWithPath: $0) } ?? run.appendingPathComponent("relay.sock"),
             relayToken: { token.value },
-            driverSocket: run.appendingPathComponent("driver.sock"),
+            driverSocket: group?.driverSocket.map { URL(fileURLWithPath: $0) } ?? run.appendingPathComponent("driver.sock"),
             driverPort: MacServer.agentProtocolPort,
             assets: images,
             backend: ContainerizationMachines(images: images),

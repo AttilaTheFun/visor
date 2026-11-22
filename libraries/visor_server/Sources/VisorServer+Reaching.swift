@@ -64,13 +64,20 @@ extension VisorServer {
     }
 
     /// `ssh://<user>@<address>` for each of this computer's addresses,
-    /// while SSH clients are let in (its sshd listens on them all).
-    public var sshPaths: [String] {
+    /// while SSH clients are let in (its sshd listens on them all), with
+    /// the socket file's path (`?socket=`) where it isn't
+    /// `~/.visor/server.sock`: the client runs `nc -U` on that path
+    /// (SSHAddress.attachCommand). A client before 0.66 passes over it.
+    public var sshPaths: [String] { sshPaths(socket: Self.socketPath) }
+
+    /// The SSH paths, with the socket file at `path`.
+    func sshPaths(socket path: String) -> [String] {
         guard settings.sshEnabled else { return [] }
         let user = NSUserName()
         guard !user.isEmpty else { return [] }
-        var paths = ServerPlatform.current.host.networkAddresses().map { "ssh://\(user)@\($0.address)" }
-        if let name = ServerPlatform.current.host.localNetworkName() { paths.append("ssh://\(user)@\(name)") }
+        let socket = path == Self.legacySocketPath ? "" : "?" + SSHAddress.socketQuery(path)
+        var paths = ServerPlatform.current.host.networkAddresses().map { "ssh://\(user)@\($0.address)\(socket)" }
+        if let name = ServerPlatform.current.host.localNetworkName() { paths.append("ssh://\(user)@\(name)\(socket)") }
         return paths
     }
 

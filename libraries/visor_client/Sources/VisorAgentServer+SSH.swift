@@ -16,12 +16,14 @@ extension VisorAgentServer {
     /// The server's port on the computer's loopback.
     static let serverPort = Int(Envelope.defaultPort)
     /// What reaches the server's socket file on the computer, run there
-    /// for each connection (`VisorServer.socketPath`): on the Visor volume
-    /// where a Mac has one (0.65), else `~/.visor/server.sock`, as before
-    /// (and as a 0.64 client still asks: the server links it to the
-    /// volume's for 0.65). In `sh`, whatever the user's own shell is.
-    static let attachCommand = "sh -c 'if [ -S /Volumes/Visor/run/server.sock ]; then exec nc -U /Volumes/Visor/run/server.sock; "
-        + "else exec nc -U \"$HOME/.visor/server.sock\"; fi'"
+    /// for each connection (`VisorServer.socketPath`), for an address with
+    /// no path of the server's in it: on the Visor volume where a Mac has
+    /// one (0.65), in the app group's container (0.66, behind a setting),
+    /// else `~/.visor/server.sock`, as before (and as a 0.64 client still
+    /// asks: the server links it to the one placed). An address that has
+    /// the path (`?socket=`, 0.66) is run on it alone
+    /// (SSHAddress.attachCommand). In `sh`, whatever the user's own shell is.
+    static let attachCommand = SSHAddress.defaultAttachCommand
 
     /// Opens the SSH connection along the address's route — each hop's
     /// host key kept the first time and compared after — and a port here
@@ -59,7 +61,7 @@ extension VisorAgentServer {
             throw AgentServerError.message("Signing in again")
         }
         do {
-            let port = try await session.attach(command: Self.attachCommand)
+            let port = try await session.attach(command: address.attachCommand)
             return (session, try Self.loopback(port))
         } catch {
             session.close()

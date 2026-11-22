@@ -27,7 +27,12 @@ With `sshEnabled` (the default; `visor-server ssh on|off`) it also
 serves the same on a socket file only its user can open,
 `~/.visor/server.sock`: a client that comes through the computer's own
 SSH as that user reaches it there (running `nc -U ~/.visor/server.sock`
-per connection) and is already signed in.
+per connection) and is already signed in. A server whose socket file is
+elsewhere (the Visor volume's `run/server.sock`; from 0.66, behind a
+setting, the app group's container's `r/server.sock`) says where in its
+SSH addresses (`ssh://user@host?socket=<the path, percent-encoded>`) and
+in `hello` (`socket`), and the client runs `nc -U` on the path it was
+given; one with no path given tries the places in turn.
 Visor.app's own server (the Mac's, in the app's process or as its server
 agent) serves the socket file always, from its start, whether or not it
 has a password yet and whatever `sshEnabled` says: Visor.app is its
@@ -163,7 +168,7 @@ under `/api`.
 | method and path | body | answer |
 |---|---|---|
 | `GET /health` | | `ok: true` and the server's `version`, without credentials: what a keep-alive asks (Shireworks' primary container), answered from the server's own loop, so a hung server doesn't answer. Nothing else is answered without them |
-| `GET /hello` | | `hello`: `host`, `login`, `token`, the server's `version` (its build, "0.31 (9)"), its `id` and own `addresses` — or, from a server that stands alone, `standalone: true` and no addresses — `keepMessages: false` from a server that asks clients to keep its sessions' messages in memory only (its `clientsKeepMessages` setting, `visor-server keep-messages off`: a client then forgets what it kept of them on disk, writes nothing more, and asks `earlier` again for the rows it lets go of; absent, it may keep them); or 401. (A server of 0.49 or before also said `container: true` here, in `welcome` and in every `sessions` list, where it could start a session in a container of its own, and took `containerSize` with `start` and `contain`; a server of 0.50 or later never says it, and a client passes it over.) |
+| `GET /hello` | | `hello`: `host`, `login`, `token`, the server's `version` (its build, "0.31 (9)"), its `id` and own `addresses` (an `ssh://` one with `?socket=<the socket file's path, percent-encoded>` where it isn't `~/.visor/server.sock`, from 0.66: an SSH client runs `nc -U` on that path), `socket`, the socket file's path, while the server listens there (0.66) — or, from a server that stands alone, `standalone: true` and no addresses — `keepMessages: false` from a server that asks clients to keep its sessions' messages in memory only (its `clientsKeepMessages` setting, `visor-server keep-messages off`: a client then forgets what it kept of them on disk, writes nothing more, and asks `earlier` again for the rows it lets go of; absent, it may keep them); or 401. (A server of 0.49 or before also said `container: true` here, in `welcome` and in every `sessions` list, where it could start a session in a container of its own, and took `containerSize` with `start` and `contain`; a server of 0.50 or later never says it, and a client passes it over.) |
 | `GET /sessions` | `since=<revision>` | the `welcome` envelope: `host`, `sessions`, `catalogs`, `revision`; with `since` at the current revision, held until the list changes (or for 25 s) |
 | `GET /sessions/<id>/state` | `since=<revision>` | the session's `ephemeral` envelope with `revision`; held the same way while nothing ephemeral changed |
 | `GET /sessions/<id>/transcript` | `since=<revision>`, `generation=<generation>`, `after=<row id>` | the session's rows as the client is to bring its own up to date: in its generation, a delta — the rows new, changed or moved since `since`, each with the row it follows (`after`), and the rows `removed` — at most 50 at a time, in order, `later: true` while more follow (the client asks again with the same `since` and `after` its last row, and takes the first page's `revision` once the last is in); otherwise the whole, `reset: true`, the latest 100 rows, with `follows`, the row the first of them follows ("" for the thread's first; a client that keeps that row keeps what is before it). Held, while the client has exactly what there is, until the rows move (or for a while). |
@@ -778,7 +783,7 @@ token re-minted, is simply reached again; a dial the server doesn't answer
 is tried again for about 8 s (0.25 s, doubling) before a call says Visor is
 not reachable, and a request is never sent twice. It reaches the server on
 loopback TCP (`VISOR_PORT`), never its socket file, so the socket's place
-(`~/.visor/server.sock`, or the Visor volume's `run/server.sock`) is no
+(`~/.visor/server.sock`, the Visor volume's `run/server.sock`, or the app group's container's `r/server.sock`) is no
 matter to it. Each endpoint is
 on for a session unless it, or its `onByDefault`, says otherwise (`mcp`).
 They are the computer's native sessions' only: a runner's agent (a driven

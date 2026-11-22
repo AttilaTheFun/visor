@@ -716,10 +716,48 @@ removed (still only when `agentProxy` is set).
   clients of 0.64, whose command is `nc -U ~/.visor/server.sock`. A client
   of 0.65 asks `sh -c` for the volume's socket first, then `~/.visor`'s
   (VisorAgentServer.attachCommand), and `/api/hello` doesn't name the path.
-  **Remove in 0.66:** the link (VisorServer.linkLegacySocket, and the legacy
-  socket in MacServerAgent.otherServerGone); `~/.visor/server.sock` stays
-  only as the socket file of a Mac without the Visor volume. Uninstall…
-  removes `~/.visor`.
+  The link stays through 0.66, whose socket file may move again, to the
+  app group's container (below). **Remove in 0.67:** the links
+  (VisorServer.linkLegacySockets, `legacySocketLinks`, and the legacy
+  socket in MacServerAgent.otherServerGone). Uninstall… removes `~/.visor`.
+- **Sandboxed Visor (0.66 prep; the switch in 0.67).** docs/sandboxed.md is
+  the design Logan agreed (22 Nov 2026): Visor.app sandboxed, with the
+  server and container sessions in it; Visor Agent Utility, unsandboxed,
+  for native sessions' agent hosts; the app groups `group.com.LoganShire.Visor`
+  and `group.com.LoganShire.Applications`, the keychain group still
+  `<team>.com.LoganShire.Visor`. 0.66, still unsandboxed, prepares:
+  - **Sockets in the app group's container**, behind a setting until
+    every profile grants the group (`defaults write com.LoganShire.Visor
+    VisorGroupSockets -bool true`, or VISOR_GROUP_SOCKETS=1; MacPlaces'
+    `groupSockets`). VisorPlaces (libraries/visor_disk_volumes) puts them
+    in `~/Library/Group Containers/group.com.LoganShire.Visor/r/`:
+    `server.sock`, the Sessions container's `relay.sock` and `driver.sock`,
+    and the agents' hosts' `h-<8 hex>.sock`, every path under the 104 bytes
+    a socket's may have (PlacesTests); with no container, or a home too
+    long for them, they stay where they were. The volume's
+    `run/server.sock` and `~/.visor/server.sock` are links to it for a
+    release. The server's SSH addresses carry the path
+    (`ssh://user@host?socket=<percent-encoded>`), so the connection code
+    does, and `/api/hello` says it (`socket`); a client runs `nc -U` on
+    the path it's given (SSHAddress.attachCommand), and with none tries the
+    volume's, the group's and `~/.visor`'s in turn.
+  - **The client's keychain items in Visor's keychain group**
+    (MacClientSettings): every item of the client's service
+    (`com.LoganShire.Visor`: `password.<server id>`, `ssh.key`, and what's
+    kept with them) moved from the login keychain, which a sandboxed app
+    can't read, to the data-protection keychain under
+    `<team>.com.LoganShire.Visor`: all at the app's start, and any left
+    when first read, with ProtectedSecrets' move (#502: the login
+    keychain's copy deleted first, then written and read back, put back if
+    it doesn't read back). Reads ask the group first. Without the group
+    (signed ad hoc) they stay where they are.
+  - **The agent hosts' spawner** (AgentHostSpawner): AgentChildren and
+    HostedChild start a host through one, given an AgentHostSpawnRequest
+    (libraries/agent_host_wire: the session, folder, harness, command,
+    environment, JWT or token file, socket; JSON, documented there).
+    Today's is the server's own (ProcessAgentHostSpawner, as before);
+    Agent Utility's, over a socket in the group's container, plugs in in
+    its place.
 - **Uninstall…** (0.65; Visor Disk Utility's toolbar, or `Visor Disk
   Utility uninstall`, a dry run unless `--yes`): libraries/visor_uninstall
   plans, from what's there, everything Visor left on the Mac outside its

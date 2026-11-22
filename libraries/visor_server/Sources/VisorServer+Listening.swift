@@ -69,10 +69,17 @@ extension VisorServer {
     /// `~/.visor/server.sock`: the socket file before the Visor volume, and
     /// what an SSH client of 0.64 still reaches (`nc -U
     /// ~/.visor/server.sock`). With the socket file placed elsewhere, it's a
-    /// link to it for one release (0.65), then goes (docs/DEVELOPMENT.md).
+    /// link to it for one release (0.65, and 0.66 for the app group's
+    /// container), then goes (docs/DEVELOPMENT.md).
     public static var legacySocketPath: String {
         FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".visor/server.sock", isDirectory: false).path
     }
+
+    /// Where else the socket file was, linked to the one placed (with
+    /// `legacySocketPath`) for a release: in 0.66, with the socket file in
+    /// the app group's container, the Visor volume's `run/server.sock`,
+    /// which a 0.65 SSH client asks for first.
+    public static var legacySocketLinks: [String] = []
 
     /// The REST side's server, made the first time a listener needs it
     /// after a start (the socket file's may be first).
@@ -106,18 +113,22 @@ extension VisorServer {
                 self?.accept(stream, trusted: true)
             }
             Self.log("listening for SSH clients at \(path)")
-            linkLegacySocket(to: path)
+            linkLegacySockets(to: path)
         } catch {
             Self.log("not listening for SSH clients: \(error)")
         }
     }
 
-    /// `~/.visor/server.sock` a link to the socket file placed elsewhere
-    /// (0.65 alone: an SSH client of 0.64 asks for that path), unless a
-    /// server still answers there; the folder made this user's alone.
-    private func linkLegacySocket(to path: String) {
-        let legacy = Self.legacySocketPath
-        guard Self.socketPathOverride == nil, path != legacy else { return }
+    /// `~/.visor/server.sock` (and `legacySocketLinks`) a link to the socket
+    /// file placed elsewhere (for a release: an SSH client of 0.64 asks for
+    /// that path, one of 0.65 for the volume's), unless a server still
+    /// answers there; the folder made this user's alone.
+    private func linkLegacySockets(to path: String) {
+        guard Self.socketPathOverride == nil else { return }
+        for legacy in [Self.legacySocketPath] + Self.legacySocketLinks where legacy != path { linkLegacySocket(legacy, to: path) }
+    }
+
+    private func linkLegacySocket(_ legacy: String, to path: String) {
         let files = FileManager.default
         if (try? files.destinationOfSymbolicLink(atPath: legacy)) == path { return }
         if ServerPlatform.current.listening.answers(unixPath: legacy) {

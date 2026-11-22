@@ -238,6 +238,8 @@ extension VisorServer {
             e.standalone = true
         } else {
             e.addresses = ownAddresses
+            // Where an SSH client reaches it (`nc -U`), while it listens there.
+            if socketListener != nil { e.socket = Self.socketPath }
         }
         return .json(e.encoded())
     }

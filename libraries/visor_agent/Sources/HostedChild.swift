@@ -64,30 +64,28 @@ package final class HostedChild: AgentChild {
 
     /// Starts a host for the agent, which listens at a socket made for it
     /// in `sockets` (beside the hosts' log in `folder` unless told
-    /// otherwise); what is written before it answers waits.
+    /// otherwise; with `shortNames`, `h-<8 hex>.sock`, as the app group's
+    /// container's are), started by `spawner`; what is written before it
+    /// answers waits. `harness` is the agent's kind, for the spawner.
     static func start(executable: String, arguments: [String], directory: String, environment: [String: String],
-                      session: String, in folder: URL, socketsIn sockets: URL? = nil, memoryLimit: UInt64,
-                      hosting: any AgentHosting) throws -> HostedChild {
+                      session: String, harness: String = "", in folder: URL, socketsIn sockets: URL? = nil, shortNames: Bool = false,
+                      memoryLimit: UInt64, hosting: any AgentHosting,
+                      spawner: any AgentHostSpawner = ProcessAgentHostSpawner()) throws -> HostedChild {
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let sockets = sockets ?? folder
         try? FileManager.default.createDirectory(at: sockets, withIntermediateDirectories: true,
                                                  attributes: [.posixPermissions: 0o700])
-        let child = HostedChild(socket: socketPath(for: session, in: sockets))
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: hosting.program)
-        process.arguments = ["--socket", child.socket, "--directory", directory, "--memory-limit", String(memoryLimit), "--",
-                             executable] + arguments
-        process.currentDirectoryURL = URL(fileURLWithPath: directory)
-        process.environment = environment
-        process.standardInput = FileHandle.nullDevice
-        let log = folder.appendingPathComponent("hosts.log", isDirectory: false)
-        if !FileManager.default.fileExists(atPath: log.path) { _ = FileManager.default.createFile(atPath: log.path, contents: nil) }
-        if let handle = try? FileHandle(forWritingTo: log) {
-            _ = handle.seekToEndOfFile()
-            process.standardOutput = handle
-            process.standardError = handle
+        let socket = shortNames ? shortSocketPath(in: sockets) : socketPath(for: session, in: sockets)
+        // The app group's container's names are short so that each fits.
+        guard !shortNames || socket.utf8.count < socketPathLimit else {
+            throw AgentProcessError.spawnFailed("the host's socket's path, \(socket), is longer than a socket's may be (\(socketPathLimit - 1) bytes)")
         }
-        do { try process.run() } catch { throw AgentProcessError.spawnFailed("\(error)") }
+        let child = HostedChild(socket: socket)
+        let request = AgentHostSpawnRequest(session: session, folder: directory,
+                                            harness: harness.isEmpty ? URL(fileURLWithPath: executable).lastPathComponent : harness,
+                                            executable: executable, arguments: arguments, environment: environment, socket: socket,
+                                            memoryLimit: memoryLimit, log: folder.appendingPathComponent("hosts.log", isDirectory: false).path)
+        let process = try spawner.spawn(request, program: hosting.program)
         Task {
             // The host listens within moments of starting.
             for _ in 0..<200 {
@@ -127,6 +125,23 @@ package final class HostedChild: AgentChild {
         child.missedLines = hello.oldest > line
         child.send(.attach(from: line))
         return child
+    }
+
+    /// The most bytes a socket's path may have on a Mac, its closing NUL
+    /// among them (`sun_path`).
+    static let socketPathLimit = 104
+
+    /// A short socket's path in `folder`: `h-<8 hex>.sock`, one no other
+    /// socket there has (VisorPlaces' names, in the app group's container).
+    static func shortSocketPath(in folder: URL) -> String {
+        var path = ""
+        for _ in 0..<16 {
+            let hex = String(UInt32.random(in: .min ... .max), radix: 16)
+            let name = "h-" + String(repeating: "0", count: 8 - hex.count) + hex + ".sock"
+            path = folder.appendingPathComponent(name, isDirectory: false).path
+            if !FileManager.default.fileExists(atPath: path) { break }
+        }
+        return path
     }
 
     /// A socket's path in `folder`, which must fit the system's limit on

@@ -14,11 +14,12 @@ import Security
 extension KeychainSecrets {
     /// The data-protection keychain's store for `service` under this
     /// process's own group for `bundleID`, or nil and why there's none.
-    public static func dataProtection(service: String, bundleID: String) -> (store: KeychainSecrets?, why: String) {
+    /// `thisDeviceOnly`: its items stay on this Mac (KeychainSecrets).
+    public static func dataProtection(service: String, bundleID: String, thisDeviceOnly: Bool = true) -> (store: KeychainSecrets?, why: String) {
         guard let group = ownAccessGroup(bundleID: bundleID) else {
             return (nil, "this build is signed with no keychain access group of its own (ad hoc, or without its Developer ID profile)")
         }
-        let store = KeychainSecrets(service: service, accessGroup: group)
+        let store = KeychainSecrets(service: service, accessGroup: group, thisDeviceOnly: thisDeviceOnly)
         // A group the signature claims but the keychain refuses (no profile
         // granting it: errSecMissingEntitlement) is no store.
         var probe = store.query("probe")

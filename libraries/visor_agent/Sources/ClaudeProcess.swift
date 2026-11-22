@@ -283,7 +283,7 @@ public final class ClaudeProcess: AgentProcess, HostableProcess {
         // when it asks the server to restart (VISOR_SESSION).
         let environment = ToolPath.environment().merging(approvalEnvironment) { _, ours in ours }
         let child = try AgentChildren.start(executable: executable, arguments: args, directory: HostFolders.resolve(cwd),
-                                            environment: environment, session: approvalEnvironment["VISOR_SESSION"])
+                                            environment: environment, session: approvalEnvironment["VISOR_SESSION"], harness: tool)
         self.child = child
         follow(child)
         return child

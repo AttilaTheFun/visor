@@ -43,7 +43,27 @@ extension ServerTests {
     @Test func testSSHReachesTheNameToo() {
         server.settings.sshEnabled = true
         let user = NSUserName()
-        #expect(server.sshPaths == ["ssh://\(user)@192.168.1.20", "ssh://\(user)@Studio-Mac.local"])
+        let paths = server.sshPaths(socket: VisorServer.legacySocketPath)
+        #expect(paths == ["ssh://\(user)@192.168.1.20", "ssh://\(user)@Studio-Mac.local"])
+    }
+
+    /// A socket file elsewhere than `~/.visor/server.sock` (the app group's
+    /// container's, 0.66): each SSH path says where, and a client runs
+    /// `nc -U` on it alone.
+    @Test func testSSHPathsCarryTheSocketFilesPlace() throws {
+        server.settings.sshEnabled = true
+        let user = NSUserName()
+        let socket = "/Users/\(user)/Library/Group Containers/group.com.LoganShire.Visor/r/server.sock"
+        let paths = server.sshPaths(socket: socket)
+        let query = "?socket=%2FUsers%2F\(user)%2FLibrary%2FGroup%20Containers%2Fgroup.com.LoganShire.Visor%2Fr%2Fserver.sock"
+        #expect(paths == ["ssh://\(user)@192.168.1.20" + query, "ssh://\(user)@Studio-Mac.local" + query])
+        let address = try #require(SSHAddress(paths[0]))
+        #expect(address.target == SSHAddress.Hop(user: user, host: "192.168.1.20"))
+        #expect(address.socket == socket)
+        #expect(address.attachCommand == "sh -c 'exec nc -U \"\(socket)\"'")
+        // A connection code carries them, read back as given.
+        let code = ConnectionCode(name: "Studio Mac", host: "http://192.168.1.20:7433", password: "pw", paths: paths)
+        #expect(ConnectionCode(parsing: code.encoded)?.paths == paths)
     }
 
     /// A server behind a front (in a container, behind Visor Runner)
