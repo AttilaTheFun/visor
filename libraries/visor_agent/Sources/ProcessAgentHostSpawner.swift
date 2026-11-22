@@ -8,7 +8,7 @@ import Foundation
 
 @MainActor
 package struct ProcessAgentHostSpawner: AgentHostSpawner {
-    package init() {}
+    package nonisolated init() {}
 
     package func spawn(_ request: AgentHostSpawnRequest, program: String) throws -> any SpawnedAgentHost {
         let process = Process()
