@@ -138,7 +138,8 @@ extension ServerTests {
             let path = HostedChild.shortSocketPath(in: folder)
             let name = URL(fileURLWithPath: path).lastPathComponent
             #expect(name.hasPrefix("h-") && name.hasSuffix(".sock") && name.count == 15, Comment(rawValue: name))
-            #expect(name.dropFirst(2).dropLast(5).allSatisfy(\.isHexDigit))
+            let hex = name.dropFirst(2).dropLast(5).allSatisfy { $0.isHexDigit }
+            #expect(hex)
             #expect(path.utf8.count < HostedChild.socketPathLimit, Comment(rawValue: path))
         }
     }
