@@ -213,7 +213,7 @@ import VisorServer
         defer { scene.cleanUp() }
         let earlier = Process()
         earlier.executableURL = URL(fileURLWithPath: "/bin/sh")
-        earlier.arguments = ["-c", RelaunchWatchLock.take(scene.lock) + "\nsleep 60"]
+        earlier.arguments = ["-c", RelaunchWatchLock.take(scene.lock) + "\nexec sleep 60"]
         try earlier.run()
         for _ in 0..<50 where scene.read(scene.lock) == nil { Thread.sleep(forTimeInterval: 0.1) }
         let held = try #require(scene.read(scene.lock).flatMap(RelaunchWatchLock.read))
