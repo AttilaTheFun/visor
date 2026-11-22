@@ -2,37 +2,34 @@
 // (VisorServer.appKey, `X-Visor-App-Key`): kept with the server's keychain
 // items (MacPlaces' server service), in the data-protection keychain under
 // Visor.app's own access group (MacSecrets), so another process of this
-// user's, an agent's, is told there's none and can't show it. The server
-// makes it the first time it is made, in the app's process or the server
-// agent's; the app reads it for each call it makes there (VisorSocketFile's
-// services), once there is one.
+// user's, an agent's, is told there's none and can't show it. What every
+// process of the app's does with it is AppKeyKeeper's (the server library,
+// tested on Linux): the server takes the one kept at its start, in the
+// app's process or the server agent's, and makes one only when there is
+// none; the app reads the kept one for each call it makes there
+// (VisorSocketFile's services), never a copy of its own from earlier; and
+// a call that didn't show the server's key has the server ask the keychain
+// again (VisorServer.appKeyAskedAgain).
 
 import Foundation
-import Synchronization
 import VisorServer
 
 enum MacAppKey {
     static let header = "X-Visor-App-Key"
-    static let name = "app-key"
-    /// The key once read, so the keychain is asked once.
-    private static let held = Mutex<String?>(nil)
+    static let name = AppKeyKeeper.name
 
-    /// The key kept, made now if there is none: the server's, at its start.
-    static func made() -> String {
-        if let kept = current { return kept }
-        let made = (0..<32).map { _ in String(format: "%02x", UInt8.random(in: 0...255)) }.joined()
-        ServerPlatform.current.secrets.set(name, made)
-        held.withLock { $0 = made }
-        return made
-    }
+    private static let keeper = AppKeyKeeper(secrets: { ServerPlatform.current.secrets },
+                                             log: { ServerPlatform.current.log($0) })
 
-    /// The key kept; nil until the server has made one.
-    static var current: String? {
-        if let held = held.withLock({ $0 }) { return held }
-        guard let kept = ServerPlatform.current.secrets.get(name), !kept.isEmpty else { return nil }
-        held.withLock { $0 = kept }
-        return kept
-    }
+    /// The server's key at its start: the one kept, else one made and kept.
+    static func made() -> String { keeper.serverKey() }
+
+    /// The server's key asked again after a call that didn't show it.
+    static func reconciled(_ current: String?) -> String? { keeper.reconciled(current) }
+
+    /// The key a call at the socket file shows; nil until the server has
+    /// made one.
+    static var current: String? { keeper.shown }
 
     /// The header every call at the socket file carries.
     static var headers: [String: String] { current.map { [header: $0] } ?? [:] }

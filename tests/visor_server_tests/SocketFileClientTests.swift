@@ -97,6 +97,34 @@ extension ServerTests {
         #expect(parseJSON(reset)?["token"].string?.isEmpty == false)
     }
 
+    /// The app showing no key (0.65.1's agent lost it from the keychain as
+    /// it kept it), with SSH clients off: refused once, the server keeps
+    /// its key again as it refuses, and the app's service asks again with
+    /// the key it now reads. The menu's reset the same.
+    @Test func theAppReadsTheKeyAgainAndIsLetInAfterARefusal() async throws {
+        let keychain = MemorySecrets()
+        keychain.set(AppKeyKeeper.name, Self.key)
+        let agent = AppKeyKeeper(secrets: { keychain }, log: { _ in }, attempts: 1, pause: {})
+        #expect(agent.serverKey() == Self.key)
+        server.appKeyAskedAgain = { agent.reconciled($0) }
+        keychain.set(AppKeyKeeper.name, nil)
+        let app = AppKeyKeeper(secrets: { keychain }, log: { _ in }, attempts: 1, pause: {})
+        let http = SocketFileHTTPService(connect: { await POSIXUnixSocket.connect($0) },
+                                         headers: { app.shown.map { [VisorServer.appKeyHeader: $0] } ?? [:] })
+        server.settings.sshEnabled = false
+        try await waitForTheSocketFile()
+
+        let sessions = try await http.request(method: "GET", url: address + "/api/sessions", body: "", headers: [:])
+        #expect(Envelope.decode(sessions)?.type == "welcome")
+        #expect(app.shown == Self.key)
+        // Lost again: the reset, refused once, is asked again and taken.
+        keychain.set(AppKeyKeeper.name, nil)
+        server.appKeyLastAsked = nil
+        _ = server.createAdminToken()
+        let reset = try await http.request(method: "POST", url: address + "/api/admin-token/reset", body: "", headers: [:])
+        #expect(parseJSON(reset)?["token"].string?.isEmpty == false)
+    }
+
     @Test func theLiveChannelOpensAndLogsInWithNoPassword() async throws {
         let sockets = channel()
         let id = sockets.open(url: try #require(ServerAddress(address)).socket, headers: [:])

@@ -62,8 +62,10 @@ enum MacServer {
         server.arrivalRoot = DiskVolumes.locate(dataDirectory: MacPlaces.folders.data).sessions.readyPath
         // Visor.app is this server's client at its socket file, from the
         // start (password or none, sshEnabled or not), and its menu's own
-        // calls are taken from it alone: by the key the keychain keeps.
+        // calls are taken from it alone: by the key the keychain keeps,
+        // asked again when a call doesn't show it (AppKeyKeeper).
         server.appKey = MacAppKey.made()
+        server.appKeyAskedAgain = { MacAppKey.reconciled($0) }
         // An unattended setup (a leased test VM, tools/e2e): the first
         // password from the environment (launchctl setenv, so it's on no
         // disk), kept as Settings' Save would keep it. Never replaces one

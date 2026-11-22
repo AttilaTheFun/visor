@@ -34,16 +34,33 @@ public final class SocketFileHTTPService: VisorHTTPService {
         try await request(method: method, url: url, body: body, headers: authorization.isEmpty ? [:] : ["Authorization": "Bearer " + authorization])
     }
 
+    /// Refused (401, 403) with headers of this service's own that have
+    /// changed since (the app key, kept again by the server as it refused:
+    /// AppKeyKeeper), it's asked once more with the new ones.
     public func request(method: String, url: String, body: String, headers: [String: String]) async throws -> String {
         guard let (socket, path) = SocketFileURL.split(url) else { throw SocketFileHTTPFailure(status: 0, body: "not a socket file's URL: \(url)") }
+        let shown = extraHeaders()
+        let answer = try await send(method: method, path: path, body: body, headers: headers, extra: shown, socket: socket)
+        if answer.status == 401 || answer.status == 403 {
+            let now = extraHeaders()
+            if now != shown {
+                let again = try await send(method: method, path: path, body: body, headers: headers, extra: now, socket: socket)
+                guard (200..<300).contains(again.status) else { throw SocketFileHTTPFailure(status: again.status, body: again.body) }
+                return again.body
+            }
+        }
+        guard (200..<300).contains(answer.status) else { throw SocketFileHTTPFailure(status: answer.status, body: answer.body) }
+        return answer.body
+    }
+
+    private func send(method: String, path: String, body: String, headers: [String: String], extra: [String: String],
+                      socket: String) async throws -> (status: Int, body: String) {
         var head = "\(method) \(path) HTTP/1.1\r\nHost: localhost\r\n"
-        for (name, value) in headers.merging(extraHeaders(), uniquingKeysWith: { mine, _ in mine }) {
+        for (name, value) in headers.merging(extra, uniquingKeysWith: { mine, _ in mine }) {
             head += "\(name): \(value)\r\n"
         }
         head += "Content-Type: application/json\r\nContent-Length: \(body.utf8.count)\r\nConnection: close\r\n\r\n"
-        let answer = try await Self.exchange(head + body, socket: socket, connect: connect, timeout: timeout)
-        guard (200..<300).contains(answer.status) else { throw SocketFileHTTPFailure(status: answer.status, body: answer.body) }
-        return answer.body
+        return try await Self.exchange(head + body, socket: socket, connect: connect, timeout: timeout)
     }
 
     /// The request sent and its answer read: its status and body.

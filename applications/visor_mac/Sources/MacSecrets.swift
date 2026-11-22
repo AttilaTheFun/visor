@@ -24,7 +24,10 @@ enum MacSecrets {
         let service = MacPlaces.serverService
         let (store, why) = KeychainSecrets.dataProtection(service: service, bundleID: MacPlaces.own)
         // Read once the platform is given: the first lookup comes after.
-        return ProtectedSecrets(legacy: KeychainSecrets(service: service), protected: store, names: protectedNames,
-                                unprotected: why, log: { ServerPlatform.current.log("secrets: " + $0) })
+        // A protected item under another group the app reaches is moved
+        // to its own group, never made again beside it.
+        let elsewhere: [any SecretStore] = store == nil ? [] : [KeychainSecrets.anyGroup(service: service)]
+        return ProtectedSecrets(legacy: KeychainSecrets(service: service), protected: store, elsewhere: elsewhere,
+                                names: protectedNames, unprotected: why, log: { ServerPlatform.current.log("secrets: " + $0) })
     }
 }
