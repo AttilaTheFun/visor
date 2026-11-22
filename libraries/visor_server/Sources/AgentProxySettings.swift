@@ -91,8 +91,17 @@ public struct AgentProxySettings: Codable, Equatable, Sendable {
     /// -agent, or claude, codex or agent as agent-token names them), the
     /// command that gives an agent's installation token (`agentToken`,
     /// `~/.local/bin/agent-token`, run as `<it> token <agent> --owner
-    /// <owner>`), and where each call is logged (`auditLog`; none: the
-    /// server's logs folder's `Visor-gh.log`, beside the egress log).
+    /// <owner>`), where each call is logged (`auditLog`; none: the
+    /// server's logs folder's `Visor-gh.log`, beside the egress log), and
+    /// the tools no session is given (`withheldTools`, gh_mcp's names, as an
+    /// upstream's).
+    ///
+    /// A session is known by its CLIENT_ID, which is trusted only as far as
+    /// the sessions' token is: whoever holds that token may send any
+    /// CLIENT_ID, and so act as any app `sessionAgents` names. Give no
+    /// session there an app with more on GitHub than `agent`'s. (Binding a
+    /// call to its session's own JWT, so a CLIENT_ID can't be another's, is
+    /// for later.)
     public struct GH: Codable, Equatable, Sendable {
         public static let defaultRepositories = ["AttilaTheFun/*"]
         public static let defaultAgent = "logan-shire-agent"

@@ -62,21 +62,34 @@ public enum Run {
             read.signal()
         }
         // The time limit: the process ended by its id (SIGTERM, as
-        // Process.terminate sends), unless it has ended already.
+        // Process.terminate sends), unless it has ended already; and, in
+        // Visor, SIGKILL 5 s on if it is still there (a program that ignores
+        // SIGTERM, as one started with it ignored does, would otherwise hold
+        // its call, and its threads, for good). Timers alone: a work item
+        // takes no thread until it fires, and then a moment.
         let pid = process.processIdentifier
-        let ended = Locked(false)
-        let deadline = DispatchWorkItem {
-            ended.withLock { ended in
-                if !ended { kill(pid, SIGTERM) }
+        let state = Locked((ended: false, stopped: false))
+        let stop: @Sendable (Int32) -> Void = { number in
+            state.withLock { state in
+                guard !state.ended else { return }
+                state.stopped = true
+                kill(pid, number)
             }
         }
+        let deadline = DispatchWorkItem { stop(SIGTERM) }
+        let last = DispatchWorkItem { stop(SIGKILL) }
         DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: deadline)
+        DispatchQueue.global().asyncAfter(deadline: .now() + timeout + 5, execute: last)
         let stdout = out.fileHandleForReading.readDataToEndOfFile()
         read.wait()
         process.waitUntilExit()
-        ended.withLock { $0 = true }
+        let stopped = state.withLock { state in
+            state.ended = true
+            return state.stopped
+        }
         deadline.cancel()
-        if process.terminationReason == .uncaughtSignal, process.terminationStatus == SIGTERM {
+        last.cancel()
+        if stopped, process.terminationReason == .uncaughtSignal {
             throw ToolError.failed("\(URL(fileURLWithPath: executable).lastPathComponent) took longer than \(Int(timeout)) s and was stopped")
         }
         return ProcessResult(status: process.terminationStatus, stdout: stdout, stderr: errors.withLock { $0 })

@@ -56,9 +56,9 @@ public enum AgentProxyHost {
         public var egressLog: String
         /// gh_mcp's audit log's where `agentProxy.gh` names none: in the
         /// server's logs folder, beside the egress log given (a Mac's:
-        /// `Visor-gh.log` in Visor's logs, ~/Library/Logs or, on 0.65's
-        /// layout, /Volumes/Visor/Logs), else `agent-proxy/gh.log` in the
-        /// data folder.
+        /// `Visor-gh.log` in Visor's logs, the Visor volume's `Logs/` where
+        /// that volume is there, else ~/Library/Logs), else
+        /// `agent-proxy/gh.log` in the data folder.
         public var ghAuditLog: String
 
         public init(dataDirectory: URL, egressLog: String? = nil, ghAuditLog: String? = nil) {

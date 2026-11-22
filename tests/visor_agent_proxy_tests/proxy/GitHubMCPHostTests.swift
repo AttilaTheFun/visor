@@ -34,7 +34,7 @@ private final class ListingInProcess: InProcessMCP {
         calls.withLock { $0 += 1 }
         let message = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any]
         let answer = message?["method"] as? String == "tools/list"
-            ? #"{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"gh__pr_view"},{"name":"gh__pr_merge"}]}}"#
+            ? #"{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"pr_view"},{"name":"pr_merge"}]}}"#
             : #"{"jsonrpc":"2.0","id":2,"result":{}}"#
         return InProcessMCPAnswer(status: 200, headers: ["Content-Type": "application/json"], body: Data(answer.utf8))
     }
@@ -103,15 +103,15 @@ private final class ListingInProcess: InProcessMCP {
     /// without them.
     @Test func anInProcessServersWithheldToolsAreKeptFromTheSessions() throws {
         let served = ListingInProcess()
-        let proxy = try proxy([], inProcess: ["gh": served], withheld: ["gh": ["gh__pr_merge"]])
+        let proxy = try proxy([], inProcess: ["gh": served], withheld: ["gh": ["pr_merge"]])
         defer { proxy.stop() }
         let listed = ask(proxy.port, "/mcp/gh", token: "one-token", body: #"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#)
-        #expect(listed.status == "200" && listed.body.contains("gh__pr_view") && !listed.body.contains("gh__pr_merge"))
+        #expect(listed.status == "200" && listed.body.contains("pr_view") && !listed.body.contains("pr_merge"))
         let refused = ask(proxy.port, "/mcp/gh", token: "one-token",
-                          body: #"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"gh__pr_merge","arguments":{}}}"#)
+                          body: #"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"pr_merge","arguments":{}}}"#)
         #expect(refused.body.contains("-32601"), "a withheld tool's call is refused")
         let allowed = ask(proxy.port, "/mcp/gh", token: "one-token",
-                          body: #"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"gh__pr_view","arguments":{}}}"#)
+                          body: #"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"pr_view","arguments":{}}}"#)
         #expect(allowed.body == #"{"jsonrpc":"2.0","id":2,"result":{}}"#)
         #expect(served.calls.withLock { $0 } == 2, "the refused call never reached it")
     }
@@ -128,11 +128,33 @@ private final class ListingInProcess: InProcessMCP {
         #expect(served.heard.withLock { $0.isEmpty }, "passed through while the upstream is configured")
     }
 
+    /// What each call reads: settings.json's `gh` now, else the last good,
+    /// said once until it can be read again.
+    @Test func theLastGoodSettingsStandInSaidOnce() throws {
+        let places = AgentProxyHost.Places(dataDirectory: try folder())
+        let said = Mutex<[String]>([])
+        let reader = GitHubMCPSettings(file: places.settingsFile, initial: MCPServer.Configuration(agent: "agent"),
+                                       log: { line in said.withLock { $0.append(line) } })
+        try Data(#"{"agentProxy":{"gh":{"agent":"claude","repositories":["AttilaTheFun/visor"]}}}"#.utf8).write(to: places.settingsFile)
+        #expect(reader.current() == MCPServer.Configuration(repositories: ["AttilaTheFun/visor"], agent: "claude"))
+        for broken in [#"{"agentProxy":"#, #"{"agentProxy":{"mcp":{}}}"#, #"{"agentProxy":{"gh":{"agent":"gpt"}}}"#] {
+            try Data(broken.utf8).write(to: places.settingsFile)
+            #expect(reader.current().agent == "claude", "the last good: \(broken)")
+            #expect(reader.current().agent == "claude")
+        }
+        #expect(said.withLock { $0.count } == 1, "said once: \(said.withLock { $0 })")
+        try Data(#"{"agentProxy":{"gh":{}}}"#.utf8).write(to: places.settingsFile)
+        #expect(reader.current().agent == "agent")
+        try Data(#"{"agentProxy":"#.utf8).write(to: places.settingsFile)
+        _ = reader.current()
+        #expect(said.withLock { $0.count } == 2, "said again once it had been read")
+    }
+
     @Test func ghSettingsReadFieldByField() throws {
-        let json = #"{"agentProxy":{"gh":{"agent":"logan-shire-codex","sessionAgents":{"s1":"claude"},"auditLog":"/tmp/x.log","withheldTools":["gh__pr_merge"]}}}"#
+        let json = #"{"agentProxy":{"gh":{"agent":"logan-shire-codex","sessionAgents":{"s1":"claude"},"auditLog":"/tmp/x.log","withheldTools":["pr_merge"]}}}"#
         let gh = try #require(try JSONDecoder().decode(ServerSettings.self, from: Data(json.utf8)).agentProxy?.gh)
         #expect(gh == AgentProxySettings.GH(agent: "logan-shire-codex", sessionAgents: ["s1": "claude"], auditLog: "/tmp/x.log",
-                                            withheldTools: ["gh__pr_merge"]))
+                                            withheldTools: ["pr_merge"]))
         let empty = try #require(try JSONDecoder().decode(ServerSettings.self, from: Data(#"{"agentProxy":{"gh":{}}}"#.utf8)).agentProxy?.gh)
         #expect(empty == AgentProxySettings.GH())
         let configuration = try #require(AgentProxyHost.configuration(empty, log: nil))
@@ -165,7 +187,7 @@ private final class ListingInProcess: InProcessMCP {
         var running: AgentProxyHost.Running?
         var port = 0
         func settings(_ agents: [String: String]) -> AgentProxySettings {
-            AgentProxySettings(mcp: .init(port: port), gh: .init(agentToken: script, sessionAgents: agents))
+            AgentProxySettings(mcp: .init(port: port), gh: .init(agentToken: script, sessionAgents: agents, withheldTools: ["pr_merge"]))
         }
         for _ in 0..<20 where running == nil {
             port = Int.random(in: 20000...45000)
@@ -181,7 +203,10 @@ private final class ListingInProcess: InProcessMCP {
         #expect(listed.status == "200")
         let tools = (try? JSONSerialization.jsonObject(with: Data(listed.body.utf8)) as? [String: Any])
             .flatMap { ($0["result"] as? [String: Any])?["tools"] as? [[String: Any]] }
-        #expect(tools?.count == 35 && tools?.first?["name"] as? String == "git_push")
+        #expect(tools?.count == 34 && tools?.first?["name"] as? String == "git_push", "gh_mcp's 35 but pr_merge, withheld")
+        #expect(tools?.contains { $0["name"] as? String == "pr_merge" } == false)
+        let merge = #"{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"pr_merge","arguments":{"repo":"AttilaTheFun/visor","number":1}}}"#
+        #expect(ask(UInt16(port), "/mcp/gh", token: "sessions-token", body: merge).body.contains("-32601"), "refused before gh_mcp")
         #expect(ask(UInt16(port), "/mcp/gh", token: nil, body: "{}").status == "401")
 
         let initialize = #"{"jsonrpc":"2.0","id":2,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}"#

@@ -10,8 +10,6 @@ public enum AgentApps {
     public static let known = ["claude", "codex", "agent"]
     /// What every app's name starts with.
     public static let prefix = "logan-shire-"
-    /// The app a session acts as unless the settings say otherwise.
-    public static let standard = "logan-shire-agent"
 
     /// `logan-shire-claude` or `claude`: `claude`, as agent-token takes it;
     /// nil for any other.

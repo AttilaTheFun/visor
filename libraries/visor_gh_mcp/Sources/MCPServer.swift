@@ -77,31 +77,35 @@ public final class MCPServer: Sendable {
         if let origin = request.header("origin"), !Self.isLocalOrigin(origin) {
             return .text("Forbidden: requests from web pages are refused", status: 403)
         }
-        let config = configuration()
         let client = Self.clientID(request)
-        let caller = Caller(application: Self.application, agent: config.agent(for: client), client: client)
         let message: JSON
         do {
             message = try JSON.parse(request.body)
         } catch {
             return .json(Self.error(id: .null, code: -32700, message: "Parse error: the body is not JSON"), status: 400)
         }
-        let rules = RepoRules(config.repositories)
         if case .array(let batch) = message {
             guard !batch.isEmpty else { return .json(Self.error(id: .null, code: -32600, message: "Invalid Request: an empty batch"), status: 400) }
             var responses: [JSON] = []
             for item in batch {
-                if let response = await respond(to: item, caller: caller, rules: rules) { responses.append(response) }
+                if let response = await respond(to: item, client: client) { responses.append(response) }
             }
             return responses.isEmpty ? MCPHTTPResponse(status: 202) : .json(.array(responses))
         }
-        guard let response = await respond(to: message, caller: caller, rules: rules) else { return MCPHTTPResponse(status: 202) }
+        guard let response = await respond(to: message, client: client) else { return MCPHTTPResponse(status: 202) }
         return .json(response)
+    }
+
+    /// Who `client` is and what it may touch, as the settings say now: asked
+    /// for initialize and tools/call alone.
+    func context(_ client: String?) -> (caller: Caller, rules: RepoRules) {
+        let config = configuration()
+        return (Caller(application: Self.application, agent: config.agent(for: client), client: client), RepoRules(config.repositories))
     }
 
     /// One JSON-RPC message's answer: nil for a notification (or a client's
     /// response), which gets none.
-    func respond(to message: JSON, caller: Caller, rules: RepoRules) async -> JSON? {
+    func respond(to message: JSON, client: String?) async -> JSON? {
         guard case .object(let fields) = message, fields["jsonrpc"]?.stringValue == "2.0" else {
             return Self.error(id: message["id"] ?? .null, code: -32600, message: "Invalid Request: not a JSON-RPC 2.0 message")
         }
@@ -117,6 +121,7 @@ public final class MCPServer: Sendable {
         let params = fields["params"] ?? .object([:])
         switch method {
         case "initialize":
+            let (caller, rules) = context(client)
             let asked = params["protocolVersion"]?.stringValue ?? ""
             let version = Self.protocolVersions.contains(asked) ? asked : Self.protocolVersions[0]
             return Self.result(id: id, [
@@ -138,6 +143,7 @@ public final class MCPServer: Sendable {
             guard let tool = toolbox.tool(named: name) else {
                 return Self.error(id: id, code: -32602, message: "Unknown tool: \(Redact.line(name, limit: 80))")
             }
+            let (caller, rules) = context(client)
             let outcome = await toolbox.call(tool, arguments: params["arguments"] ?? .null, caller: caller, rules: rules, services: services)
             log.record(caller: caller.label, tool: tool.name, repo: outcome.repo, outcome: outcome.logOutcome)
             return Self.result(id: id, [

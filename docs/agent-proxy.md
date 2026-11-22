@@ -144,10 +144,14 @@ trusted only as far as the token is: they choose among the apps the token
 already reaches, and are not an authority of their own. Keep the token from
 anything that shouldn't act as every session, and
 give a session its own app only to choose its GitHub identity, not to fence
-it off from the others.
+it off from the others. So don't use `sessionAgents` to give a session an app
+with more access on GitHub than `agent`'s. A later improvement is to bind
+each call to its session's own JWT, so that one session can't claim
+another's `CLIENT_ID`.
 
 **Tools kept from the sessions.** `withheldTools` names gh_mcp tools the
-sessions may not call. They are left out of `tools/list` and their calls
+sessions may not call, by gh_mcp's own names (`pr_merge`, not
+`gh__pr_merge`). They are left out of `tools/list` and their calls
 are refused (-32601) before gh_mcp sees them, as an upstream's
 `withheldTools` are. They're read when agent-proxy starts.
 
@@ -167,17 +171,21 @@ secrets would replace `AgentTokenCommand` there, and nothing else would
 change. That isn't built yet.
 
 **Settings read at each call.** `repositories`, `agent` and `sessionAgents`
-are read again from settings.json at each call, as the dial-ins are, so a
-session given its own app needs no restart. `agentToken` and `auditLog` are
-the ones agent-proxy started with.
+are read again from settings.json at each `initialize` and `tools/call`, as
+the dial-ins are, so a session given its own app needs no restart.
+`tools/list` reads nothing: it is gh_mcp's catalog. If settings.json can't be
+read, has no `agentProxy.gh`, or names an `agent` that agent-token doesn't
+know, the last good settings stand in, and the log says so once. Taking
+`gh` out therefore needs a restart. `agentToken`, `auditLog` and
+`withheldTools` are the ones agent-proxy started with.
 
 **The audit log.** Each tool call is one line, in gh_mcp's form: the time,
 `<session id>@visor`, the tool, the repository, and the outcome (`ok`,
 `refused: …`, `invalid: …`, `failed: …`). It never holds a token, a key or a
 body. It is `auditLog`, or else `Visor-gh.log` in the server's logs folder,
-beside the egress log. On a Mac that is `~/Library/Logs`, or
-`/Volumes/Visor/Logs` on 0.65's volumes. Elsewhere it is
-`<data folder>/agent-proxy/gh.log`.
+beside the egress log. On a Mac, that is the Visor volume's `Logs/`
+(`/Volumes/Visor/Logs`) where that volume is there, else `~/Library/Logs`.
+Elsewhere it is `<data folder>/agent-proxy/gh.log`.
 
 **What stayed behind** with the archived repo: gh_mcp's own HTTP listener,
 its keys and `key` command, `~/.config/gh_mcp/config.json`, and its

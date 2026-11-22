@@ -5,6 +5,7 @@
 // instructions naming the session's own app.
 
 import Foundation
+import Synchronization
 import Testing
 @testable import VisorGHMCP
 
@@ -38,6 +39,16 @@ func recordedListing() throws -> Data {
     let (status, listed) = await post(server, ["jsonrpc": "2.0", "id": 2, "method": "tools/list"])
     #expect(status == 200 && listed?["result"]?["tools"]?.arrayValue?.count == 35)
     #expect(transport.requests.isEmpty)
+    // Nor the settings: only initialize and tools/call read them.
+    final class Reads: Sendable { let count = Mutex(0) }
+    let reads = Reads()
+    let counted = MCPServer(configuration: { reads.count.withLock { $0 += 1 }; return MCPServer.Configuration() },
+                            services: Services(transport: transport, tokens: TokenCache(source: Refusing())), log: CallLog(path: nil))
+    _ = await post(counted, ["jsonrpc": "2.0", "id": 3, "method": "tools/list"])
+    _ = await post(counted, ["jsonrpc": "2.0", "id": 4, "method": "ping"])
+    #expect(reads.count.withLock { $0 } == 0)
+    _ = await post(counted, ["jsonrpc": "2.0", "id": 5, "method": "initialize", "params": [:]])
+    #expect(reads.count.withLock { $0 } == 1)
 }
 
 @Test func jsonRPCFraming() async {

@@ -3,9 +3,11 @@
 // it), kept by a TokenCache; its audit log in the server's logs folder
 // unless the settings name another file. Which repositories and which
 // session acts as which app are read again from settings.json at each
-// call, as the dial-ins are at each CONNECT, so a session's app given in
-// `sessionAgents` counts at its next call without a restart; agent-token's
-// path and the log's are what agent-proxy started with.
+// initialize and tools/call (GitHubMCPSettings), as the dial-ins are at each
+// CONNECT, so a session's app given in `sessionAgents` counts at its next
+// call without a restart; agent-token's path, the log's and the tools
+// withheld (NativeMCPProxy's inProcessWithheld) are what agent-proxy
+// started with.
 
 import Foundation
 import VisorAgentProxy
@@ -19,11 +21,7 @@ extension AgentProxyHost {
     static func gitHubMCP(_ settings: AgentProxySettings.GH, places: Places, home: String = homeDirectory(),
                           log: @escaping @Sendable (String) -> Void) -> GitHubMCP? {
         guard let initial = configuration(settings, log: log) else { return nil }
-        let settingsFile = places.settingsFile
-        let configuration: @Sendable () -> MCPServer.Configuration = {
-            guard let current = (try? configured(at: settingsFile)).flatMap({ $0 })?.gh else { return initial }
-            return Self.configuration(current, log: nil) ?? initial
-        }
+        let reader = GitHubMCPSettings(file: places.settingsFile, initial: initial, log: log)
         let agentToken = expandingTilde(settings.agentToken ?? AgentProxySettings.GH.defaultAgentToken, home: home)
         let auditLog = expandingTilde(settings.auditLog ?? places.ghAuditLog, home: home)
         let services = Services(transport: URLSessionTransport(), tokens: TokenCache(source: AgentTokenCommand(path: agentToken)))
@@ -33,7 +31,7 @@ extension AgentProxyHost {
         log("gh_mcp is at /mcp/\(GitHubMCP.name) as logan-shire-\(initial.agent) (\(initial.sessionAgents.count) sessions' own), "
             + "touching \(initial.repositories.joined(separator: ", ")), its tokens from \(agentToken), its calls logged to \(auditLog)"
             + (FileManager.default.isExecutableFile(atPath: agentToken) ? "" : "; \(agentToken) isn't there: every call that needs GitHub fails"))
-        return GitHubMCP(server: MCPServer(configuration: configuration, services: services, log: calls))
+        return GitHubMCP(server: MCPServer(configuration: { reader.current() }, services: services, log: calls))
     }
 
     /// What gh_mcp's calls may touch and whom they act as, from the

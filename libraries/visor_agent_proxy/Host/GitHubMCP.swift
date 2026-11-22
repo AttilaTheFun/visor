@@ -4,7 +4,8 @@
 // agent-proxy's own process at the pass-through's `/mcp/gh` (an
 // InProcessMCP), from ServerSettings' `agentProxy.gh`. No key of its own:
 // a call has shown the sessions' token to get here, and its CLIENT_ID (the
-// session's id) says which session it is.
+// session's id) says which session it is. That CLIENT_ID is trusted only
+// as far as the sessions' token is (AgentProxySettings.GH).
 
 import Foundation
 import VisorAgentProxy

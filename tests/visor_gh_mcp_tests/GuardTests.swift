@@ -31,10 +31,16 @@ private func makeCheckout() throws -> (folder: String, checkout: String, bare: S
     let (_, checkout, bare) = try makeCheckout()
     let transport = FakeTransport(["GET /repos/AttilaTheFun/x": (200, ["default_branch": "develop"])])
     let server = makeServer(transport: transport, remoteURL: { _ in "file://" + bare })
-    for branch in ["main", "master", "develop", "refs/heads/develop", "v1", "refs/tags/v1", "refs/remotes/origin/feature", "HEAD"] {
+    for branch in ["main", "master", "MAIN", "develop", "refs/heads/develop", "v1", "refs/tags/v1", "refs/heads/../tags/v1",
+                   "refs/remotes/origin/feature", "HEAD"] {
         let refused = await call(server, "git_push", ["path": .string(checkout), "branch": .string(branch)])
         #expect(refused.isError && (refused.text.hasPrefix("Refused") || refused.text.hasPrefix("Invalid")), "\(branch): \(refused.text)")
     }
+    // The default branch whatever its case on GitHub.
+    let cased = makeServer(transport: FakeTransport(["GET /repos/AttilaTheFun/x": (200, ["default_branch": "Develop"])]),
+                           remoteURL: { _ in "file://" + bare })
+    let otherCase = await call(cased, "git_push", ["path": .string(checkout), "branch": "develop"])
+    #expect(otherCase.isError && otherCase.text.contains("default branch"), "\(otherCase.text)")
     #expect(try sh(["git", "for-each-ref", "--format=%(refname)"], in: bare).isEmpty, "nothing reached the remote")
     let pushed = await call(server, "git_push", ["path": .string(checkout), "branch": "refs/heads/feature"])
     #expect(!pushed.isError, "\(pushed.text)")

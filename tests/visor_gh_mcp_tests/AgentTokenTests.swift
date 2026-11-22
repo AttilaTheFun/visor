@@ -53,7 +53,7 @@ import Testing
 @Test func appsAreNamedEitherWay() {
     #expect(AgentApps.agent("logan-shire-claude") == "claude")
     #expect(AgentApps.agent("codex") == "codex")
-    #expect(AgentApps.agent(AgentApps.standard) == "agent")
+    #expect(AgentApps.agent("logan-shire-agent") == "agent")
     for wrong in ["logan-shire-gpt", "", "logan-shire-", "Claude", "shire-agent"] { #expect(AgentApps.agent(wrong) == nil, "\(wrong)") }
     #expect(MCPServer.Configuration(agent: "agent", sessionAgents: ["s1": "codex"]).agent(for: "s1") == "codex")
     #expect(MCPServer.Configuration(agent: "agent", sessionAgents: ["s1": "codex"]).agent(for: nil) == "agent")

@@ -11,8 +11,21 @@ public struct Git: Sendable {
 
     public init(executable: String = "git", searchPath: String? = nil, home: String = homeDirectory()) {
         self.executable = executable
-        self.searchPath = searchPath ?? ProcessInfo.processInfo.environment["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
+        self.searchPath = searchPath ?? Self.searchPath(ProcessInfo.processInfo.environment["PATH"])
         self.home = home
+    }
+
+    /// The folders gh_mcp's LaunchAgent gave it (its PATH), each where git
+    /// and unzip may be: the system's, then Homebrew's.
+    public static let standardFolders = ["/usr/bin", "/bin", "/usr/sbin", "/sbin", "/opt/homebrew/bin"]
+
+    /// Where git and unzip are looked for: the process's PATH (in Visor,
+    /// agent-proxy's: launchd gives a job /usr/bin:/bin:/usr/sbin:/sbin),
+    /// then those of gh_mcp's PATH it lacks, so git is found as it was.
+    static func searchPath(_ given: String?) -> String {
+        var folders = (given ?? "").split(separator: ":").map(String.init).filter { !$0.isEmpty }
+        for folder in standardFolders where !folders.contains(folder) { folders.append(folder) }
+        return folders.joined(separator: ":")
     }
 
     public func environment(_ extra: [String: String] = [:]) -> [String: String] {
