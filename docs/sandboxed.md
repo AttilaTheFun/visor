@@ -65,11 +65,12 @@
   - container sessions need none;
   - microphone and Local Network stay with Visor.app;
   - Background Items shows Visor (the main app) and Agent Utility when it's installed.
-- **Keychain:** one group, `<team>.com.LoganShire.Visor`, shared by all three apps. **#502's fix is a prerequisite**, since it makes the group keep items. The client's **ungrouped login-keychain items** (server passwords, SSH key), which a sandboxed app can't read, move into the group in a **0.66 prep step** run by the still-unsandboxed 0.66 app.
+- **Keychain:** one group, `<team>.com.LoganShire.Visor`, shared by all three apps. **#502's fix is a prerequisite**, since it makes the group keep items. The client's **ungrouped login-keychain items** (server passwords, SSH key), which a sandboxed app can't read, are **copied** into the group in a **0.66 prep step** run by the still-unsandboxed 0.66 app (written to the group and read back; reads prefer the group's, writes go to the group alone).
+  - **The login-keychain copies are kept** for a rollback through the prep release (to 0.66.1, or the update watcher's own undo after a failed update, which read the login keychain alone). Nothing is deleted or updated there: a legacy-flavoured delete reaches the group's item (#502), and an update may too. The copies go stale after the prep release, and Uninstall… removes them; sandboxed Visor can neither read nor delete them (NCH's review of #503).
 
 ## 6. Migration from 0.65
 1. **0.66 prep (unsandboxed):**
-   - move the client keychain items into the group;
+   - copy the client keychain items into the group, keeping the login keychain's for a rollback;
    - move the sockets and host sockets to the group container (with a ~/.visor link for one release);
    - keep data on the Visor volume, where 0.65 put it.
 2. **0.67 (sandboxed) first launch:**
@@ -81,7 +82,7 @@
 
 ## 7. PR plan (agent hours, plus review and lease runs)
 1. **This note, agreed by Logan.**
-2. **0.66 prep (about 4 h):** the group container and short socket paths; client keychain items into the group; the spawner seam in AgentChildren (posix_spawn now, a remote spawner later).
+2. **0.66 prep (about 4 h):** the group container and short socket paths; client keychain items copied into the group; the spawner seam in AgentChildren (posix_spawn now, a remote spawner later).
 3. **Visor Agent Utility (about 6–8 h):** the new app and its SMAppService agent; the spawn API; 7439 with gh moved there; tests; a lease run.
 4. **Visor.app sandboxed (about 8–10 h):**
    - entitlements;

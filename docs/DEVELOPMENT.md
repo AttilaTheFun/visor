@@ -744,13 +744,21 @@ removed (still only when `agentProxy` is set).
   - **The client's keychain items in Visor's keychain group**
     (MacClientSettings): every item of the client's service
     (`com.LoganShire.Visor`: `password.<server id>`, `ssh.key`, and what's
-    kept with them) moved from the login keychain, which a sandboxed app
+    kept with them) copied from the login keychain, which a sandboxed app
     can't read, to the data-protection keychain under
     `<team>.com.LoganShire.Visor`: all at the app's start, and any left
-    when first read, with ProtectedSecrets' move (#502: the login
-    keychain's copy deleted first, then written and read back, put back if
-    it doesn't read back). Reads ask the group first. Without the group
-    (signed ad hoc) they stay where they are.
+    when first read (ProtectedSecrets' `keepsLegacy`: written and read
+    back). Reads ask the group first, then the login keychain, whose item
+    is copied; writes go to the group alone; a secret removed is removed
+    from the group, its login-keychain copy noted as forgotten (by hash) so
+    a read doesn't bring it back. **The login keychain's copies are kept**,
+    for a rollback through the prep release (0.66.1, or the update
+    watcher's undo, read them alone): nothing is ever deleted or updated
+    there, since a legacy-flavoured delete reaches the group's item (#502)
+    and an update may too. They go stale after the prep release, and
+    Uninstall… removes them; sandboxed Visor can't read or delete them.
+    The server's own items keep #502's move. Without the group (signed ad
+    hoc) the client's stay where they are.
   - **The agent hosts' spawner** (AgentHostSpawner): AgentChildren and
     HostedChild start a host through one, given an AgentHostSpawnRequest
     (libraries/agent_host_wire: the session, folder, harness, command,
