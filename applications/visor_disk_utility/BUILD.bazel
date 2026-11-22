@@ -1,7 +1,7 @@
 load("//tools/swift:defs.bzl", "STRICT_SWIFT")
 load("@rules_apple//apple:macos.bzl", "macos_application")
 load("@rules_swift//swift:swift.bzl", "swift_library")
-load("//tools/signing:defs.bzl", "update_entitlements")
+load("//tools/app_groups:defs.bzl", "app_group_entitlements")
 load("//tools/variant:defs.bzl", "variant_infoplist")
 
 package(default_visibility = ["//visibility:public"])
@@ -35,12 +35,13 @@ swift_library(
     ],
 )
 
-# The CI build's entitlements: its own identifier and Visor's keychain
-# access group, the team prefix the builder's here (a placeholder in CI),
-# which CI's signing makes the profile's (tools/signing).
-update_entitlements(
+# The CI build's entitlements: its own identifier, Visor's keychain access
+# group, and the app groups, the Visor family's and Applications'
+# (tools/app_groups: UpdateKit's installed versions, and Uninstall… finding
+# the group's container), the team prefix the builder's here (a placeholder
+# in CI), which CI's signing makes the profile's (tools/signing).
+app_group_entitlements(
     name = "app_ci_entitlements",
-    team_prefix = True,
     template = "app.ci.entitlements",
 )
 
@@ -50,12 +51,14 @@ macos_application(
     bundle_id = BUNDLE_ID,
     bundle_name = "Visor Disk Utility",
     # Not sandboxed (it runs diskutil and osascript), and the hardened
-    # runtime needs nothing for that. A build CI publishes asks for Visor's
-    # own keychain access group (`<team>.com.LoganShire.Visor`), as
+    # runtime needs nothing for that. A build CI publishes asks for the app
+    # groups (above) and Visor's own keychain access group
+    # (`<team>.com.LoganShire.Visor`), as
     # Visor.app's build does (applications/visor_mac), so Uninstall… can
     # delete the app key in the data-protection keychain: Shireworks'
     # signing makes the prefix its Developer ID profile's, which must grant
-    # the group (the team's `<team>.*`). A build to run here asks for none,
+    # the groups (the team's `<team>.*`, and both app groups). A build to
+    # run here asks for none,
     # and Uninstall… says the protected items are out of its reach.
     entitlements = select({
         "//applications/visor_mac:ci_signed": ":app_ci_entitlements",

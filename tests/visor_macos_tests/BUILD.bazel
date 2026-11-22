@@ -3,8 +3,9 @@ load("//tools/swift:defs.bzl", "STRICT_SWIFT")
 
 # Visor Client's entitlements (applications/visor_macos), both builds' (the
 # one to run here and CI's, whose team prefix is the builder's, a
-# placeholder in CI): sandboxed, with nothing beyond its list. Plists read
-# as data, so on Linux too (//tests:linux).
+# placeholder in CI): sandboxed, with nothing beyond its list. And the app
+# groups CI's builds of Visor.app and Visor Disk Utility ask for
+# (tools/app_groups). Plists read as data, so on Linux too (//tests:linux).
 swift_test(
     name = "visor_macos_tests",
     copts = STRICT_SWIFT,
@@ -12,6 +13,8 @@ swift_test(
     data = [
         "//applications/visor_macos:app.entitlements",
         "//applications/visor_macos:app_ci_entitlements",
+        "//applications/visor_mac:app_ci_entitlements",
+        "//applications/visor_disk_utility:app_ci_entitlements",
     ],
     module_name = "VisorMacOSTests",
     deps = ["//:foundation"],
