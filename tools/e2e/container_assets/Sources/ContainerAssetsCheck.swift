@@ -13,7 +13,7 @@ import VisorContainerCore
 ///     bazel run //tools/e2e/container_assets -- --image <ghcr.io/attilathefun/visor-agent@sha256:…> [--root <folder>]
 ///         [--linux <Visor.app/Contents/Resources/Linux> --version <visor version>]
 ///
-/// `--root` is where Visor's folder would be on the Containers volume (a
+/// `--root` is where the Containers folder would be on the Visor volume (a
 /// scratch folder where there's no volume); without it, the volume's, or it
 /// refuses with Visor Disk Utility's name. `--linux` stages Visor's Linux
 /// programs there too, under the link rule. Exits 0 when everything was had
@@ -44,8 +44,7 @@ enum ContainerAssetsCheck {
             if let root {
                 layout = ContainerLayout(root: root)
             } else {
-                let data = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Visor")
-                layout = try ContainerLayout.locate(DiskVolumes.locate(dataDirectory: data))
+                layout = try ContainerLayout.locate(DiskVolumes.locate(dataDirectory: VisorFolders.locate().data))
             }
             say("host: \(ContainerHost.current)")
             say("root: \(layout.root.path)")

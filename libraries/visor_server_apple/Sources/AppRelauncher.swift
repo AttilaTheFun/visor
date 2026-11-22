@@ -22,7 +22,13 @@ public struct AppRelauncher: ServerLifecycle {
     /// How long a new build has to answer the first time while it runs.
     public static let firstAnswer = 600
 
-    public init() {}
+    /// Where the relauncher's shell writes: Visor's logs' folder
+    /// (VisorFolders.logs, on the Visor volume once it's there).
+    public let logPath: String
+
+    public init(logPath: String = "/tmp/visor-relaunch.log") {
+        self.logPath = logPath
+    }
 
     @MainActor
     public func relaunch(installing build: String?, carrying sessions: String) -> String? {
@@ -42,9 +48,8 @@ public struct AppRelauncher: ServerLifecycle {
             newVersion = incoming.map(Self.version(of:)) ?? newVersion
             if identifier == Bundle.main.bundleIdentifier {
                 if source != destination {
-                    let kept = VisorServer.rollbackNoteURL.deletingLastPathComponent()
-                        .appendingPathComponent("Previous", isDirectory: true)
-                        .appendingPathComponent((destination as NSString).lastPathComponent, isDirectory: true).path
+                    // In a folder of this watch's own (RelaunchWatchLock).
+                    let kept = RelaunchWatchLock.backup(for: destination)
                     backup = kept
                     // The running bundle is moved aside, not removed: it is
                     // what comes back if the new one fails.
@@ -82,10 +87,14 @@ public struct AppRelauncher: ServerLifecycle {
         // screen, the server not running meanwhile: lifted, once the system
         // accepts the build (notarized, Developer ID).
         let accept = "spctl --assess --type execute \(Self.quoted(destination)) >/dev/null 2>&1 && xattr -rd com.apple.quarantine \(Self.quoted(destination)) 2>/dev/null"
+        // One watch at a time (RelaunchWatchLock); what this one installed,
+        // by its executables' checksum, before an undo touches it.
         let script = """
+        \(RelaunchWatchLock.take(RelaunchWatchLock.url.path))
         while kill -0 \(ProcessInfo.processInfo.processIdentifier) 2>/dev/null; do sleep 0.2; done
         sleep 0.5
         \(install)\(accept)
+        installed=$(cat \(Self.quoted(destination))/Contents/MacOS/* 2>/dev/null | cksum)
         \(open)
         \(Self.watching(destination: destination, backup: backup, serving: VisorServer.shared.listening,
                         newVersion: newVersion, oldVersion: Self.version(of: Bundle.main), open: open))
@@ -94,7 +103,7 @@ public struct AppRelauncher: ServerLifecycle {
         process.executableURL = URL(fileURLWithPath: "/bin/sh")
         process.arguments = ["-c", script]
         // Somewhere to look when a relaunch does not come back.
-        let logPath = "/tmp/visor-relaunch.log"
+        try? FileManager.default.createDirectory(atPath: (logPath as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
         if !FileManager.default.fileExists(atPath: logPath) { FileManager.default.createFile(atPath: logPath, contents: nil) }
         if let log = FileHandle(forWritingAtPath: logPath) {
             log.seekToEndOfFile()
@@ -102,6 +111,9 @@ public struct AppRelauncher: ServerLifecycle {
             process.standardError = log
         }
         do { try process.run() } catch { return "Could not start the relauncher: \(error.localizedDescription)" }
+        // Held at once, before its shell takes it: a restart asked of the
+        // next server meanwhile is refused.
+        try? Data("\(process.processIdentifier) \(Int(Date().timeIntervalSince1970))\n".utf8).write(to: RelaunchWatchLock.url, options: .atomic)
         return nil
     }
 
@@ -120,17 +132,22 @@ public struct AppRelauncher: ServerLifecycle {
         // Nov). Its folder too, when nothing else is in it.
         let removeReplaced = backup.map { backup in
             let folder = (backup as NSString).deletingLastPathComponent
-            return "rm -rf \(quoted(backup)) && rmdir \(quoted(folder)) 2>/dev/null; echo \"$(date): the build it replaced is removed\""
+            let previous = (folder as NSString).deletingLastPathComponent
+            return "rm -rf \(quoted(backup)) && rmdir \(quoted(folder)) \(quoted(previous)) 2>/dev/null; echo \"$(date): the build it replaced is removed\""
         } ?? ""
         let undo: String
         if let backup {
             let note = "Visor Server \(newVersion) did not stay up after the update ($why), so \(oldVersion) was put back."
             undo = """
             pkill -f \(quoted(destination + "/Contents/MacOS/")); sleep 2; pkill -9 -f \(quoted(destination + "/Contents/MacOS/"))
-            if [ -d \(quoted(backup)) ]; then
+            if [ -d \(quoted(backup)) ] && [ -d \(quoted(backup))/Contents/MacOS ] \\
+               && [ "$(cat \(quoted(destination))/Contents/MacOS/* 2>/dev/null | cksum)" = "$installed" ]; then
               rm -rf \(quoted(destination)) && mv \(quoted(backup)) \(quoted(destination))
+              rmdir \(quoted((backup as NSString).deletingLastPathComponent)) \(quoted(((backup as NSString).deletingLastPathComponent as NSString).deletingLastPathComponent)) 2>/dev/null
               printf '%s\\n' "\(note)" > \(quoted(VisorServer.rollbackNoteURL.path))
               echo "$(date): rolled back to \(oldVersion): $why"
+            else
+              echo "$(date): \(newVersion) did not stay up ($why), but \(destination) was left as it is: this watch's copy is gone, or the bundle there isn't the one it installed"
             fi
             \(open)
             """

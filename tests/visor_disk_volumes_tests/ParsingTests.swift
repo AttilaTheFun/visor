@@ -36,8 +36,8 @@ import Testing
         #expect(sessions.mountPoint == "/Volumes/Sessions")
         #expect(sessions.filesystemName == "Case-sensitive APFS")
         #expect(sessions.isCaseSensitive)
-        let containers = try Disks.info(Fixtures.infoContainers)
-        #expect(containers.mountPoint == "/Volumes/Containers")
+        let containers = try Disks.info(Fixtures.infoVisor)
+        #expect(containers.mountPoint == "/Volumes/Visor")
         #expect(containers.isCaseSensitive)
     }
 
@@ -51,7 +51,7 @@ import Testing
     @Test func quotaAndReserveAsMade() throws {
         let volumes = try Disks.list(Fixtures.listWithBoth)[0].volumes
         let sessions = try #require(volumes.first { $0.name == "Sessions" })
-        let containers = try #require(volumes.first { $0.name == "Containers" })
+        let containers = try #require(volumes.first { $0.name == "Visor" })
         // 5 GB and 20 GB asked for (`5000000000b`, `20000000000b`), rounded
         // up to APFS's 4 KiB blocks. APFS lists an unused reserve as used.
         #expect(sessions.reserve == 5_000_003_584)

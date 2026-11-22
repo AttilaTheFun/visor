@@ -4,10 +4,9 @@ import DiskVolumes
 import Foundation
 
 /// Runs diskutil. Reading the disks (`apfs list`, `info`) needs no rights;
-/// a change (`apfs addVolume`, Containers' `apfs deleteVolume`) is checked
-/// by VolumeGuard against the disks as they are now, then run through a
-/// PrivilegeRoute. Every call blocks: the app makes them off the main
-/// actor.
+/// a change (`apfs addVolume`) is checked by VolumeGuard against the disks
+/// as they are now, then run through a PrivilegeRoute. Every call blocks:
+/// the app makes them off the main actor.
 enum DiskTool {
     /// What diskutil says of the disks now.
     static func survey() throws -> DiskSurvey {
@@ -40,8 +39,10 @@ enum DiskTool {
     /// Runs the commands as an administrator once VolumeGuard has passed
     /// them against a fresh survey and volumes.json's record of Visor's own
     /// volumes; then the disks as they are after.
-    static func change(_ commands: [DiskCommand], route: PrivilegeRoute) throws -> DiskSurvey {
-        try VolumeGuard.check(commands, against: survey(), recorded: DiskVolumes.readStatus(at: statusURL))
+    static func change(_ commands: [DiskCommand], route: PrivilegeRoute, deleting: Set<VolumeRole> = [],
+                       fixing: Set<VolumeRole> = []) throws -> DiskSurvey {
+        try VolumeGuard.check(commands, against: survey(), recorded: DiskVolumes.readStatus(at: statusURL), deleting: deleting,
+                              user: user, fixing: fixing)
         for invocation in route.invocations(of: commands.map(\.argv)) {
             do {
                 _ = try run(invocation)
@@ -52,10 +53,49 @@ enum DiskTool {
         return try survey()
     }
 
-    /// volumes.json in Visor's data folder.
-    static var statusURL: URL {
-        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return VolumesStatus.url(inDataDirectory: support.appendingPathComponent("Visor", isDirectory: true))
+    /// The person running Visor Disk Utility: the owner a volume it makes is
+    /// given (chown, in the same prompt).
+    static var user: String { NSUserName() }
+
+    /// Who owns the mount point now (its root folder); nil if it can't be
+    /// read.
+    static func owner(of path: String) -> String? {
+        (try? FileManager.default.attributesOfItem(atPath: path))?[.ownerAccountName] as? String
+    }
+
+    /// Whether the Visor volume at `path` is left out of Time Machine and
+    /// Spotlight, as tmutil and mdutil say (as the user: they only read).
+    static func exclusions(at path: String = VolumeRole.visor.mountPoint) -> VolumeExclusions {
+        func said(_ argv: [String]) -> String {
+            (try? run(argv)).map { String(decoding: $0, as: UTF8.self) } ?? ""
+        }
+        return VolumeExclusions(timeMachineExcluded: VolumeExclusions.timeMachineExcluded(isexcluded: said(["/usr/bin/tmutil", "isexcluded", path])),
+                                spotlightIndexed: VolumeExclusions.spotlightIndexed(mdutilStatus: said([DiskCommand.mdutil, "-s", path])))
+    }
+
+    /// Time Machine's settings, where the person leaves the Visor volume
+    /// out (Options… › + › Visor): no app may (VolumeExclusions).
+    static let timeMachineSettings = URL(string: "x-apple.systempreferences:com.apple.Time-Machine-Settings.extension")
+
+    /// volumes.json in Visor's data folder: on the Visor volume once it's
+    /// there (VisorFolders), else in Application Support, as before.
+    static var statusURL: URL { VolumesStatus.url(inDataDirectory: VisorFolders.locate().data) }
+
+    /// The Sessions container's folder on the Visor volume emptied: its
+    /// image, root filesystem, caches and logs, all made again when it next
+    /// starts. A folder of this user's, so no administrator is asked; the
+    /// volume, which holds Visor's data too, is never erased. What was
+    /// removed (the folder's path); nil when there was nothing to remove.
+    static func clearContainers() throws -> String? {
+        guard let folder = VisorFolders.locate().containers else {
+            throw DiskVolumesError.blocked("There's no Visor volume at \(VolumeRole.visor.mountPoint), so no container's folder on it.")
+        }
+        let files = FileManager.default
+        guard files.fileExists(atPath: folder.path) else { return nil }
+        for name in try files.contentsOfDirectory(atPath: folder.path) {
+            try files.removeItem(at: folder.appendingPathComponent(name))
+        }
+        return folder.path
     }
 
     /// Writes volumes.json for the survey, keeping the UUIDs of Visor's own

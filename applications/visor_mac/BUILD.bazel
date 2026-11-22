@@ -6,6 +6,10 @@ load("//tools/variant:defs.bzl", "variant_infoplist")
 
 package(default_visibility = ["//visibility:public"])
 
+# The server agent's plist, for the bundle and for its test
+# (//tests/visor_launch_agent_tests, which checks it is ServerAgentJob's).
+exports_files(["LaunchAgents/com.LoganShire.Visor.server.plist"])
+
 BUNDLE_ID = "com.LoganShire.Visor"
 
 # Which build this is (tools/variant: Alpha unless a release's), and the
@@ -96,9 +100,13 @@ macos_application(
     # each session's agent runs under one.
     # And agent_protocol's agent-wrapper, which the native runner runs each
     # of its agents under.
+    # And the server agent's launchd plist (ServerAgentJob), registered
+    # with SMAppService from the bundle, so none is written outside it: at
+    # Contents/Library/LaunchAgents (the file keeps its own folder's name).
     additional_contents = {
         "//applications/agent_wrapper:agent-wrapper": "Helpers",
         "//applications/visor_agent_host:visor-agent-host": "Helpers",
+        "LaunchAgents/com.LoganShire.Visor.server.plist": "Library",
     },
     app_icons = ["//artwork/app-icon:app_icon"],
     bundle_id = BUNDLE_ID,

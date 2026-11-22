@@ -1,5 +1,6 @@
 // This user's launchd, for Visor's LaunchAgents (LaunchAgentJob+Settle):
-// agent-proxy's job and the server's.
+// agent-proxy's job and the server's (registered with SMAppService:
+// ServerAgentService).
 
 #if os(macOS)
 import Darwin
@@ -53,6 +54,12 @@ public enum Launchctl {
             guard await run(["print", target])?.status == 0 else { return }
             try? await Task.sleep(for: .milliseconds(250))
         }
+    }
+
+    /// Started now (`kickstart -k`: ended first if it runs): whether
+    /// launchd had it to start.
+    public static func kickstart(label: String) async -> Bool {
+        await run(["kickstart", "-k", "\(domain)/\(label)"])?.status == 0
     }
 
     /// Loaded from its plist, and so started (RunAtLoad). What launchctl

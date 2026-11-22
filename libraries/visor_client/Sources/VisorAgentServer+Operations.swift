@@ -211,7 +211,16 @@ extension VisorAgentServer {
     public func authorizeSSHKey(_ line: String) async throws {
         var body = Envelope(type: "ssh")
         body.text = line
+        // The device its line is tagged with (`visor:<device>`).
+        body.title = VisorHost.deviceName
         let reply = try await call("POST", "/ssh/keys", body)
+        if let error = reply.error { throw AgentServerError.message(error) }
+    }
+
+    public func forgetSSHKey(_ line: String) async throws {
+        var body = Envelope(type: "ssh")
+        body.text = line
+        let reply = try await call("POST", "/ssh/keys/forget", body)
         if let error = reply.error { throw AgentServerError.message(error) }
     }
 }

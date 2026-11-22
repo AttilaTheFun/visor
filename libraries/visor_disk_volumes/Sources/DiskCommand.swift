@@ -2,24 +2,63 @@
 
 import Foundation
 
-/// One `diskutil` command line. Only two kinds are ever made: adding a
-/// volume, and deleting Containers (VolumeGuard checks both again before
-/// anything runs).
+/// One command line run as an administrator. Only these are ever made:
+/// adding a volume, giving a volume just made to the person (chown, chmod),
+/// deleting one of Visor's, and turning Spotlight off on the Visor volume
+/// (VolumeGuard checks each again before anything runs, and passes a delete
+/// only of a role asked for, Spotlight's only on Visor's own, and an owner
+/// only of a volume made in the same run, or one the card's Fix names).
 public struct DiskCommand: Equatable, Sendable, CustomStringConvertible {
     /// diskutil, by its full path: never one found on a PATH.
     public static let diskutil = "/usr/sbin/diskutil"
+    /// Spotlight's tool, by its full path.
+    public static let mdutil = "/usr/bin/mdutil"
+    /// chown and chmod, by their full paths.
+    public static let chown = "/usr/sbin/chown"
+    public static let chmod = "/bin/chmod"
 
-    /// Its arguments, after diskutil's own path.
+    /// The program, by its full path: diskutil unless said.
+    public var program: String
+    /// Its arguments, after the program's own path.
     public var arguments: [String]
 
     /// A command as given. Nothing runs it but DiskTool, after VolumeGuard
     /// has passed it.
-    public init(arguments: [String]) { self.arguments = arguments }
+    public init(program: String = DiskCommand.diskutil, arguments: [String]) {
+        self.program = program
+        self.arguments = arguments
+    }
 
-    /// The whole command line, diskutil first.
-    public var argv: [String] { [Self.diskutil] + arguments }
+    /// The whole command line, the program first.
+    public var argv: [String] { [program] + arguments }
 
-    public var description: String { (["diskutil"] + arguments).joined(separator: " ") }
+    public var description: String { ([(program as NSString).lastPathComponent] + arguments).joined(separator: " ") }
+
+    /// `chown <user>:staff <mount point>` and `chmod 775 <mount point>`: a
+    /// volume made as an administrator is root's at its root, where Visor
+    /// can't write (its data folder, its socket, the sessions' folders), so
+    /// it's given to the person who made it, as Nimbus gives its own, in the
+    /// same prompt.
+    public static func ownership(_ role: VolumeRole, user: String) throws -> [DiskCommand] {
+        guard isUserName(user) else { throw DiskVolumesError.blocked("\(user) isn't a user's name.") }
+        return [DiskCommand(program: chown, arguments: [user + ":staff", role.mountPoint]),
+                DiskCommand(program: chmod, arguments: ["775", role.mountPoint])]
+    }
+
+    /// Whether `name` is a short user name: letters, digits, `.`, `_` and
+    /// `-`, not starting with `-`.
+    public static func isUserName(_ name: String) -> Bool {
+        !name.isEmpty && name.count <= 64 && !name.hasPrefix("-")
+            && name.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || "._-".contains($0)) }
+    }
+
+    /// `mdutil -i off <mount point>`: Spotlight's index of the Visor volume
+    /// off, as Nimbus turns it off on its own (its data, caches, logs and
+    /// container are nothing to search). Sessions and Sources stay indexed.
+    public static func spotlightOff(_ role: VolumeRole) throws -> DiskCommand {
+        guard role == .visor else { throw DiskVolumesError.blocked("Spotlight is turned off on the Visor volume alone.") }
+        return DiskCommand(program: mdutil, arguments: ["-i", "off", role.mountPoint])
+    }
 
     /// `diskutil apfs addVolume <container> "Case-sensitive APFS" <name>
     /// [-reserve <bytes>b] [-quota <bytes>b]`: mounted at /Volumes/<name>.
@@ -34,12 +73,12 @@ public struct DiskCommand: Equatable, Sendable, CustomStringConvertible {
         return DiskCommand(arguments: arguments)
     }
 
-    /// `diskutil apfs deleteVolume <volume UUID>`, for Containers alone:
-    /// Sessions throws. By its APFS volume UUID, never its disk (`disk3s8`):
-    /// disk numbers can change between VolumeGuard's look and the command
-    /// running as root, a UUID can't.
+    /// `diskutil apfs deleteVolume <volume UUID>`: by its APFS volume UUID,
+    /// never its disk (`disk3s8`): disk numbers can change between
+    /// VolumeGuard's look and the command running as root, a UUID can't.
+    /// Made only for Uninstall…, when the volumes' deletion is asked for;
+    /// VolumeGuard refuses it otherwise.
     public static func deleteVolume(_ role: VolumeRole, uuid: String) throws -> DiskCommand {
-        guard role.isErasable else { throw DiskVolumesError.sessionsNeverErased("diskutil apfs deleteVolume \(uuid)") }
         guard isVolumeUUID(uuid) else {
             throw DiskVolumesError.blocked("\(role.volumeName) has no APFS volume UUID (\"\(uuid)\"): it's deleted by its UUID alone.")
         }

@@ -1,5 +1,5 @@
 // agent-proxy's own log, kept in bounds (the launchd job's: launchd opens
-// `~/Library/Logs/Visor-agent-proxy.log` and gives it to the process as
+// `Visor-agent-proxy.log` (in Visor's logs: VisorFolders) and gives it to the process as
 // its standard output and error, and never rotates it). Past `limit` (about
 // 8 MB), the file is moved aside to `<path>.1` (the one before it replaced)
 // and a new one opened at the path, onto the same descriptors, so what's

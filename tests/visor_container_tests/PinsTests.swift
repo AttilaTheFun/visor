@@ -1,5 +1,5 @@
 // The pins, container.json, image digests, and where things go on the
-// Containers volume.
+// Visor volume.
 
 import DiskVolumes
 import Foundation
@@ -64,24 +64,26 @@ import VisorContainerCore
         #expect(ContainerManifest.inResources(folder) == manifest)
     }
 
-    @Test func theLayoutIsVisorsFolderOnContainers() throws {
+    @Test func theLayoutIsTheContainersFolderOnVisor() throws {
         let mounted = DiskVolumes(sessions: LocatedVolume(role: .sessions, path: "/Volumes/Sessions", isMounted: true, record: nil),
-                                  containers: LocatedVolume(role: .containers, path: "/Volumes/Containers", isMounted: true, record: nil),
+                                  sources: LocatedVolume(role: .sources, path: "/Volumes/Sources", isMounted: true, record: nil),
+                                  visor: LocatedVolume(role: .visor, path: "/Volumes/Visor", isMounted: true, record: nil),
                                   status: nil)
         let layout = try ContainerLayout.locate(mounted)
-        #expect(layout.root.path == "/Volumes/Containers/Visor")
-        #expect(layout.kernel.path == "/Volumes/Containers/Visor/kernel/vmlinux")
-        #expect(layout.store.path == "/Volumes/Containers/Visor/store")
-        #expect(layout.templates.path == "/Volumes/Containers/Visor/templates")
-        #expect(layout.tools(version: "0.64.3")?.path == "/Volumes/Containers/Visor/tools/0.64.3")
+        #expect(layout.root.path == "/Volumes/Visor/Containers")
+        #expect(layout.kernel.path == "/Volumes/Visor/Containers/kernel/vmlinux")
+        #expect(layout.store.path == "/Volumes/Visor/Containers/store")
+        #expect(layout.templates.path == "/Volumes/Visor/Containers/templates")
+        #expect(layout.tools(version: "0.64.3")?.path == "/Volumes/Visor/Containers/tools/0.64.3")
         for bad in ["", ".", "..", "../x", "a/b"] { #expect(layout.tools(version: bad) == nil) }
     }
 
-    @Test func noContainersVolumeIsRefusedWithAPointerToDiskUtility() {
+    @Test func noVisorVolumeIsRefusedWithAPointerToDiskUtility() {
         let missing = DiskVolumes(sessions: LocatedVolume(role: .sessions, path: "/Volumes/Sessions", isMounted: true, record: nil),
-                                  containers: LocatedVolume(role: .containers, path: "/Volumes/Containers", isMounted: false, record: nil),
+                                  sources: LocatedVolume(role: .sources, path: "/Volumes/Sources", isMounted: false, record: nil),
+                                  visor: LocatedVolume(role: .visor, path: "/Volumes/Visor", isMounted: false, record: nil),
                                   status: nil)
-        #expect(throws: ContainerAssetsError.noContainersVolume("/Volumes/Containers")) { try ContainerLayout.locate(missing) }
-        #expect(ContainerAssetsError.noContainersVolume("/Volumes/Containers").description.contains("Visor Disk Utility"))
+        #expect(throws: ContainerAssetsError.noVisorVolume("/Volumes/Visor")) { try ContainerLayout.locate(missing) }
+        #expect(ContainerAssetsError.noVisorVolume("/Volumes/Visor").description.contains("Visor Disk Utility"))
     }
 }

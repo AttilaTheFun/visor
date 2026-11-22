@@ -10,9 +10,10 @@ import VisorServer
 extension AgentProxyJob {
     /// The job settled for the app this process is, its data in `places`.
     /// `folded`: agent-proxy runs inside the server (the server agent), so
-    /// the job is stopped and removed whatever the settings say.
+    /// the job is stopped and removed whatever the settings say. `logs`:
+    /// the job's logs' folder (nil: ~/Library/Logs).
     public static func settle(bundleID: String, version: String, places: AgentProxyHost.Places, folded: Bool = false,
-                              log: @escaping @Sendable (String) -> Void) async {
+                              logs: String? = nil, log: @escaping @Sendable (String) -> Void) async {
         let configured: Bool?
         let settings: AgentProxySettings?
         do {
@@ -22,7 +23,7 @@ extension AgentProxyJob {
             settings = nil
             configured = folded ? false : nil
         }
-        await job(bundleID: bundleID).settle(configured: configured, version: version, settings: AgentProxyHost.digest(settings),
+        await job(bundleID: bundleID, logs: logs).settle(configured: configured, version: version, settings: AgentProxyHost.digest(settings),
                                              why: folded ? "it runs inside the server agent now" : "settings.json has no agentProxy",
                                              log: log)
     }

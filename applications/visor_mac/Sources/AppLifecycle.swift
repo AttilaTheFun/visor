@@ -8,7 +8,9 @@ import VisorServer
 import VisorServerApple
 
 struct AppLifecycle: ServerLifecycle {
-    private let relauncher = AppRelauncher()
+    /// Its shell's log among Visor's (MacPlaces: on the Visor volume once
+    /// it's there).
+    private let relauncher = AppRelauncher(logPath: MacPlaces.log("visor-relaunch.log"))
 
     @MainActor
     func relaunch(installing build: String?, carrying sessions: String) -> String? {

@@ -122,7 +122,7 @@ final class SSHTransportTests: XCTestCase {
         XCTAssertEqual(ssh.connects[0].route, [VisorSSHHop(user: "me", host: "mini.local", port: 22)])
         XCTAssertEqual(ssh.connects[0].hostKeys, [nil])
         XCTAssertEqual(settings.kept(key: "ssh.hostkey.me@mini.local:22"), "ssh-ed25519 AAAAhost mini")
-        XCTAssertEqual(ssh.sessions[0].attached, ["nc -U ~/.visor/server.sock"])
+        XCTAssertEqual(ssh.sessions[0].attached, [VisorAgentServer.attachCommand])
         XCTAssertEqual(ssh.sessions[0].forwarded, [], "the port is not needed")
         XCTAssertEqual(http.urls, ["http://127.0.0.1:60001/api/hello"])
 
@@ -140,7 +140,7 @@ final class SSHTransportTests: XCTestCase {
         let server = VisorAgentServer(record: record())
         let name = try await server.authenticate(record())
         XCTAssertEqual(name, "Mini")
-        XCTAssertEqual(ssh.sessions[0].attached, ["nc -U ~/.visor/server.sock"])
+        XCTAssertEqual(ssh.sessions[0].attached, [VisorAgentServer.attachCommand])
         XCTAssertEqual(ssh.sessions[0].forwarded, [7433])
         XCTAssertEqual(http.urls, ["http://127.0.0.1:60001/api/hello", "http://127.0.0.1:54321/api/hello"])
         XCTAssertEqual(http.bearers.last, "pw")

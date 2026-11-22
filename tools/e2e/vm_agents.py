@@ -13,7 +13,11 @@ import socket
 import sys
 import time
 
-SOCKET = os.environ.get("VISOR_SOCKET") or os.path.expanduser("~/.visor/server.sock")
+# The server's socket file: on the Visor volume where there is one (0.65),
+# else in ~/.visor.
+VOLUME_SOCKET = "/Volumes/Visor/run/server.sock"
+SOCKET = os.environ.get("VISOR_SOCKET") or (VOLUME_SOCKET if os.path.exists(VOLUME_SOCKET)
+                                            else os.path.expanduser("~/.visor/server.sock"))
 
 
 class UnixHTTP(http.client.HTTPConnection):

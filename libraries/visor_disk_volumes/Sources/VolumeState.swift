@@ -1,6 +1,6 @@
 // A role's volume as it is now, and what's to be done.
 
-/// One of the two volumes: found or not, its plan, and what it holds.
+/// One of the three volumes: found or not, its plan, and what it holds.
 public struct VolumeState: Equatable, Sendable {
     public var role: VolumeRole
     public var plan: VolumePlan
@@ -66,24 +66,46 @@ public struct VolumeState: Equatable, Sendable {
     }
 
     /// The commands that make it: `diskutil apfs addVolume` in the boot
-    /// container, case-sensitive, with its reserve and quota (0: none).
-    public func createCommands(reserve: Int64, quota: Int64) throws -> [DiskCommand] {
+    /// container, case-sensitive, with its reserve and quota (0: none); its
+    /// mount point given to `user` (`chown <user>:staff`, `chmod 775`: as an
+    /// administrator made it, it's root's); and, for Visor, Spotlight turned
+    /// off on it (VolumeExclusions). All in the same administrator prompt.
+    public func createCommands(reserve: Int64, quota: Int64, user: String) throws -> [DiskCommand] {
         guard case let .create(container) = plan else {
             throw DiskVolumesError.blocked("\(role.volumeName) already exists or can't be made here; it's never made twice.")
         }
-        return [try DiskCommand.addVolume(role, container: container, reserve: reserve, quota: quota)]
+        let made = [try DiskCommand.addVolume(role, container: container, reserve: reserve, quota: quota)]
+            + (try DiskCommand.ownership(role, user: user))
+        return role == .visor ? made + [try DiskCommand.spotlightOff(role)] : made
     }
 
-    /// The commands that erase it: Containers alone, deleted (by its APFS
-    /// volume UUID) and made again
-    /// in its container, case-sensitive, with the reserve and quota given
-    /// (an erase in place would keep its case and lose both). Sessions
-    /// throws: it's never erased.
-    public func eraseCommands(reserve: Int64, quota: Int64) throws -> [DiskCommand] {
-        guard role.isErasable else { throw DiskVolumesError.sessionsNeverErased("Erase \(role.volumeName)") }
-        guard let volume, let container else { throw DiskVolumesError.blocked("There's no \(role.volumeName) volume to erase.") }
-        return [try DiskCommand.deleteVolume(role, uuid: volume.uuid),
-                try DiskCommand.addVolume(role, container: container.reference, reserve: reserve, quota: quota)]
+    /// The commands that give an adopted volume's mount point to `user`
+    /// (its Fix, on the card, when it isn't theirs): Visor's own alone
+    /// (named for its role, mounted in place). VolumeGuard lets them run
+    /// only with the role named in its `fixing`.
+    public func ownershipCommands(user: String) throws -> [DiskCommand] {
+        guard inPlaceUUID != nil else {
+            throw DiskVolumesError.blocked("\(role.mountPoint) isn't \(role.volumeName) as Visor Disk Utility makes it: its owner is left as it is.")
+        }
+        return try DiskCommand.ownership(role, user: user)
+    }
+
+    /// The commands that put back what an adopted volume should have: for
+    /// Visor's own (mounted in place), Spotlight turned off when it's found
+    /// indexing (`exclusions`); nothing for Sessions and Sources, which are
+    /// backed up and indexed as any folder of the person's is. Time
+    /// Machine's exclusion is the person's to make (VolumeExclusions).
+    public func exclusionCommands(_ exclusions: VolumeExclusions) throws -> [DiskCommand] {
+        guard role == .visor, inPlaceUUID != nil, exclusions.spotlightIndexed != false else { return [] }
+        return [try DiskCommand.spotlightOff(role)]
+    }
+
+    /// The commands that delete it, by its APFS volume UUID: for
+    /// Uninstall…, which VolumeGuard lets through only when the volume's
+    /// deletion is asked for.
+    public func deleteCommands() throws -> [DiskCommand] {
+        guard let volume else { throw DiskVolumesError.blocked("There's no \(role.volumeName) volume to delete.") }
+        return [try DiskCommand.deleteVolume(role, uuid: volume.uuid)]
     }
 
     /// Its APFS volume UUID when it's Visor's own as found now: named for

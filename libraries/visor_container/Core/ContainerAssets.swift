@@ -1,4 +1,4 @@
-// The Sessions container's assets on the Containers volume
+// The Sessions container's assets on the Visor volume (Containers/)
 // (docs/containers.md): the kernel, the init filesystem and the agent
 // image's root filesystem, each fetched once, checked against its pin
 // (SHA-256 or digest), kept, and checked again before it's used.

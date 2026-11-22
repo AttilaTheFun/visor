@@ -1,21 +1,23 @@
 // What the container engine is given by the server that runs it: this Mac,
-// where the Containers volume is, Visor's Linux programs, the relay's
+// where the Visor volume is, Visor's Linux programs, the relay's
 // socket and token, the driver link's socket and the driver's port, the backends, the settings as they are now, how many
 // sessions are placed in the container, the clock and the log.
 
+import DiskVolumes
 import Foundation
 
 extension ContainerEngine {
     public struct Context: Sendable {
         public var host: ContainerHost
-        /// Visor's folder on the Containers volume (ContainerLayout.locate),
+        /// The container's folder on the Visor volume (ContainerLayout.locate),
         /// or why there is none.
         public var locate: @Sendable () throws -> ContainerLayout
         /// The app's Contents/Resources/Linux; nil for a build without them.
         public var linuxPrograms: URL?
         /// Visor's version, naming the programs' folder on the volume.
         public var version: String
-        /// The Sessions volume, shared at the same path.
+        /// The Sessions volume, shared at the same path: where volumes.json
+        /// says it's mounted (DiskVolumes), /Volumes/Sessions unless given.
         public var sessions: String
         /// The relay's socket on the host (under 104 bytes, in a folder of
         /// this user's alone).
@@ -45,7 +47,7 @@ extension ContainerEngine {
         public var checkRetryPause: Duration
 
         public init(host: ContainerHost, locate: @escaping @Sendable () throws -> ContainerLayout, linuxPrograms: URL?, version: String,
-                    sessions: String = "/Volumes/Sessions", relaySocket: URL, relayToken: @escaping @Sendable () -> String?,
+                    sessions: String = VolumeRole.sessions.mountPoint, relaySocket: URL, relayToken: @escaping @Sendable () -> String?,
                     driverSocket: URL? = nil, driverPort: Int = 7434, assets: any ContainerAssetBackend, pins: ContainerPins = .current, backend: any ContainerBackend,
                     configuration: @escaping @Sendable () -> ContainerEngineConfiguration,
                     placedSessions: @escaping @Sendable () async -> Int = { 0 }, now: @escaping @Sendable () -> Date = { Date() },

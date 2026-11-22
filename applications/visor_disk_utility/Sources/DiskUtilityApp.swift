@@ -1,4 +1,4 @@
-// Visor Disk Utility: one window with Visor's two volumes.
+// Visor Disk Utility: one window with Visor's three volumes.
 
 import SwiftUI
 

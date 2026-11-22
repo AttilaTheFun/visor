@@ -1,5 +1,6 @@
 // The window's state: the survey, the sizes typed, and what's running.
 
+import AppKit
 import DiskVolumes
 import Foundation
 import Observation
@@ -17,6 +18,11 @@ final class VolumesModel {
     var failure: String?
     /// Where volumes.json was last written, or why it wasn't.
     private(set) var statusLine = ""
+    /// Each role's mount point's owner, as last looked (Visor's own, in place).
+    private(set) var owners: [VolumeRole: String] = [:]
+    /// Whether the Visor volume is left out of Time Machine and Spotlight,
+    /// as last looked; nil without it.
+    private(set) var visorExclusions: VolumeExclusions?
 
     init() {
         for role in VolumeRole.allCases {
@@ -32,14 +38,47 @@ final class VolumesModel {
     func create(_ role: VolumeRole) async {
         guard let state = states[role], let sizes = sizes(for: role) else { return }
         await perform {
-            try DiskTool.change(state.createCommands(reserve: sizes.reserve, quota: sizes.quota), route: .administratorPrompt)
+            try DiskTool.change(state.createCommands(reserve: sizes.reserve, quota: sizes.quota, user: DiskTool.user), route: .administratorPrompt)
         }
     }
 
-    func eraseContainers() async {
-        guard let state = states[.containers], let sizes = sizes(for: .containers) else { return }
+    /// An adopted volume's mount point given to the person (Fix: chown
+    /// <user>:staff, chmod 775, the administrator prompt).
+    func fixOwner(_ role: VolumeRole) async {
+        guard let state = states[role] else { return }
         await perform {
-            try DiskTool.change(state.eraseCommands(reserve: sizes.reserve, quota: sizes.quota), route: .administratorPrompt)
+            try DiskTool.change(state.ownershipCommands(user: DiskTool.user), route: .administratorPrompt, fixing: [role])
+        }
+    }
+
+    /// Who owns a volume's mount point, when it isn't the person running
+    /// Visor Disk Utility (Visor can't write there); nil when it is, or the
+    /// volume isn't Visor's own in place.
+    func foreignOwner(_ role: VolumeRole) -> String? {
+        guard let owner = owners[role], owner != DiskTool.user else { return nil }
+        return owner
+    }
+
+    /// The Visor volume left out again where it isn't: Spotlight turned off
+    /// (the administrator prompt) when it's found indexing, and Time
+    /// Machine's settings opened, for the person to leave it out there, when
+    /// it's backed up.
+    func excludeVisor() async {
+        guard let state = states[.visor], let exclusions = visorExclusions else { return }
+        await perform {
+            let commands = try state.exclusionCommands(exclusions)
+            return commands.isEmpty ? try DiskTool.survey() : try DiskTool.change(commands, route: .administratorPrompt)
+        }
+        if visorExclusions?.timeMachineExcluded != true, let settings = DiskTool.timeMachineSettings {
+            NSWorkspace.shared.open(settings)
+        }
+    }
+
+    /// The container's folder on Visor emptied (Erase Containers…).
+    func eraseContainers() async {
+        await perform {
+            _ = try DiskTool.clearContainers()
+            return try DiskTool.survey()
         }
     }
 
@@ -53,13 +92,18 @@ final class VolumesModel {
     }
 
     /// Runs a look or a change off the main actor, then shows the disks as
-    /// they are and writes volumes.json.
+    /// they are and writes volumes.json, and looks at Visor's exclusions.
     private func perform(_ work: @escaping @Sendable () throws -> DiskSurvey) async {
         isBusy = true
         defer { isBusy = false }
         do {
             let survey = try await Task.detached(operation: work).value
             apply(survey)
+            owners = Dictionary(uniqueKeysWithValues: VolumeRole.allCases.compactMap { role in
+                survey.state(for: role).inPlaceUUID == nil ? nil : DiskTool.owner(of: role.mountPoint).map { (role, $0) }
+            })
+            let inPlace = survey.state(for: .visor).isMountedInPlace
+            visorExclusions = inPlace ? await Task.detached { DiskTool.exclusions() }.value : nil
         } catch DiskVolumesError.cancelled {
             // The person said no at the prompt: nothing to report.
         } catch {
@@ -72,7 +116,7 @@ final class VolumesModel {
         for role in VolumeRole.allCases {
             let state = survey.state(for: role)
             states[role] = state
-            // An existing volume's own sizes, as Erase Containers… keeps them.
+            // An existing volume's own sizes, as they are.
             if let volume = state.volume {
                 reserve[role] = Self.gigabytes(volume.reserve)
                 quota[role] = Self.gigabytes(volume.quota)

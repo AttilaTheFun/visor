@@ -6,7 +6,18 @@
 // (MacSessionsContainer, its VM in this process: an update restarts it),
 // restarted and updated by launchd
 // (ServerAgentRestart). Its lines go to the system log, as the app's do, and
-// to standard error, which launchd points at ~/Library/Logs/Visor-server.log.
+// to standard error, which it points at Visor-server.log in Visor's logs
+// itself (on the Visor volume once it's there: MacPlaces), as its plist is
+// the bundle's and names no path. Its data, cache and logs move onto the
+// Visor volume at its start (MacPlaces.settle); with the volume expected
+// and not mounted, it ends, for launchd to start it again.
+//
+// `Visor server-agent register`: the agent registered afresh with
+// SMAppService from this bundle (LaunchServices told of it again, unregistered,
+// booted out, then registered:
+// ServerAgentService.reregister), for the update's watcher after an update
+// or a rollback, when SMAppService's launch constraint still names the
+// bundle that was replaced.
 //
 // Sent TERM (launchd: the app handing the server back, a restart of the
 // job, logging out; or anyone: `killall Visor` reaches it too, its process
@@ -16,7 +27,9 @@
 // was ending it: only `/api/quit` (an exit of 0) leaves it stopped.
 
 import Darwin
+import DiskVolumes
 import Foundation
+import Synchronization
 import VisorLaunchAgent
 import VisorProtocol
 import VisorServer
@@ -27,16 +40,45 @@ enum MacServerAgent {
     /// Runs the server agent when `arguments` ask for it, and never returns
     /// then; returns otherwise, for the app to start.
     static func handle(_ arguments: [String]) {
-        guard arguments.dropFirst().first == ServerAgentJob.argument else { return }
+        let given = Array(arguments.dropFirst())
+        if given == [ServerAgentJob.command, "register"] {
+            register()
+        }
+        guard given.first == ServerAgentJob.argument else { return }
         run()
     }
 
+    /// Registered afresh from this bundle (unregistered, booted out, then registered:
+    /// ServerAgentService.reregister), which starts it; ends.
+    private static func register() -> Never {
+        let bundleID = MacPlaces.own
+        let problem = Mutex<String?>(nil)
+        let done = DispatchSemaphore(value: 0)
+        Task.detached {
+            let said = await ServerAgentService.reregister(bundleID: bundleID)
+            problem.withLock { $0 = said }
+            done.signal()
+        }
+        done.wait()
+        if let problem = problem.withLock({ $0 }) {
+            FileHandle.standardError.write(Data("Visor: the server agent couldn't be registered: \(problem)\n".utf8))
+            exit(1)
+        }
+        exit(0)
+    }
+
     private static func run() -> Never {
-        let job = ServerAgentJob.job(bundleID: MacPlaces.own)
-        MacServer.prepare(lifecycle: ServerAgentRestart(job: job), log: { line in
+        let job = ServerAgentJob.job(bundleID: MacPlaces.own, logs: VisorFolders.locate().logs.path)
+        let missing = MacServer.prepare(lifecycle: ServerAgentRestart(job: job), runsServer: true, client: false, log: { line in
             FileHandle.standardError.write(Data("\(Date().formatted(.iso8601)) \(line)\n".utf8))
         })
+        // Settled: the log is where Visor's logs are now.
+        openLog(ServerAgentJob.job(bundleID: MacPlaces.own, logs: MacPlaces.folders.logs.path).log)
         let log = ServerPlatform.current.log
+        if missing {
+            log("the server agent ends for now: its data is on the Visor volume, which isn't mounted; launchd starts it again")
+            exit(1)
+        }
         log("the server agent \(VisorMacApp.bundleVersion) starting: process \(ProcessInfo.processInfo.processIdentifier), "
             + "\(Bundle.main.executablePath ?? "?")")
         // Another server on this Mac's data (the app's, still going): never
@@ -72,11 +114,23 @@ enum MacServerAgent {
         exit(0)
     }
 
-    /// Whether no other server answers, at the socket file or on the port,
-    /// within `seconds`.
+    /// Standard output and error appended to `path` (its owner's alone),
+    /// as launchd pointed them at the log when the plist named it.
+    private static func openLog(_ path: String) {
+        try? FileManager.default.createDirectory(atPath: (path as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
+        let file = open(path, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0o600)
+        guard file >= 0 else { return }
+        dup2(file, STDOUT_FILENO)
+        dup2(file, STDERR_FILENO)
+        close(file)
+    }
+
+    /// Whether no other server answers, at the socket file (and 0.64's,
+    /// `~/.visor/server.sock`) or on the port, within `seconds`.
     private static func otherServerGone(within seconds: Int) -> Bool {
         for _ in 0..<(seconds * 2) {
-            if !POSIXUnixSocket.answers(VisorServer.socketPath), !portAnswers(Envelope.defaultPort) { return true }
+            if !POSIXUnixSocket.answers(VisorServer.socketPath), !POSIXUnixSocket.answers(VisorServer.legacySocketPath),
+               !portAnswers(Envelope.defaultPort) { return true }
             Thread.sleep(forTimeInterval: 0.5)
         }
         return false

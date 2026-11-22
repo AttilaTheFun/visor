@@ -1,8 +1,8 @@
 // What diskutil says of this Mac's disks, gathered once.
 
 /// The boot disk's APFS container, every APFS container and volume, and
-/// `diskutil info` of the volumes that matter (those named Sessions or
-/// Containers, and whatever is mounted at their mount points).
+/// `diskutil info` of the volumes that matter (those named Sessions,
+/// Sources or Visor, and whatever is mounted at their mount points).
 public struct DiskSurvey: Equatable, Sendable {
     /// The APFS container the system boots from (`diskutil info -plist /`'s
     /// APFSContainerReference), where new volumes are made.

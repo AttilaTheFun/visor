@@ -28,6 +28,11 @@ public final class SessionExport: Identifiable {
     public private(set) var name = ""
     public private(set) var size = 0
 
+    /// Where an archive is read to before it's saved, when the host says
+    /// (Visor on the Mac: the Visor volume's tmp/, emptied at its start);
+    /// nil for the system's temporary folder.
+    public static var staging: URL?
+
     /// How much of the archive is read at a time.
     static let piece = 4 << 20
 
@@ -45,7 +50,8 @@ public final class SessionExport: Identifiable {
             let (token, file) = try await host.server.exportSession(session.id)
             name = file.place.isEmpty ? "Session.visorsession" : file.place
             size = file.size
-            let folder = FileManager.default.temporaryDirectory.appendingPathComponent("visor-export-" + UUID().uuidString, isDirectory: true)
+            let folder = (Self.staging ?? FileManager.default.temporaryDirectory)
+                .appendingPathComponent("visor-export-" + UUID().uuidString, isDirectory: true)
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
             let url = folder.appendingPathComponent(name, isDirectory: false)
             guard FileManager.default.createFile(atPath: url.path, contents: nil) else {

@@ -34,13 +34,91 @@ of these places, and the placement shown on each session).
   `applications/visor_mac/app.entitlements` and `app.ci.entitlements`. It's
   unrestricted: no provisioning profile grants it, and an ad hoc build opens
   with it.
-- **The Containers volume** (`/Volumes/Containers`), made by Visor Disk
-  Utility. Without it, Visor refuses with a pointer to Visor Disk Utility.
+- **The Visor volume** (`/Volumes/Visor`), made by Visor Disk Utility, with
+  the **Sessions** volume and, for the checkouts, **Sources** beside it
+  (below). Without Visor, Visor refuses with a pointer to Visor Disk
+  Utility.
+
+## Visor's volumes (0.65)
+
+Visor owns three case-sensitive APFS volumes, made (or adopted as they are)
+by Visor Disk Utility, which records them in `volumes.json`:
+
+| Volume | Mounted at, and shared into the container at | What's on it |
+| --- | --- | --- |
+| **Sessions** | `/Volumes/Sessions` | The sessions' working folders (`Claude/<id>`, also those moved in from another computer and Super Compact's new ones), the container's Claude folder (`.claude`) and staged exports. Never erased. |
+| **Sources** | `/Volumes/Sources` | The sessions' checkouts: the container's checkouts' folder unless `container.checkouts` names another. |
+| **Visor** | `/Volumes/Visor` (not shared, but for `Containers/`'s parts below) | Everything else of Visor's: `Data/` (the server's data folder: sessions.json, settings, push, relay, jobs, images, backups, migrations, super-compact, agent-proxy, `run/`, `hosts/`, and `volumes.json`), `Caches/Server` and `Caches/Client` (the two `messages.sqlite`), `Logs/` (Visor-server, agent-proxy and egress, and the relaunch log), `tmp/` (an export before it's saved; emptied at the app's start), `run/server.sock` (the server's socket file) and `Containers/` (below). It replaced 0.64's Containers volume: a `volumes.json` that says `containers` reads as `visor`. |
+
+Each volume Visor Disk Utility makes is given to the person who made it,
+as Nimbus gives its own: a volume made in the administrator prompt is
+root's at its root, where Visor can't write its data, socket or sessions'
+folders, so `chown <user>:staff` and `chmod 775` of its mount point follow
+the `addVolume` in the same prompt. VolumeGuard lets them run exactly so,
+on a role's mount point, and only for a volume made earlier in the same run
+(never `-R`, never `/`, never another owner). An adopted volume that isn't
+the person's says so on its card ("Owned by root: Visor can't write
+here"), and its Fix (`fix-owner <role>` on the command line) runs the same
+two, the guard told that volume is being fixed.
+
+The Visor volume is left out of Time Machine and Spotlight, as Nimbus
+leaves its own (Logan, 21 Nov 2026): Visor's data, caches, logs and
+container aren't the person's work, and a container's root filesystem
+would fill a backup disk. Sessions and Sources stay in both: they're what
+is worth backing up. Visor Disk Utility turns Spotlight off on it
+(`mdutil -i off /Volumes/Visor`, in the same administrator prompt as its
+creation; VolumeGuard lets it run at Visor's own volume alone), and its
+card says how it stands ("Not backed up by Time Machine · Not indexed by
+Spotlight", from `tmutil isexcluded` and `mdutil -s`), with Leave Out of
+Backups… to put back what's missing. macOS 27 lets no app leave a whole
+volume out of Time Machine (`tmutil addexclusion -v` is refused to
+anything an app starts, root or not: Nimbus found it so), so that part is
+the person's, in Time Machine's settings (Options… › + › Visor), which the
+button opens.
+
+The engine and the container runner take Sessions' and Sources' paths from
+`volumes.json` (DiskVolumes), never a path assumed. Once the Visor volume is
+there, the process about to run the server moves what was in the home
+folder onto it, once, at its start (`VisorFolderMove`): the data folder (but
+for its `Sessions/`, the working folders of sessions moved in before 0.65,
+which sessions.json and Claude's project keys know by their paths, and
+which go with Migrate… or Move to Container), the server's cache and the
+logs; the app moves its own cache. Not while an agent's host still answers
+in the data folder's `hosts/` (an update leaves the agents running): then
+the data folder stays in the home folder until a start with none running (a
+restart of the Mac, or Quit Visor). Without the volume, everything is where
+it was. Once the data is on the volume, a start that finds it unmounted
+waits a minute for it (at login it can come after the server agent), and
+the server agent ends rather than serve from an empty folder; launchd starts
+it again.
+
+The goal (Logan, 21 Nov 2026): set Visor up on a clean Mac, use it with
+containers only, uninstall it, delete the volumes, and the Mac is as it
+was. So, beside the volumes: the server agent's plist is the app bundle's
+(SMAppService: docs/DEVELOPMENT.md, The server as a background agent), the
+`authorized_keys` lines Visor adds end in `visor:<device>` (Forget This
+Device, in a computer's settings over SSH, takes its own out), and, with the
+container on, the server's own `claude -p` runs in it (Containers only,
+below). `~/.visor/server.sock` is a link to the volume's socket file for
+0.65 alone, for SSH clients of 0.64, then goes.
+
+### Containers only
+
+While the container is on, the `claude -p` the server runs for itself runs
+in the container (`SessionsContainer.run`: `sh -c 'exec "$@" < <input>'`,
+its input a file on Sessions in `.visor-commands/`, gone once it ends), with
+`CLAUDE_CONFIG_DIR=/Volumes/Sessions/.claude`, as its sessions' agents have
+it: Super Compact's calls (the container started for them if it isn't
+running) and the models' `initialize` every few hours (only while it's
+running: never started for it; the list held stands meanwhile). So a Mac
+used with the container alone has no Claude Code of its own writing
+`~/.claude`, `~/.claude.json` or the keychain's "Claude Code-credentials".
 
 ## The assets
 
-All of them are on the Containers volume, in `Visor/`. All of it can be
-thrown away and made again (Visor Disk Utility's Erase Containers):
+All of them are on the Visor volume, in `Containers/`. All of it can be
+thrown away and made again (Visor Disk Utility's Erase Containers…, which
+empties the folder; the volume, with Visor's data on it, is never erased):
 
 | Path | What | Pinned by |
 | --- | --- | --- |
@@ -102,7 +180,7 @@ to run here) has no image pinned unless Settings names one.
 
 `Contents/Resources/Linux` (visor-server, with relay-client and
 visor-agent-host as links to it, and agent-wrapper) is copied to `tools/<visor version>/` on
-the Containers volume, to be mounted read-only at `/opt/visor/bin`. A share
+the Visor volume's `Containers/`, to be mounted read-only at `/opt/visor/bin`. A share
 of the app bundle itself would go stale when the app is updated in place.
 `ToolsFolder` copies it under **the link rule**, checked on the app's folder
 and again on the copy:
@@ -143,7 +221,7 @@ none is the defaults, off:
 | `memoryGiB` | Half of what's free when it starts, at least 4, at most 24 | At most all of this Mac's less 4 GiB. The cap minds that Nimbus will run VMs and containers on the Mini (32 GB) too; set it lower there if need be. Memory the guest frees isn't given back while it runs: the idle stop gives it back. |
 | `idleMinutes` | 30 | Minutes with no session in it before it's stopped. |
 | `imageDigest` | none | An agent image digest in place of the release's. |
-| `checkouts` | none | A folder of this Mac's (an absolute path) shared read-write at the same path, for the checkouts. Still open: see below. |
+| `checkouts` | the Sources volume | A folder of this Mac's (an absolute path) shared read-write at the same path, for the checkouts; none set, the Sources volume, when it's mounted. |
 
 A value that isn't one (a tag for `imageDigest`, a CPU count of 0) reads as
 its default.
@@ -151,7 +229,7 @@ its default.
 **Settings › Sessions Container** has the switch (`PUT /api/settings
 {containerEnabled}`), off and disabled unless this Mac can run it, and the
 readiness row: macOS 26 or later, Apple silicon, Virtualization, the
-Containers volume, and the assets on it (present, or what's missing: the
+Visor volume, and the assets on it (present, or what's missing: the
 engine fetches them when it first starts), with the image it would run.
 
 ## The engine
@@ -173,10 +251,10 @@ progress interrupted). There's no helper process of its own.
   Containerization's guest overhead on top).
 - **No network interface** (`interfaces = []`). Its only way out is the
   relay, below.
-- **Shares** (virtiofs): `/Volumes/Sessions` at the same path, read-write;
-  `tools/<version>/` read-only at `/opt/visor/bin`; and the checkouts'
-  folder (`container.checkouts`) at its own path where the settings name
-  one. Nothing else.
+- **Shares** (virtiofs): Sessions (`/Volumes/Sessions`) at the same path,
+  read-write; `tools/<version>/` read-only at `/opt/visor/bin`; and the
+  checkouts' folder (`container.checkouts`, else the Sources volume) at its
+  own path. Nothing else.
 - **Its main process** is `/opt/visor/bin/relay-client run --relay
   /run/agent-proxy/relay.sock --forward 7434=/run/visor/driver.sock --
   <a shell that waits>`, as root, with
@@ -382,13 +460,11 @@ as a defence beside it. Visor adopts it once #17 lands in a release.
 
 ## Still open
 
-- **Where the sessions' checkouts live** (case sensitivity). Both Macs'
-  Sessions volumes are case-insensitive today, and virtiofs passes that to
-  Linux, where `Foo.h` and `foo.h` are two files. Proposed: a third,
-  case-sensitive APFS volume for checkouts (`/Volumes/Work`, never erased),
-  made by Visor Disk Utility and mounted at the same path. The engine
-  doesn't decide it: `container.checkouts` names a folder to share at its
-  own path, and none is shared unless it's set.
+- **Case sensitivity of the Macs' volumes today.** Both Macs' Sessions
+  and Sources are case-insensitive, and virtiofs passes that to Linux,
+  where `Foo.h` and `foo.h` are two files. Visor Disk Utility makes new
+  ones case-sensitive and adopts an existing one as it is, with a note;
+  converting the Mini's is a window of its own (the volumes plan's §2).
 
 ## What's next
 

@@ -4,12 +4,17 @@
 import DiskVolumes
 import Foundation
 
-/// `Visor Disk Utility status`, `… create sessions|containers`, `…
-/// erase-containers --yes`; options `--reserve-gb <n>`, `--quota-gb <n>`
-/// (the role's defaults otherwise) and `--sudo` (`sudo -n` instead of the
-/// administrator prompt). Each writes volumes.json after.
+/// `Visor Disk Utility status`, `… create sessions|sources|visor`, `…
+/// erase-containers --yes` (the container's folder on Visor emptied);
+/// options `--reserve-gb <n>`, `--quota-gb <n>` (the role's defaults
+/// otherwise) and `--sudo` (`sudo -n` instead of the administrator prompt).
+/// `… fix-owner sessions|sources|visor`: an adopted volume's mount point
+/// given to the person running it (chown <user>:staff, chmod 775), as one
+/// it makes is. `… exclude-visor`: Spotlight turned off on the Visor volume where it's
+/// found indexing (Time Machine's exclusion is the person's: it says how).
+/// Each writes volumes.json after.
 enum DiskUtilityCLI {
-    static let verbs: Set<String> = ["status", "create", "erase-containers"]
+    static let verbs: Set<String> = ["status", "create", "erase-containers", "fix-owner", "exclude-visor"]
 
     /// Runs and exits when the arguments are a command; else returns, for
     /// the app.
@@ -30,26 +35,45 @@ enum DiskUtilityCLI {
         switch arguments[0] {
         case "create":
             guard arguments.count > 1, let role = VolumeRole(rawValue: arguments[1]) else {
-                throw DiskVolumesError.blocked("create sessions|containers")
+                throw DiskVolumesError.blocked("create sessions|sources|visor")
             }
             let commands = try survey.state(for: role).createCommands(
                 reserve: try size(arguments, "--reserve-gb") ?? role.defaultReserve,
-                quota: try size(arguments, "--quota-gb") ?? role.defaultQuota)
+                quota: try size(arguments, "--quota-gb") ?? role.defaultQuota, user: DiskTool.user)
             commands.forEach { print("running: \($0)") }
             survey = try DiskTool.change(commands, route: route)
+        case "fix-owner":
+            guard arguments.count > 1, let role = VolumeRole(rawValue: arguments[1]) else {
+                throw DiskVolumesError.blocked("fix-owner sessions|sources|visor")
+            }
+            let commands = try survey.state(for: role).ownershipCommands(user: DiskTool.user)
+            commands.forEach { print("running: \($0)") }
+            survey = try DiskTool.change(commands, route: route, fixing: [role])
+        case "exclude-visor":
+            let commands = try survey.state(for: .visor).exclusionCommands(DiskTool.exclusions())
+            commands.forEach { print("running: \($0)") }
+            if !commands.isEmpty { survey = try DiskTool.change(commands, route: route) }
         case "erase-containers":
-            guard arguments.contains("--yes") else { throw DiskVolumesError.blocked("erase-containers erases everything on Containers: add --yes.") }
-            let role = VolumeRole.containers
-            let state = survey.state(for: role)
-            let commands = try state.eraseCommands(
-                reserve: try size(arguments, "--reserve-gb") ?? state.volume?.reserve ?? role.defaultReserve,
-                quota: try size(arguments, "--quota-gb") ?? state.volume?.quota ?? role.defaultQuota)
-            commands.forEach { print("running: \($0)") }
-            survey = try DiskTool.change(commands, route: route)
+            guard arguments.contains("--yes") else {
+                throw DiskVolumesError.blocked("erase-containers deletes the container's image, root filesystem, caches and logs: add --yes.")
+            }
+            print(try DiskTool.clearContainers().map { "emptied \($0)" } ?? "the container's folder was empty already")
         default:
             break
         }
-        for role in VolumeRole.allCases { print(describe(survey.state(for: role))) }
+        for role in VolumeRole.allCases {
+            print(describe(survey.state(for: role)))
+            if survey.state(for: role).inPlaceUUID != nil, let owner = DiskTool.owner(of: role.mountPoint), owner != DiskTool.user {
+                print("  note: owned by \(owner): Visor can't write here (fix-owner \(role.rawValue))")
+            }
+        }
+        if survey.state(for: .visor).isMountedInPlace {
+            let exclusions = DiskTool.exclusions()
+            print("Visor: \(exclusions.summary)")
+            if exclusions.timeMachineExcluded == false {
+                print("  note: leave it out in System Settings › General › Time Machine › Options… › + › Visor (no app may: macOS 27)")
+            }
+        }
         print("wrote \(try DiskTool.writeStatus(survey).path)")
     }
 
