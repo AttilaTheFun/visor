@@ -256,7 +256,7 @@ import VisorServer
         #expect(script.contains("while kill -0 1 2>/dev/null"), "it waits for the server to go first")
         // The rollback: the bundle put back before it's registered afresh.
         let undo = script.components(separatedBy: "rolled back")[0]
-        let putBack = try? #require(undo.range(of: "mv '/tmp/Previous/Visor.app' '/Applications/Visor.app'"))
+        let putBack = undo.range(of: "mv '/tmp/Previous/Visor.app' '/Applications/Visor.app'")
         let registered = script.range(of: register, options: .backwards)
         #expect(putBack != nil && registered != nil && putBack!.lowerBound < registered!.lowerBound)
     }
