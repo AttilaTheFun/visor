@@ -19,6 +19,9 @@ settings.json has `agentProxy`.
   `mcpEndpoints` point here (`http://127.0.0.1:7439/mcp/gh`, with the
   `X-Visor-Proxy` header a secret of the endpoint's). Upstreams are plain
   `http://` addresses.
+- **gh_mcp, in-process** (from 0.66) at the pass-through's `/mcp/gh`, when
+  `agentProxy.gh` is set and no upstream is named `gh`. It is below, under
+  gh_mcp in agent-proxy.
 - **The relay listener** on a loopback port (`relayPort`): the containers'
   way out. Each stream starts with the relay's PROXY v2 header, which carries
   the relay's token (TLV 0xE2). After the header comes one of these:
@@ -75,12 +78,21 @@ optional:
   "dns": {"tailnetSuffixes": ["ts.net"], "tailnet": ["100.100.100.100"], "fallbacks": ["1.1.1.1"]},
   "dialIns": [{"name": "visor", "port": 7434}],
   "maxConnections": 512, "maxConnectionsPerLease": 128,
-  "egressLog": "…", "caCertificate": "…", "gateRules": "…"
+  "egressLog": "…", "caCertificate": "…", "gateRules": "…",
+  "gh": {
+    "repositories": ["AttilaTheFun/*"],
+    "agentToken": "~/.local/bin/agent-token",
+    "agent": "logan-shire-agent",
+    "sessionAgents": {"<session id>": "logan-shire-claude"},
+    "auditLog": "…",
+    "withheldTools": []
+  }
 }
 ```
 
-- Without `mcp`, there is no pass-through. Without `relayPort`, there is no
-  relay listener.
+- Without `mcp`, there is no pass-through, unless `gh` is set: then the
+  pass-through listens on 7439 for gh_mcp alone. Without `relayPort`, there
+  is no relay listener.
 - By default the egress log is `~/Library/Logs/Visor-egress.log` on a Mac,
   and `<data folder>/agent-proxy/egress.log` elsewhere.
 - The authority's certificate is `<data folder>/agent-proxy/ca.pem` unless
@@ -89,6 +101,121 @@ optional:
 - An `agentProxy` that can't be read leaves the rest of the settings as they
   are. agent-proxy then runs with the last good one it kept
   (`agent-proxy/last-good.json`).
+
+## gh_mcp in agent-proxy (from 0.66)
+
+gh_mcp is GitHub for coding agents: an agent gets only the GitHub access it
+needs, and holds no GitHub credential. Until 0.66 it was a program of its own
+(AttilaTheFun/gh_mcp, now archived; its main ends at #12), on 7470 as the
+LaunchAgent `gh_mcp.server`, and agent-proxy's `gh` upstream passed calls on
+to it. Logan, 21 Nov 2026: "fold gh_mcp into Visor's agent-proxy at /mcp/gh,
+retire the LaunchAgent and binary". It is now `libraries/visor_gh_mcp`
+(module VisorGHMCP), and agent-proxy answers it in its own process at
+`/mcp/gh` on the pass-through's port. Its tests are
+`tests/visor_gh_mcp_tests`.
+
+**What a session sees doesn't change.** It gets the same 35 tools
+(`gh__pr_create`, `gh__git_push`, …), with the same names, descriptions and
+input schemas, byte for byte. `tests/visor_gh_mcp_tests` checks `tools/list`
+against gh_mcp's own answer, recorded from its source. The answers, the
+errors and the rules are gh_mcp's too:
+
+- a push goes to `refs/heads/<branch>` only, never to main, master, the
+  default branch or a tag;
+- a force push is made only with a lease;
+- a merge happens only when every check is green;
+- reviews are COMMENT only;
+- an issue's state is never edited;
+- only the allowed repositories are touched (`repositories`,
+  `AttilaTheFun/*` unless said).
+
+Its README's never-list is `Policy.never`.
+
+**Who the caller is.** gh_mcp took a key (`API_KEY`), which named an
+application and an agent. Here there is no key. A call has already shown the
+sessions' token (`X-Visor-Proxy`) to reach `/mcp/gh`, and its `CLIENT_ID`
+(the session's own id, since #482) names the session.
+
+**How far that is trusted.** `CLIENT_ID` is the caller's word, and the
+sessions' token is one token shared by every native session. So anything
+holding the token can name any session, act as the app `sessionAgents` gives
+that session, and be logged as it. `CLIENT_ID` and `sessionAgents` are
+trusted only as far as the token is: they choose among the apps the token
+already reaches, and are not an authority of their own. Keep the token from
+anything that shouldn't act as every session, and
+give a session its own app only to choose its GitHub identity, not to fence
+it off from the others. So don't use `sessionAgents` to give a session an app
+with more access on GitHub than `agent`'s. A later improvement is to bind
+each call to its session's own JWT, so that one session can't claim
+another's `CLIENT_ID`.
+
+**Tools kept from the sessions.** `withheldTools` names gh_mcp tools the
+sessions may not call, by gh_mcp's own names (`pr_merge`, not
+`gh__pr_merge`). They are left out of `tools/list` and their calls
+are refused (-32601) before gh_mcp sees them, as an upstream's
+`withheldTools` are. They're read when agent-proxy starts.
+
+**Tokens, per agent.** Each call acts as one of the GitHub Apps:
+logan-shire-claude, -codex or -agent. Which one comes from `sessionAgents`
+(by session id), else `agent` (logan-shire-agent unless said). Either may
+name an app in full or by its last word (`claude`). The app's installation
+token comes from `agentToken`, which is run exactly as gh_mcp ran it:
+`~/.local/bin/agent-token token <agent> --owner <owner>`, with `<agent>`
+being claude, codex or agent. Each token is kept for four minutes, and is
+dropped when GitHub refuses it. agent-token holds the Apps' keys, and Visor
+holds none.
+
+The seam for minting tokens in-process later is VisorGHMCP's `TokenSource`.
+A source that signs for installation tokens with App keys kept in Visor's
+secrets would replace `AgentTokenCommand` there, and nothing else would
+change. That isn't built yet.
+
+**Settings read at each call.** `repositories`, `agent` and `sessionAgents`
+are read again from settings.json at each `initialize` and `tools/call`, as
+the dial-ins are, so a session given its own app needs no restart.
+`tools/list` reads nothing: it is gh_mcp's catalog. If settings.json can't be
+read, has no `agentProxy.gh`, or names an `agent` that agent-token doesn't
+know, the last good settings stand in, and the log says so once. Taking
+`gh` out therefore needs a restart. `agentToken`, `auditLog` and
+`withheldTools` are the ones agent-proxy started with.
+
+**The audit log.** Each tool call is one line, in gh_mcp's form: the time,
+`<session id>@visor`, the tool, the repository, and the outcome (`ok`,
+`refused: …`, `invalid: …`, `failed: …`). It never holds a token, a key or a
+body. It is `auditLog`, or else `Visor-gh.log` in the server's logs folder,
+beside the egress log. On a Mac, that is the Visor volume's `Logs/`
+(`/Volumes/Visor/Logs`) where that volume is there, else `~/Library/Logs`.
+Elsewhere it is `<data folder>/agent-proxy/gh.log`.
+
+**What stayed behind** with the archived repo: gh_mcp's own HTTP listener,
+its keys and `key` command, `~/.config/gh_mcp/config.json`, and its
+LaunchAgent and `install`.
+
+### The cut-over, per Mac
+
+While `agentProxy.mcp.upstreams` still names `gh` (gh_mcp at 7470), calls
+are passed through to it as before, even with `gh` set. The cut-over is a
+settings change:
+
+1. Install the release.
+2. In settings.json, set `agentProxy.gh` (`{}` takes every default) and
+   remove the `gh` upstream from `agentProxy.mcp.upstreams`. Then, with
+   Logan's go, restart the server. agent-proxy starts again with the new
+   settings: as its job, settled to them, or inside the server agent. Check
+   its log for "the MCP pass-through is on loopback port 7439: /mcp/gh
+   (in-process)".
+3. Check that one gh call passes: from a native session, a read such as
+   `gh__pr_list` on AttilaTheFun/visor. Then find its line in
+   `Visor-gh.log`.
+4. NCH boots out `gh_mcp.server`, and removes its plist
+   (`~/Library/LaunchAgents/gh_mcp.server.plist`) and its binary
+   (`~/.local/bin/gh_mcp`). `~/.config/gh_mcp` and `~/Library/Logs/gh_mcp.log`
+   can go with them. agent-token stays as long as `agentToken` runs it.
+
+Sessions' `mcpEndpoints` don't change: they still point at
+`http://127.0.0.1:7439/mcp/gh`. The `mcp/gh/api_key` secret is no longer
+read once the upstream is gone (`agent-proxy secret-remove mcp/gh/api_key`).
+The MacBook's own gh_mcp goes when its sessions move to the Mini.
 
 ## The secrets
 

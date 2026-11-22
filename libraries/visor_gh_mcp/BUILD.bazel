@@ -1,0 +1,23 @@
+load("@rules_swift//swift:swift.bzl", "swift_library")
+load("//tools/swift:defs.bzl", "STRICT_SWIFT")
+
+package(default_visibility = ["//visibility:public"])
+
+# gh_mcp, folded into Visor (Logan, 2026-11-21: "fold gh_mcp into Visor's
+# agent-proxy at /mcp/gh, retire the LaunchAgent and binary";
+# docs/agent-proxy.md): GitHub for coding agents, from AttilaTheFun/gh_mcp
+# (archived; its main at #12), its tools, their guards (Policy, Refs,
+# RepoRules, pr_merge's, run_rerun's) and its audit log, with the names,
+# descriptions and schemas it served. agent-proxy answers it in-process at
+# `/mcp/gh` (VisorAgentProxyHost's GitHubMCP), the session known by its
+# CLIENT_ID behind the sessions' token: gh_mcp's own HTTP listener, keys,
+# config file and LaunchAgent stayed behind. No dependencies but
+# Foundation's: GitHub through URLSession, git, unzip and agent-token as
+# programs. Linux and macOS.
+swift_library(
+    name = "visor_gh_mcp",
+    copts = STRICT_SWIFT,
+    srcs = glob(["Sources/*.swift"]),
+    module_name = "VisorGHMCP",
+    deps = ["//:foundation"],
+)

@@ -1,0 +1,22 @@
+load("@rules_swift//swift:swift.bzl", "swift_test")
+load("//tools/swift:defs.bzl", "STRICT_SWIFT")
+
+# gh_mcp's tests (from AttilaTheFun/gh_mcp at #12, Swift Testing, as they
+# came, its keys', HTTP listener's and LaunchAgent's left behind with
+# them), and the fold's: every guard a test, the allow-list, the tokens per
+# agent with a fake agent-token, the audit lines, and tools/list byte for
+# byte as gh_mcp served it (fixtures/gh_mcp_tools_list.json, recorded from
+# its source). git_push's and git_fetch's run git against local bare
+# repositories. On Linux, in //tests:linux, as agent-proxy's are.
+swift_test(
+    name = "visor_gh_mcp_tests",
+    copts = STRICT_SWIFT,
+    srcs = glob(["*.swift"]),
+    data = ["fixtures/gh_mcp_tools_list.json"],
+    module_name = "VisorGHMCPTests",
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        "//:foundation",
+        "//libraries/visor_gh_mcp",
+    ],
+)

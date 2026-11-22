@@ -13,6 +13,11 @@
 //   their egress (by `egressAllow`), the GitHub gate (with the auth token),
 //   DNS (split by `dns`), the dial-ins and the egress log. None: no relay
 //   listener (nothing of Visor's relays containers to it yet).
+// - `gh`: gh_mcp, answered in-process at the pass-through's `/mcp/gh`
+//   (libraries/visor_gh_mcp; Logan, 2026-11-21: "fold gh_mcp into Visor's
+//   agent-proxy at /mcp/gh"), the session known by its CLIENT_ID behind the
+//   sessions' token. None: none. An upstream named `gh` in `mcp` wins: the
+//   cut-over from gh_mcp's LaunchAgent (7470) is this set and that removed.
 //
 // Its secrets are the server's (the keychain on a Mac, the secrets file
 // elsewhere), each `agent-proxy/<name>` (`secretKey`), never in these
@@ -75,6 +80,58 @@ public struct AgentProxySettings: Codable, Equatable, Sendable {
             url = try c.decode(String.self, forKey: .url)
             headers = try c.decodeIfPresent([String: String].self, forKey: .headers) ?? [:]
             secretHeaders = try c.decodeIfPresent([String].self, forKey: .secretHeaders) ?? []
+            withheldTools = try c.decodeIfPresent([String].self, forKey: .withheldTools) ?? []
+        }
+    }
+
+    /// gh_mcp in agent-proxy: what its tools may touch (`repositories`,
+    /// `AttilaTheFun/*` unless said), whom a session acts as on GitHub
+    /// (`agent`, logan-shire-agent unless said, or the session's own in
+    /// `sessionAgents`, by session id: logan-shire-claude, -codex or
+    /// -agent, or claude, codex or agent as agent-token names them), the
+    /// command that gives an agent's installation token (`agentToken`,
+    /// `~/.local/bin/agent-token`, run as `<it> token <agent> --owner
+    /// <owner>`), where each call is logged (`auditLog`; none: the
+    /// server's logs folder's `Visor-gh.log`, beside the egress log), and
+    /// the tools no session is given (`withheldTools`, gh_mcp's names, as an
+    /// upstream's).
+    ///
+    /// A session is known by its CLIENT_ID, which is trusted only as far as
+    /// the sessions' token is: whoever holds that token may send any
+    /// CLIENT_ID, and so act as any app `sessionAgents` names. Give no
+    /// session there an app with more on GitHub than `agent`'s. (Binding a
+    /// call to its session's own JWT, so a CLIENT_ID can't be another's, is
+    /// for later.)
+    public struct GH: Codable, Equatable, Sendable {
+        public static let defaultRepositories = ["AttilaTheFun/*"]
+        public static let defaultAgent = "logan-shire-agent"
+        public static let defaultAgentToken = "~/.local/bin/agent-token"
+
+        public var repositories: [String]?
+        public var agentToken: String?
+        public var agent: String?
+        public var sessionAgents: [String: String]
+        public var auditLog: String?
+        /// Its tools kept from the sessions (refused, and left out of `tools/list`), as an upstream's `withheldTools`.
+        public var withheldTools: [String]
+
+        public init(repositories: [String]? = nil, agentToken: String? = nil, agent: String? = nil, sessionAgents: [String: String] = [:],
+                    auditLog: String? = nil, withheldTools: [String] = []) {
+            self.repositories = repositories
+            self.agentToken = agentToken
+            self.agent = agent
+            self.sessionAgents = sessionAgents
+            self.auditLog = auditLog
+            self.withheldTools = withheldTools
+        }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            repositories = try c.decodeIfPresent([String].self, forKey: .repositories)
+            agentToken = try c.decodeIfPresent(String.self, forKey: .agentToken)
+            agent = try c.decodeIfPresent(String.self, forKey: .agent)
+            sessionAgents = try c.decodeIfPresent([String: String].self, forKey: .sessionAgents) ?? [:]
+            auditLog = try c.decodeIfPresent(String.self, forKey: .auditLog)
             withheldTools = try c.decodeIfPresent([String].self, forKey: .withheldTools) ?? []
         }
     }
@@ -145,10 +202,12 @@ public struct AgentProxySettings: Codable, Equatable, Sendable {
     /// A gate.json in place of the gate's standard rules; none:
     /// `agent-proxy/gate.json` in the data folder where there is one.
     public var gateRules: String?
+    /// gh_mcp, in-process at the pass-through's `/mcp/gh`; none: none.
+    public var gh: GH?
 
     public init(mcp: MCP? = nil, relayPort: Int? = nil, egressAllow: [String] = [], dns: DNS? = nil, dialIns: [DialIn] = [],
                 maxConnections: Int? = nil, maxConnectionsPerLease: Int? = nil, egressLog: String? = nil, caCertificate: String? = nil,
-                gateRules: String? = nil) {
+                gateRules: String? = nil, gh: GH? = nil) {
         self.mcp = mcp
         self.relayPort = relayPort
         self.egressAllow = egressAllow
@@ -159,6 +218,7 @@ public struct AgentProxySettings: Codable, Equatable, Sendable {
         self.egressLog = egressLog
         self.caCertificate = caCertificate
         self.gateRules = gateRules
+        self.gh = gh
     }
 
     public init(from decoder: Decoder) throws {
@@ -173,6 +233,7 @@ public struct AgentProxySettings: Codable, Equatable, Sendable {
         egressLog = try c.decodeIfPresent(String.self, forKey: .egressLog)
         caCertificate = try c.decodeIfPresent(String.self, forKey: .caCertificate)
         gateRules = try c.decodeIfPresent(String.self, forKey: .gateRules)
+        gh = try c.decodeIfPresent(GH.self, forKey: .gh)
     }
 
     // MARK: Its secrets
