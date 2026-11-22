@@ -17,7 +17,10 @@
 // booted out, then registered:
 // ServerAgentService.reregister), for the update's watcher after an update
 // or a rollback, when SMAppService's launch constraint still names the
-// bundle that was replaced.
+// bundle that was replaced. `Visor server-agent unregister`: stopped and
+// unregistered (out of launchd and Background Items), and 0.64's plist
+// removed, for Visor Disk Utility's Uninstall…, which can't unregister
+// another app's agent itself.
 //
 // Sent TERM (launchd: the app handing the server back, a restart of the
 // job, logging out; or anyone: `killall Visor` reaches it too, its process
@@ -44,11 +47,30 @@ enum MacServerAgent {
         if given == [ServerAgentJob.command, "register"] {
             register()
         }
+        if given == [ServerAgentJob.command, "unregister"] {
+            unregister()
+        }
         guard given.first == ServerAgentJob.argument else { return }
         run()
     }
 
-    /// Registered afresh from this bundle (unregistered, booted out, then registered:
+    /// The agent stopped and unregistered, whatever the settings say; ends.
+    private static func unregister() -> Never {
+        let job = ServerAgentJob.job(bundleID: MacPlaces.own, logs: VisorFolders.locate().logs.path)
+        let done = DispatchSemaphore(value: 0)
+        Task.detached {
+            await ServerAgentService.removeLegacy(job: job, bundleID: MacPlaces.own, log: { print($0) })
+            try? await ServerAgentService.service(bundleID: MacPlaces.own).unregister()
+            await Launchctl.stop(label: job.label)
+            done.signal()
+        }
+        done.wait()
+        print("the server agent (\(job.label)) is stopped and unregistered")
+        exit(0)
+    }
+
+    /// Registered afresh from this bundle (LaunchServices told of it again,
+    /// unregistered, booted out, then registered, again until it runs:
     /// ServerAgentService.reregister), which starts it; ends.
     private static func register() -> Never {
         let bundleID = MacPlaces.own
