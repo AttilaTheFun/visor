@@ -138,7 +138,13 @@ public struct UninstallPlanner: Sendable {
             steps.append(UninstallStep(.list(path: "\(projects)/\(name)"), stage: .list, what: "\(projects)/\(name)"))
         }
 
-        // The volumes, when asked: Visor's own alone.
+        // The volumes, when asked: Visor's own alone. Not asked, the Visor
+        // volume is said to be kept, so it's clear nothing on it is touched.
+        let visor = VolumeRole.visor.mountPoint
+        if !deleteVolumes, files.exists(visor) {
+            steps.append(UninstallStep(.keep(path: visor), stage: .kept,
+                                       what: "Kept: \(visor) (Visor's data, containers, logs): removed with --delete-volumes"))
+        }
         if deleteVolumes {
             for state in volumes {
                 guard let volume = state.volume, volume.name == state.role.volumeName, volume.roles.isEmpty,

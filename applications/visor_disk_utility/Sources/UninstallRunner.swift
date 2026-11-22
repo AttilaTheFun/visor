@@ -98,7 +98,7 @@ enum UninstallRunner {
             try files.removeItem(atPath: path)
         case let .trash(path):
             try files.trashItem(at: URL(fileURLWithPath: path), resultingItemURL: nil)
-        case .list, .note, .deleteVolume:
+        case .list, .keep, .note, .deleteVolume:
             break
         }
     }

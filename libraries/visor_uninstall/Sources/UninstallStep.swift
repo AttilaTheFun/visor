@@ -29,6 +29,9 @@ public struct UninstallStep: Equatable, Sendable {
         case remove(path: String)
         /// Said only: never removed (Claude Code's own project folders).
         case list(path: String)
+        /// Said only: a volume of Visor's left as it is, its deletion not
+        /// asked for.
+        case keep(path: String)
         /// One of Visor's volumes deleted, by its APFS volume UUID
         /// (diskutil, as an administrator; VolumeGuard with it asked for).
         case deleteVolume(role: VolumeRole, uuid: String)
@@ -45,6 +48,8 @@ public struct UninstallStep: Equatable, Sendable {
         case remove
         /// Listed, never removed.
         case list
+        /// Visor's volume kept, its deletion not asked for: a line of its own.
+        case kept
         /// The volumes, only when their deletion is asked for.
         case volumes
         /// The apps to the Trash.
@@ -67,5 +72,5 @@ public struct UninstallStep: Equatable, Sendable {
     }
 
     /// Whether running it changes anything (the lists and notes don't).
-    public var changes: Bool { stage != .list && stage != .note }
+    public var changes: Bool { stage != .list && stage != .kept && stage != .note }
 }

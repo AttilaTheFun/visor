@@ -738,7 +738,9 @@ removed (still only when `agentProxy` is set).
   own, which Move Back left. Only when asked (`--delete-volumes`), with
   "delete Sessions, Sources and Visor" typed: the three volumes, by their
   APFS volume UUIDs through the administrator prompt (VolumeGuard lets
-  those roles alone through). Last, Visor.app and Visor Disk Utility to the
+  those roles alone through). Not asked, the dry run says so on a line of
+  its own ("Kept: /Volumes/Visor (Visor's data, containers, logs): removed
+  with --delete-volumes"). Last, Visor.app and Visor Disk Utility to the
   Trash. Printed, never run: how to undo a hand-run `tailscale serve` of
   7433, and the line of `~/.zshrc` that exports `VISOR_ADMIN_TOKEN` (its
   number, never the token). What no app can remove goes by itself: the

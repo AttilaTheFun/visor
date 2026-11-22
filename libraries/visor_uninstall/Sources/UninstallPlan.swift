@@ -29,6 +29,13 @@ public struct UninstallPlan: Equatable, Sendable {
         ]
         var lines: [String] = []
         for (stage, heading) in headings {
+            // Kept: a line each, no heading ("Kept: /Volumes/Visor …").
+            if stage == .volumes {
+                for step in steps(.kept) {
+                    if !lines.isEmpty { lines.append("") }
+                    lines.append(step.what)
+                }
+            }
             let those = steps(stage)
             guard !those.isEmpty else { continue }
             if !lines.isEmpty { lines.append("") }

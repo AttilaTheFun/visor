@@ -93,6 +93,20 @@ import VisorUninstall
         #expect(!said.contains("Developer-visor"))
     }
 
+    /// The volumes kept: the Visor volume said to be, on a line of its own,
+    /// so it's clear nothing there is touched; gone once deletion is asked.
+    @Test func theVisorVolumeKeptIsSaidSo() {
+        var paths = Self.usedMac().paths
+        paths["/Volumes/Visor/Data/sessions.json"] = ""
+        let files = FakeFiles(paths)
+        let plan = planner().plan(files: files, keychain: Self.keychain)
+        #expect(plan.steps(.kept).map(\.action) == [.keep(path: "/Volumes/Visor")])
+        #expect(plan.dryRun.contains("\nKept: /Volumes/Visor (Visor's data, containers, logs): removed with --delete-volumes\n"))
+        #expect(plan.steps(.kept).allSatisfy { !$0.changes })
+        #expect(planner(deleting: true).plan(files: files, keychain: Self.keychain).steps(.kept).isEmpty)
+        #expect(planner().plan(files: Self.usedMac(), keychain: Self.keychain).steps(.kept).isEmpty, "no volume, no line")
+    }
+
     @Test func theDryRunSaysEachStageInTurn() {
         let said = planner().plan(files: Self.usedMac(), keychain: Self.keychain).dryRun
         let stages = ["Stopped and removed:", "Listed, not removed", "Moved to the Trash, last:", "Not done by Uninstall…"]
