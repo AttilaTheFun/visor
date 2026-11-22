@@ -204,11 +204,13 @@ public enum AgentProxyHost {
                                     withheldTools: given.withheldTools)
         }
         var inProcess: [String: any InProcessMCP] = [:]
+        var inProcessWithheld: [String: [String]] = [:]
         if let gh {
             if upstreams.contains(where: { $0.name == GitHubMCP.name }) {
                 log("agentProxy.gh is set, but mcp's upstream gh is passed through still: remove it for gh_mcp in-process")
             } else if let served = gitHubMCP(gh, places: places, log: log) {
                 inProcess[GitHubMCP.name] = served
+                if !gh.withheldTools.isEmpty { inProcessWithheld[GitHubMCP.name] = gh.withheldTools }
             }
         }
         let token = KeptSecret(AgentProxySettings.mcpTokenName, in: secrets)
@@ -216,7 +218,7 @@ public enum AgentProxyHost {
                                          secret: { upstream, header in
                                              secrets.get(AgentProxySettings.secretKey(AgentProxySettings.mcpSecretName(upstream: upstream,
                                                                                                                        header: header)))
-                                         }, inProcess: inProcess) else {
+                                         }, inProcess: inProcess, inProcessWithheld: inProcessWithheld) else {
             log("loopback port \(mcp.port) can't be had for the MCP pass-through (another listener on it?)")
             return nil
         }

@@ -56,13 +56,16 @@ public final class NativeMCPProxy: Sendable {
     private let open = Locked(0)
     /// The MCP servers answered here, in this process, by name (`/mcp/<name>`), where no upstream has that name.
     private let inProcess: [String: any InProcessMCP]
+    /// The tools each of those keeps from the sessions, as an upstream's `withheldTools`.
+    private let inProcessWithheld: [String: Set<String>]
 
     public static let defaultMaxConnections = 64
 
     /// Listening on loopback `port` alone: a call without the sessions' token is refused. Nil when the port can't be had.
     public init?(port: UInt16, endpoints: @escaping @Sendable () -> [Endpoint], admits: @escaping @Sendable (String) -> Bool,
                  secret: @escaping @Sendable (_ endpoint: String, _ header: String) -> String?,
-                 inProcess: [String: any InProcessMCP] = [:], maxConnections: Int = NativeMCPProxy.defaultMaxConnections) {
+                 inProcess: [String: any InProcessMCP] = [:], inProcessWithheld: [String: [String]] = [:],
+                 maxConnections: Int = NativeMCPProxy.defaultMaxConnections) {
         agent_proxy_ignore_broken_pipes()
         let listener = agent_proxy_listen(port, 0)
         guard listener >= 0 else { return nil }
@@ -72,6 +75,7 @@ public final class NativeMCPProxy: Sendable {
         self.admits = admits
         self.secret = secret
         self.inProcess = inProcess
+        self.inProcessWithheld = inProcessWithheld.mapValues(Set.init)
         self.maxConnections = maxConnections
     }
 
@@ -211,7 +215,19 @@ public final class NativeMCPProxy: Sendable {
         let name = request.path.hasPrefix("/mcp/") ? String(request.path.dropFirst(5).prefix { $0 != "?" && $0 != "/" }) : ""
         guard let endpoint = endpoints().first(where: { $0.name == name }) else {
             guard let server = inProcess[name] else { return Self.reply(client, "404 Not Found", "No MCP server \(name).") }
-            return Self.send(client, Self.answered(request, by: server))
+            // Its withheld tools kept from the sessions as an upstream's are: a call refused, the listing without them.
+            let withheld = inProcessWithheld[name] ?? []
+            var listing = false
+            if !withheld.isEmpty {
+                switch Self.checked(request, withheld: withheld) {
+                case .refused(let error): return Self.send(client, Self.jsonAnswer(error))
+                case .passed(let body, let lists):
+                    request.body = body
+                    listing = lists
+                }
+            }
+            let answer = Self.answered(request, by: server)
+            return Self.send(client, listing ? Self.withoutTools(withheld, in: answer) : answer)
         }
         guard let url = URLComponents(string: endpoint.url), url.scheme == "http", let host = url.host else {
             return Self.reply(client, "502 Bad Gateway", "\(endpoint.url) is not a plain HTTP address.")

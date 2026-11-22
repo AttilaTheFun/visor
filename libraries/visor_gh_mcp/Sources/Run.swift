@@ -14,8 +14,12 @@ public enum Run {
         _ executable: String, _ arguments: [String], environment: [String: String]? = nil,
         directory: String? = nil, timeout: TimeInterval = 120
     ) async throws -> ProcessResult {
+        // On a thread of its own, not Dispatch's shared pool: a call waits up
+        // to `timeout` (600-900 s for a push or a rerun), and in Visor's
+        // server dozens at once would leave the pool no thread for the rest
+        // of the process.
         try await withCheckedThrowingContinuation { continuation in
-            DispatchQueue.global().async {
+            Thread.detachNewThread {
                 do {
                     continuation.resume(returning: try runBlocking(executable, arguments, environment: environment, directory: directory, timeout: timeout))
                 } catch {
@@ -47,15 +51,15 @@ public enum Run {
         } catch {
             throw ToolError.failed("\(executable) could not be run: \(error.localizedDescription)")
         }
-        // Standard error read on a thread of its own, so neither pipe fills
-        // while the other is read; in Visor, kept behind a lock (Locked).
+        // Standard error read on a thread of its own (not Dispatch's pool,
+        // as above), so neither pipe fills while the other is read; kept
+        // behind a lock (Locked).
         let errors = Locked(Data())
-        let group = DispatchGroup()
-        group.enter()
-        DispatchQueue.global().async {
+        let read = DispatchSemaphore(value: 0)
+        Thread.detachNewThread {
             let data = err.fileHandleForReading.readDataToEndOfFile()
             errors.withLock { $0 = data }
-            group.leave()
+            read.signal()
         }
         // The time limit: the process ended by its id (SIGTERM, as
         // Process.terminate sends), unless it has ended already.
@@ -68,7 +72,7 @@ public enum Run {
         }
         DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: deadline)
         let stdout = out.fileHandleForReading.readDataToEndOfFile()
-        group.wait()
+        read.wait()
         process.waitUntilExit()
         ended.withLock { $0 = true }
         deadline.cancel()

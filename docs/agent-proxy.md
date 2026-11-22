@@ -84,7 +84,8 @@ optional:
     "agentToken": "~/.local/bin/agent-token",
     "agent": "logan-shire-agent",
     "sessionAgents": {"<session id>": "logan-shire-claude"},
-    "auditLog": "…"
+    "auditLog": "…",
+    "withheldTools": []
   }
 }
 ```
@@ -134,6 +135,21 @@ Its README's never-list is `Policy.never`.
 application and an agent. Here there is no key. A call has already shown the
 sessions' token (`X-Visor-Proxy`) to reach `/mcp/gh`, and its `CLIENT_ID`
 (the session's own id, since #482) names the session.
+
+**How far that is trusted.** `CLIENT_ID` is the caller's word, and the
+sessions' token is one token shared by every native session. So anything
+holding the token can name any session, act as the app `sessionAgents` gives
+that session, and be logged as it. `CLIENT_ID` and `sessionAgents` are
+trusted only as far as the token is: they choose among the apps the token
+already reaches, and are not an authority of their own. Keep the token from
+anything that shouldn't act as every session, and
+give a session its own app only to choose its GitHub identity, not to fence
+it off from the others.
+
+**Tools kept from the sessions.** `withheldTools` names gh_mcp tools the
+sessions may not call. They are left out of `tools/list` and their calls
+are refused (-32601) before gh_mcp sees them, as an upstream's
+`withheldTools` are. They're read when agent-proxy starts.
 
 **Tokens, per agent.** Each call acts as one of the GitHub Apps:
 logan-shire-claude, -codex or -agent. Which one comes from `sessionAgents`

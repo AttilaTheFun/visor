@@ -103,14 +103,17 @@ public struct AgentProxySettings: Codable, Equatable, Sendable {
         public var agent: String?
         public var sessionAgents: [String: String]
         public var auditLog: String?
+        /// Its tools kept from the sessions (refused, and left out of `tools/list`), as an upstream's `withheldTools`.
+        public var withheldTools: [String]
 
         public init(repositories: [String]? = nil, agentToken: String? = nil, agent: String? = nil, sessionAgents: [String: String] = [:],
-                    auditLog: String? = nil) {
+                    auditLog: String? = nil, withheldTools: [String] = []) {
             self.repositories = repositories
             self.agentToken = agentToken
             self.agent = agent
             self.sessionAgents = sessionAgents
             self.auditLog = auditLog
+            self.withheldTools = withheldTools
         }
 
         public init(from decoder: Decoder) throws {
@@ -120,6 +123,7 @@ public struct AgentProxySettings: Codable, Equatable, Sendable {
             agent = try c.decodeIfPresent(String.self, forKey: .agent)
             sessionAgents = try c.decodeIfPresent([String: String].self, forKey: .sessionAgents) ?? [:]
             auditLog = try c.decodeIfPresent(String.self, forKey: .auditLog)
+            withheldTools = try c.decodeIfPresent([String].self, forKey: .withheldTools) ?? []
         }
     }
 

@@ -26,6 +26,20 @@ private final class FakeInProcess: InProcessMCP {
     }
 }
 
+/// An in-process server listing two tools, and answering any call.
+private final class ListingInProcess: InProcessMCP {
+    let calls = Mutex(0)
+
+    func answer(method: String, headers: [String: String], body: Data) async -> InProcessMCPAnswer {
+        calls.withLock { $0 += 1 }
+        let message = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any]
+        let answer = message?["method"] as? String == "tools/list"
+            ? #"{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"gh__pr_view"},{"name":"gh__pr_merge"}]}}"#
+            : #"{"jsonrpc":"2.0","id":2,"result":{}}"#
+        return InProcessMCPAnswer(status: 200, headers: ["Content-Type": "application/json"], body: Data(answer.utf8))
+    }
+}
+
 @Suite struct GitHubMCPHostTests {
     private func folder() throws -> URL {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("gh-mcp-host-\(UUID().uuidString)", isDirectory: true)
@@ -55,10 +69,11 @@ private final class FakeInProcess: InProcessMCP {
     }
 
     /// A pass-through on a free port.
-    private func proxy(_ endpoints: [NativeMCPProxy.Endpoint], inProcess: [String: any InProcessMCP]) throws -> NativeMCPProxy {
+    private func proxy(_ endpoints: [NativeMCPProxy.Endpoint], inProcess: [String: any InProcessMCP],
+                       withheld: [String: [String]] = [:]) throws -> NativeMCPProxy {
         for _ in 0..<20 {
             if let proxy = NativeMCPProxy(port: UInt16.random(in: 20000...45000), endpoints: { endpoints }, admits: { $0 == "one-token" },
-                                          secret: { _, _ in nil }, inProcess: inProcess) {
+                                          secret: { _, _ in nil }, inProcess: inProcess, inProcessWithheld: withheld) {
                 proxy.start()
                 return proxy
             }
@@ -83,6 +98,24 @@ private final class FakeInProcess: InProcessMCP {
         #expect(served.heard.withLock { $0.count } == 1, "nothing without the token reached it")
     }
 
+    /// `agentProxy.gh`'s `withheldTools` keep tools from the sessions as an
+    /// upstream's do: a call refused before it reaches gh_mcp, the listing
+    /// without them.
+    @Test func anInProcessServersWithheldToolsAreKeptFromTheSessions() throws {
+        let served = ListingInProcess()
+        let proxy = try proxy([], inProcess: ["gh": served], withheld: ["gh": ["gh__pr_merge"]])
+        defer { proxy.stop() }
+        let listed = ask(proxy.port, "/mcp/gh", token: "one-token", body: #"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#)
+        #expect(listed.status == "200" && listed.body.contains("gh__pr_view") && !listed.body.contains("gh__pr_merge"))
+        let refused = ask(proxy.port, "/mcp/gh", token: "one-token",
+                          body: #"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"gh__pr_merge","arguments":{}}}"#)
+        #expect(refused.body.contains("-32601"), "a withheld tool's call is refused")
+        let allowed = ask(proxy.port, "/mcp/gh", token: "one-token",
+                          body: #"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"gh__pr_view","arguments":{}}}"#)
+        #expect(allowed.body == #"{"jsonrpc":"2.0","id":2,"result":{}}"#)
+        #expect(served.calls.withLock { $0 } == 2, "the refused call never reached it")
+    }
+
     @Test func anUpstreamOfTheNameWins() throws {
         let upstream = try #require(FakeEndpoint())
         defer { upstream.stop() }
@@ -96,9 +129,10 @@ private final class FakeInProcess: InProcessMCP {
     }
 
     @Test func ghSettingsReadFieldByField() throws {
-        let json = #"{"agentProxy":{"gh":{"agent":"logan-shire-codex","sessionAgents":{"s1":"claude"},"auditLog":"/tmp/x.log"}}}"#
+        let json = #"{"agentProxy":{"gh":{"agent":"logan-shire-codex","sessionAgents":{"s1":"claude"},"auditLog":"/tmp/x.log","withheldTools":["gh__pr_merge"]}}}"#
         let gh = try #require(try JSONDecoder().decode(ServerSettings.self, from: Data(json.utf8)).agentProxy?.gh)
-        #expect(gh == AgentProxySettings.GH(agent: "logan-shire-codex", sessionAgents: ["s1": "claude"], auditLog: "/tmp/x.log"))
+        #expect(gh == AgentProxySettings.GH(agent: "logan-shire-codex", sessionAgents: ["s1": "claude"], auditLog: "/tmp/x.log",
+                                            withheldTools: ["gh__pr_merge"]))
         let empty = try #require(try JSONDecoder().decode(ServerSettings.self, from: Data(#"{"agentProxy":{"gh":{}}}"#.utf8)).agentProxy?.gh)
         #expect(empty == AgentProxySettings.GH())
         let configuration = try #require(AgentProxyHost.configuration(empty, log: nil))
