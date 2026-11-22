@@ -16,7 +16,7 @@ public struct LaunchdHandOverSteps: ServerHandOverSteps {
     public let executable: String?
     public let port: UInt16
     /// Told what the person should see while registering waits on macOS
-    /// ("Waiting for macOS to let Visor's server start…").
+    /// ("Handing Visor's server to macOS Login Items…").
     public let notice: @Sendable (String) -> Void
     public let log: @Sendable (String) -> Void
 

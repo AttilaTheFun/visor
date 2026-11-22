@@ -170,7 +170,7 @@ public enum ServerAgentJob {
                     return "macOS didn't let Visor's server start for about \(refusedBackoff.reduce(0) { $0 + $1.components.seconds }) seconds "
                         + "(\(problem)): open Visor again, or allow it in System Settings › General › Login Items"
                 }
-                waiting("Waiting for macOS to let Visor's server start… (\(problem))")
+                waiting(waitingForLoginItems)
                 await pause(next)
                 continue
             }
@@ -180,6 +180,11 @@ public enum ServerAgentJob {
         }
         return "launchd didn't start it after \(max(attempts, 1)) registrations (its launch constraint: the build registered isn't the one in place)"
     }
+
+    /// What the menu says while macOS refuses the registration for now: a
+    /// calm line, no raw error (Logan, 22 Nov: "Operation not permitted"
+    /// read as broken). Login Items is named only if it gives up.
+    public static let waitingForLoginItems = "Handing Visor's server to macOS Login Items (this can take a minute or so)…"
 
     /// The pauses between registrations macOS refuses for now: about a
     /// minute and a half in all.

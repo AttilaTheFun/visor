@@ -196,7 +196,8 @@ private actor FakeSteps: ServerHandOverSteps {
         let pauses = await said.all.filter { $0.hasPrefix("pause") }
         #expect(pauses == ["pause 2", "pause 4", "pause 8"], "backed off, then the usual look")
         try? await Task.sleep(for: .milliseconds(50))
-        #expect(await said.all.contains { $0.hasPrefix("Waiting for macOS to let Visor's server start") })
+        #expect(await said.all.contains { $0 == ServerAgentJob.waitingForLoginItems })
+        #expect(await !said.all.contains { $0.localizedCaseInsensitiveContains("not permitted") })
     }
 
     /// Refused for good: given up after about a minute and a half, saying
