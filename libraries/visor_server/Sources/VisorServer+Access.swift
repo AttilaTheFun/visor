@@ -46,10 +46,25 @@ extension VisorServer {
     /// socket file, showing the app key (`appKey`), which the keychain
     /// gives Visor's processes alone. Its menu's calls are taken from it
     /// alone: the admin token reset without it, an emergency rotation of
-    /// the signing keys.
+    /// the signing keys; and, with SSH clients off, every call of its own.
+    ///
+    /// A call there that doesn't show it has the key asked again
+    /// (`appKeyAskedAgain`, at most every `appKeyAskInterval`): a key
+    /// another process of Visor's kept since is taken, and with none kept
+    /// this one is kept again, for the app's next call (AppKeyKeeper).
     func isOwnApp(socketFile: Bool, headers: [String: String]) -> Bool {
-        socketFile && SecretToken.same(headers[Self.appKeyHeader], appKey)
+        guard socketFile, appKey != nil else { return false }
+        if SecretToken.same(headers[Self.appKeyHeader], appKey) { return true }
+        guard let askAgain = appKeyAskedAgain,
+              appKeyLastAsked.map({ Date().timeIntervalSince($0) >= Self.appKeyAskInterval }) ?? true else { return false }
+        appKeyLastAsked = Date()
+        guard let kept = askAgain(appKey) else { return false }
+        appKey = kept
+        return SecretToken.same(headers[Self.appKeyHeader], appKey)
     }
+
+    /// How often, at most, the app key is asked again: seconds.
+    nonisolated static let appKeyAskInterval: TimeInterval = 5
 
     func isOwnApp(_ request: HTTPRequest) -> Bool { isOwnApp(socketFile: request.trusted, headers: request.headers) }
 

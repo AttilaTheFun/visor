@@ -31,6 +31,14 @@ extension KeychainSecrets {
         return (store, "")
     }
 
+    /// The data-protection keychain's store for `service` in every access
+    /// group this process reaches, its own among them: where a protected
+    /// secret left under another group of the app's is found, to be moved
+    /// to its own (ProtectedSecrets' `elsewhere`) rather than made again.
+    public static func anyGroup(service: String) -> KeychainSecrets {
+        KeychainSecrets(service: service, everyGroup: true)
+    }
+
     /// This process's own keychain access group for `bundleID`
     /// (`<team>.<bundle id>`), from its signature's entitlements; nil
     /// without one.

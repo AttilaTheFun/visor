@@ -159,6 +159,72 @@ extension ServerTests {
         #expect(rest("POST", "/api/keys/rotate").status == 200)
     }
 
+    // MARK: The key asked again (AppKeyKeeper)
+
+    /// The server agent's key, and the app's view of the same keychain.
+    private func keepers(_ secrets: MemorySecrets) -> (server: AppKeyKeeper, app: AppKeyKeeper) {
+        (AppKeyKeeper(secrets: { secrets }, log: { _ in }, attempts: 1, pause: {}),
+         AppKeyKeeper(secrets: { secrets }, log: { _ in }, attempts: 1, pause: {}))
+    }
+
+    /// 0.65.1's agent: its key lost from the keychain as it was kept, so
+    /// the app showed none and Reset Admin Token… was refused. Now the
+    /// refusal has the server keep it again, and the app's next call shows
+    /// it.
+    @Test func theAppIsLetInAgainAfterA403OnceTheServerKeptItsKeyAgain() throws {
+        let secrets = MemorySecrets()
+        let (agent, app) = keepers(secrets)
+        server.appKey = agent.serverKey()
+        server.appKeyAskedAgain = { agent.reconciled($0) }
+        let first = try #require(server.createAdminToken())
+        secrets.set(AppKeyKeeper.name, nil)
+        #expect(app.shown == nil)
+
+        #expect(rest("POST", "/api/admin-token/reset", bearer: nil, socketFile: true, appKey: app.shown).status == 403)
+        #expect(app.shown == server.appKey, "kept again as it refused")
+        let reset = rest("POST", "/api/admin-token/reset", bearer: nil, socketFile: true, appKey: app.shown)
+        #expect(reset.status == 200)
+        #expect(!server.adminToken.admits(first))
+        let dropped = rest("POST", "/api/keys/rotate", bearer: nil, body: #"{"dropPrevious":true}"#, socketFile: true, appKey: app.shown)
+        #expect(dropped.status == 200, "the emergency rotation too")
+    }
+
+    /// Another process of Visor's kept a new key since this server started
+    /// (the app's own server before the agent, say): the server takes it.
+    @Test func aKeyKeptSinceIsTakenByTheServer() {
+        let secrets = MemorySecrets()
+        let (agent, app) = keepers(secrets)
+        server.appKey = agent.serverKey()
+        server.appKeyAskedAgain = { agent.reconciled($0) }
+        secrets.set(AppKeyKeeper.name, "made-since")
+        server.settings.sshEnabled = false
+        #expect(rest("GET", "/api/sessions", bearer: nil, socketFile: true, appKey: app.shown).status == 200)
+        #expect(server.appKey == "made-since")
+    }
+
+    /// With SSH clients off, every call of the app's wants its key: one
+    /// lost locked the app out of its own server (401). Asked again, at most
+    /// every few seconds, and never for a call on the port.
+    @Test func withSSHClientsOffTheAppIsLockedOutNoLonger() {
+        let secrets = MemorySecrets()
+        let (agent, app) = keepers(secrets)
+        server.appKey = agent.serverKey()
+        server.appKeyAskedAgain = { agent.reconciled($0) }
+        server.settings.sshEnabled = false
+        secrets.set(AppKeyKeeper.name, nil)
+        #expect(rest("GET", "/api/settings", bearer: nil, socketFile: false, appKey: app.shown).status == 401)
+        #expect(app.shown == nil, "not asked again for a call on the port")
+        #expect(rest("GET", "/api/settings", bearer: nil, socketFile: true, appKey: app.shown).status == 401)
+        #expect(rest("GET", "/api/settings", bearer: nil, socketFile: true, appKey: app.shown).status == 200)
+        // Lost again at once: not asked again until a few seconds on.
+        secrets.set(AppKeyKeeper.name, nil)
+        #expect(rest("GET", "/api/settings", bearer: nil, socketFile: true, appKey: "guess").status == 401)
+        #expect(app.shown == nil)
+        server.appKeyLastAsked = Date().addingTimeInterval(-VisorServer.appKeyAskInterval)
+        #expect(rest("GET", "/api/settings", bearer: nil, socketFile: true, appKey: "guess").status == 401)
+        #expect(app.shown == server.appKey)
+    }
+
     /// The app's own server listens on its socket file from its start,
     /// before there is a password, so the app can set one; the port waits
     /// for it.

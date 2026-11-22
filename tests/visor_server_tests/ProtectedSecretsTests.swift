@@ -2,47 +2,15 @@
 // follow-up): Visor.app's app key in the protected store (the Mac's
 // data-protection keychain under its own access group) when the build has
 // one, else in the legacy store (the login keychain), as the log says;
-// moved over the first time it's read, deleted from the legacy store only
-// once the protected one reads it back. Fake keychains stand in for both.
+// moved over the first time it's read: deleted from the legacy store
+// first, then written to the protected store and read back (a Mac's delete
+// from the login keychain reaches the data-protection keychain too, so
+// deleting after took the new copy with it: 0.66). Fake keychains stand in
+// for both, the legacy one reaching the protected one as a Mac's does.
 
 import Synchronization
 @testable import VisorServer
 import Testing
-
-/// A keychain standing in: what it keeps, a write it can be told to drop
-/// (a keychain refusing it), a read it can be told to fail, and its calls.
-private final class FakeKeychain: SecretStore {
-    private let values = Mutex<[String: String]>([:])
-    private let calls = Mutex<[String]>([])
-    let dropsWrites: Bool
-    let unreadable: Bool
-
-    init(dropsWrites: Bool = false, unreadable: Bool = false, holding: [String: String] = [:]) {
-        self.dropsWrites = dropsWrites
-        self.unreadable = unreadable
-        values.withLock { $0 = holding }
-    }
-
-    var kept: [String: String] { values.withLock { $0 } }
-    var log: [String] { calls.withLock { $0 } }
-
-    func get(_ key: String) -> String? {
-        guard case .found(let value) = lookup(key) else { return nil }
-        return value
-    }
-
-    func lookup(_ key: String) -> SecretLookup {
-        calls.withLock { $0.append("lookup \(key)") }
-        if unreadable { return .unreadable("keychain error -25308") }
-        return values.withLock { $0[key] }.map(SecretLookup.found) ?? .absent
-    }
-
-    func set(_ key: String, _ value: String?) {
-        calls.withLock { $0.append(value == nil ? "delete \(key)" : "set \(key)") }
-        if dropsWrites && value != nil { return }
-        values.withLock { $0[key] = value.flatMap { $0.isEmpty ? nil : $0 } }
-    }
-}
 
 /// The lines a store logs.
 private final class Lines: Sendable {
@@ -55,10 +23,11 @@ extension ServerTests {
 @Suite final class ProtectedSecretsTests {
     private let lines = Lines()
 
-    private func store(legacy: FakeKeychain, protected: FakeKeychain?, unprotected: String = "") -> ProtectedSecrets {
+    private func store(legacy: FakeKeychain, protected: FakeKeychain?, elsewhere: [FakeKeychain] = [],
+                       unprotected: String = "") -> ProtectedSecrets {
         let lines = lines
-        return ProtectedSecrets(legacy: legacy, protected: protected, names: ["app-key"], unprotected: unprotected,
-                                log: { lines.add($0) })
+        return ProtectedSecrets(legacy: legacy, protected: protected, elsewhere: elsewhere, names: ["app-key"],
+                                unprotected: unprotected, log: { lines.add($0) })
     }
 
     // MARK: Which store
@@ -116,30 +85,75 @@ extension ServerTests {
 
     // MARK: The move
 
-    @Test func theLegacyAppKeyIsMovedWhenFirstReadThenDeletedFromTheLegacyStore() {
-        let legacy = FakeKeychain(holding: ["app-key": "k0"])
-        let protected = FakeKeychain()
+    @Test func theLegacyAppKeyIsMovedWhenFirstReadDeletedThereFirst() {
+        let journal = Journal()
+        let protected = FakeKeychain(journal: journal, label: "protected")
+        let legacy = FakeKeychain(holding: ["app-key": "k0"], reaching: protected, journal: journal, label: "legacy")
         let secrets = store(legacy: legacy, protected: protected)
         #expect(secrets.lookup("app-key") == .found("k0"))
-        #expect(protected.kept["app-key"] == "k0")
+        #expect(protected.kept["app-key"] == "k0", "still there: the legacy delete came before the write")
         #expect(legacy.kept["app-key"] == nil)
-        // Written, read back, and only then deleted.
+        #expect(journal.all == ["legacy delete app-key", "protected set app-key"])
         #expect(protected.log == ["lookup app-key", "set app-key", "lookup app-key"])
-        #expect(legacy.log == ["lookup app-key", "delete app-key"])
-        #expect(lines.all == ["app-key: moved to the protected store, and deleted from the legacy store"])
+        #expect(lines.all == ["app-key: moved to the protected store from the legacy store"])
         // Read from the protected store from then on.
         #expect(secrets.get("app-key") == "k0")
         #expect(legacy.log.count == 2)
     }
 
-    @Test func aMoveThatDoesntReadBackLeavesTheLegacyAppKeyInPlace() {
+    @Test func aMoveThatDoesntReadBackPutsTheLegacyAppKeyBack() {
         let legacy = FakeKeychain(holding: ["app-key": "k0"])
         let protected = FakeKeychain(dropsWrites: true)
         let secrets = store(legacy: legacy, protected: protected)
         #expect(secrets.get("app-key") == "k0")
         #expect(legacy.kept["app-key"] == "k0")
-        #expect(!legacy.log.contains("delete app-key"))
+        #expect(protected.kept.isEmpty)
         #expect(lines.all == ["app-key: stays in the legacy store (the protected store's write didn't read back)"])
+    }
+
+    // MARK: A Mac's legacy delete, which reaches the protected store
+
+    /// 0.66: the key kept was deleted with the legacy copy as it was
+    /// written, so it lived in the writing process alone.
+    @Test func aKeyWrittenStaysKeptThoughTheLegacyDeleteReachesTheProtectedStore() {
+        let journal = Journal()
+        let protected = FakeKeychain(journal: journal, label: "protected")
+        let legacy = FakeKeychain(reaching: protected, journal: journal, label: "legacy")
+        let secrets = store(legacy: legacy, protected: protected)
+        secrets.set("app-key", "k1")
+        #expect(protected.kept["app-key"] == "k1")
+        #expect(journal.all == ["legacy delete app-key", "protected set app-key"])
+        // Another process's view of the same keychains finds it.
+        #expect(store(legacy: legacy, protected: protected).get("app-key") == "k1")
+    }
+
+    @Test func aStaleLegacyCopyIsReplacedNotLeftBeside() {
+        let protected = FakeKeychain()
+        let legacy = FakeKeychain(holding: ["app-key": "stale"], reaching: protected)
+        store(legacy: legacy, protected: protected).set("app-key", "k1")
+        #expect(protected.kept["app-key"] == "k1")
+        #expect(legacy.kept["app-key"] == nil)
+    }
+
+    // MARK: Elsewhere
+
+    @Test func aKeyUnderAnotherGroupIsMovedNotMadeAgain() {
+        let protected = FakeKeychain()
+        let other = FakeKeychain(holding: ["app-key": "k-other"])
+        let legacy = FakeKeychain(holding: ["app-key": "k-legacy"], reaching: protected)
+        let secrets = store(legacy: legacy, protected: protected, elsewhere: [other])
+        #expect(secrets.get("app-key") == "k-other")
+        #expect(protected.kept["app-key"] == "k-other")
+        #expect(other.kept.isEmpty)
+        #expect(lines.all == ["app-key: moved to the protected store from another access group"])
+        #expect(secrets.get("app-key") == "k-other")
+    }
+
+    @Test func aMoveFromAnotherGroupThatDoesntReadBackLeavesItThere() {
+        let other = FakeKeychain(holding: ["app-key": "k-other"])
+        let secrets = store(legacy: FakeKeychain(), protected: FakeKeychain(dropsWrites: true), elsewhere: [other])
+        #expect(secrets.get("app-key") == "k-other")
+        #expect(other.kept["app-key"] == "k-other")
     }
 
     @Test func anUnreadableProtectedStoreIsSaidSoAndNothingIsMoved() {
@@ -168,8 +182,8 @@ extension ServerTests {
 
     @Test func twoProcessesMovingTheSameKeyAgree() {
         // The app's process and the server agent's, each with its own view of the same keychains.
-        let legacy = FakeKeychain(holding: ["app-key": "k0"])
         let protected = FakeKeychain()
+        let legacy = FakeKeychain(holding: ["app-key": "k0"], reaching: protected)
         let app = store(legacy: legacy, protected: protected)
         let server = store(legacy: legacy, protected: protected)
         #expect(app.get("app-key") == "k0")

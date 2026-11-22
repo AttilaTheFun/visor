@@ -13,10 +13,20 @@ import VisorServer
 public final class KeychainSecrets: SecretStore {
     private let service: String
     private let accessGroup: String?
+    /// In the data-protection keychain with no group named: every group
+    /// this process reaches (KeychainSecrets+DataProtection's `anyGroup`).
+    private let everyGroup: Bool
 
     public init(service: String = Bundle.main.bundleIdentifier ?? "Visor Server", accessGroup: String? = nil) {
         self.service = service
         self.accessGroup = accessGroup
+        everyGroup = false
+    }
+
+    init(service: String, everyGroup: Bool) {
+        self.service = service
+        accessGroup = nil
+        self.everyGroup = everyGroup
     }
 
     func query(_ key: String) -> [String: Any] {
@@ -26,6 +36,8 @@ public final class KeychainSecrets: SecretStore {
         if let accessGroup {
             query[kSecUseDataProtectionKeychain as String] = true
             query[kSecAttrAccessGroup as String] = accessGroup
+        } else if everyGroup {
+            query[kSecUseDataProtectionKeychain as String] = true
         }
         return query
     }
@@ -60,7 +72,7 @@ public final class KeychainSecrets: SecretStore {
             add[kSecValueData as String] = data
             // The data-protection keychain's never leave this Mac (a backup
             // restored elsewhere has none): the next start makes them again.
-            add[kSecAttrAccessible as String] = accessGroup == nil ? kSecAttrAccessibleAfterFirstUnlock
+            add[kSecAttrAccessible as String] = accessGroup == nil && !everyGroup ? kSecAttrAccessibleAfterFirstUnlock
                 : kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
             SecItemAdd(add as CFDictionary, nil)
         }

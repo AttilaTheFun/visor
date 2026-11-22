@@ -779,7 +779,16 @@ removed (still only when `agentProxy` is set).
   build moves it over the first time it's read, MacSecrets): the app
   is let in with `sshEnabled` off, and the menu's Reset Admin Token… and
   Emergency Key Rotation… are taken from it alone, as they were only the
-  menu's in the app's process. Quit Visor: in the app's process,
+  menu's in the app's process. One key for every process of the app's
+  (AppKeyKeeper, 0.66): the server takes the one kept at its start,
+  whichever process runs it, and makes one only when none is; the app
+  reads the kept one for each call; a call that doesn't show the server's
+  key has the server ask the keychain again (a key kept since is taken,
+  none kept has its own kept again), and the app's call is made once more
+  when its key changed meanwhile. Before 0.66 the agent's key was deleted
+  as it was kept (a delete from the login keychain reaches the
+  data-protection keychain too: ProtectedSecrets deletes the old copy
+  first now), so with the server as the agent the app showed none. Quit Visor: in the app's process,
   `/api/quit` (the agents ended, then the app, AppLifecycle; a quit from
   outside waits for it the same way); with the agent, the app alone. The
   agent's menu also has Restart Server, Stop Server (`/api/quit`, which

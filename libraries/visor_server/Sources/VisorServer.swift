@@ -196,6 +196,14 @@ public final class VisorServer {
     /// menu's own calls, a reset of the admin token without it and an
     /// emergency rotation of the signing keys, are taken from it alone.
     public var appKey: String?
+    /// The app key asked again, after a call at the socket file didn't show
+    /// `appKey` (AppKeyKeeper.reconciled): the one kept now when it's
+    /// another, taken as `appKey`; nil when there's nothing new. Set by the
+    /// Mac's binaries beside `appKey`.
+    public var appKeyAskedAgain: (@Sendable (String?) -> String?)?
+    /// When it was last asked again: at most every few seconds
+    /// (VisorServer+Access).
+    var appKeyLastAsked: Date?
     /// Re-mints the native sessions' token files hourly
     /// (VisorServer+SessionTokenFiles).
     var sessionTokenRefresh: Task<Void, Never>?
