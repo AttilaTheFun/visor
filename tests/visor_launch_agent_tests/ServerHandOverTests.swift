@@ -162,18 +162,63 @@ private actor FakeSteps: ServerHandOverSteps {
                                                       stop: { await calls.add("bootout") },
                                                       register: { await calls.add("register"); return nil },
                                                       running: { await runs.add("look"); return await runs.all.count > 1 },
-                                                      pause: { await calls.add("pause") })
+                                                      pause: { await calls.add("pause \($0.components.seconds)") })
         #expect(problem == nil)
-        let once = ["lsregister", "unregister", "bootout", "register", "pause"]
+        let once = ["lsregister", "unregister", "bootout", "register", "pause 8"]
         #expect(await calls.all == once + once, "refused once (the constraint), then running")
-        let refused = await ServerAgentJob.reregister(refresh: {}, unregister: {}, stop: {}, register: { "Operation not permitted" },
-                                                      running: { true }, pause: {})
-        #expect(refused == "Operation not permitted")
+        let refused = await ServerAgentJob.reregister(refresh: {}, unregister: {}, stop: {}, register: { "Invalid argument" },
+                                                      running: { true }, pause: { _ in })
+        #expect(refused == "Invalid argument", "a refusal for good isn't waited on")
         let never = Calls()
         let down = await ServerAgentJob.reregister(attempts: 3, refresh: {}, unregister: {}, stop: {},
-                                                   register: { await never.add("register"); return nil }, running: { false }, pause: {})
+                                                   register: { await never.add("register"); return nil }, running: { false }, pause: { _ in })
         #expect(down?.contains("after 3 registrations") == true)
         #expect(await never.all.count == 3)
+    }
+
+    /// NCH's check of #491: just after 0.64's plist was removed, macOS
+    /// refused the registration ("Operation not permitted") until Background
+    /// Items dropped 0.64's item. Refused twice, then allowed: waited out,
+    /// the person told why, and running.
+    @Test func aRegistrationMacOSRefusesForNowIsWaitedOut() async {
+        let tries = Calls()
+        let said = Calls()
+        let problem = await ServerAgentJob.reregister(
+            refresh: {}, unregister: {}, stop: {},
+            register: {
+                await tries.add("register")
+                return await tries.all.count <= 2 ? "The operation couldn’t be completed. Operation not permitted" : nil
+            },
+            running: { true }, pause: { await said.add("pause \($0.components.seconds)") },
+            waiting: { text in Task { await said.add(text) } })
+        #expect(problem == nil)
+        #expect(await tries.all.count == 3)
+        let pauses = await said.all.filter { $0.hasPrefix("pause") }
+        #expect(pauses == ["pause 2", "pause 4", "pause 8"], "backed off, then the usual look")
+        try? await Task.sleep(for: .milliseconds(50))
+        #expect(await said.all.contains { $0.hasPrefix("Waiting for macOS to let Visor's server start") })
+    }
+
+    /// Refused for good: given up after about a minute and a half, saying
+    /// so, never silently.
+    @Test func aRegistrationMacOSNeverAllowsEndsInAClearNotice() async {
+        let tries = Calls()
+        let problem = await ServerAgentJob.reregister(refresh: {}, unregister: {}, stop: {},
+                                                      register: { await tries.add("register"); return "Job is not allowed to bootstrap" },
+                                                      running: { true }, pause: { _ in })
+        #expect(await tries.all.count == ServerAgentJob.refusedBackoff.count + 1)
+        #expect(problem?.contains("macOS didn't let Visor's server start for about 89 seconds") == true, "\(problem ?? "")")
+        #expect(problem?.contains("Login Items") == true)
+        #expect(ServerAgentJob.isRefusedForNow("Operation not permitted"))
+        #expect(!ServerAgentJob.isRefusedForNow("Invalid argument"))
+        // The hand-over then waits, the app serving nothing, and says why.
+        let steps = FakeSteps(install: .hold(problem ?? ""), answersAfter: nil)
+        guard case .waiting(let why) = await ServerHandOver.run(wanted: true, steps: steps, watch: .seconds(4), poll: .seconds(2),
+                                                                log: { _ in }) else {
+            Issue.record("waited for, never the app's own server")
+            return
+        }
+        #expect(why.contains("macOS didn't let Visor's server start"))
     }
 }
 

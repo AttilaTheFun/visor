@@ -14,6 +14,7 @@ extension VisorServer {
     /// server starts its successor.
     @discardableResult
     public func relaunch(installing build: String?, carrying: [String]) -> String? {
+        if let refusal = relaunchWatched() { return refusal }
         // The sessions that are mid-turn are written down as such: the flag
         // is what the next launch reads to know a reply is owed.
         for record in sessions where record.info.busy { record.interrupted = true }
@@ -32,6 +33,20 @@ extension VisorServer {
             ServerPlatform.current.lifecycle.terminate()
         }
         return nil
+    }
+
+    /// Why a restart or an update is refused now: an earlier one's watch
+    /// still holds its lock (RelaunchWatchLock), or nil.
+    func relaunchWatched() -> String? {
+        let text = try? String(contentsOf: RelaunchWatchLock.url, encoding: .utf8)
+        guard let left = RelaunchWatchLock.remaining(text, now: Int(Date().timeIntervalSince1970),
+                                                     isRunning: { ServerPlatform.current.processes.isRunning($0) }) else { return nil }
+        return Self.relaunchWatchedRefusal(left)
+    }
+
+    /// What a restart asked for during a watch is told.
+    static func relaunchWatchedRefusal(_ seconds: Int) -> String {
+        "An update is still being watched; try again in \(seconds) s."
     }
 
     /// Makes way, as a relaunch does, for whoever ends this process next

@@ -685,6 +685,28 @@ removed (still only when `agentProxy` is set).
   exclusion of a whole volume is the person's on macOS 27 (no app may, as
   Nimbus found), in Time Machine's settings, which the button opens.
   Sessions and Sources are left in both.
+- **One update's watch at a time (0.65; NCH's check of #491):** an
+  update 43 seconds after another had the first watcher, still watching,
+  take the second's restart for a crash and undo it over the second's
+  install, leaving no Visor.app. Now the watcher (ServerAgentWatch, or
+  AppRelauncher in the app) holds `relaunch-watch.lock` beside the rollback
+  note while it watches (RelaunchWatchLock: `<pid> <started>`), stopping an
+  earlier watcher still holding it as it starts; the server answers
+  `/api/restart` with 409 ("An update is still being watched; try again in
+  N s"), and the menu's restart likewise, while a live watcher holds it.
+  Each watch keeps the bundle it replaced in `Previous/<token>/`, and puts
+  it back only if that copy is there, whole, and the bundle in place is
+  still the one it installed (its executable's checksum): otherwise the
+  bundle in place is left as it is, and the log says so.
+- **The first registration after 0.64's plist (NCH's check of #491):**
+  for a while after 0.64's plist is removed, Background Items keeps 0.64's
+  item of the same identifier and macOS refuses the registration
+  ("Operation not permitted": the job "is not allowed to bootstrap").
+  ServerAgentJob.reregister waits that out, trying again after 2, 4, 8 and
+  then 15-second pauses (about a minute and a half), the menu saying
+  "Waiting for macOS to let Visor's server start…"; only then does it give
+  up, saying so, and the app stays the agent's client, never its own
+  server.
 - **The socket file's move (0.65):** with the Visor volume, the server
   listens at `/Volumes/Visor/run/server.sock` (VisorServer.placedSocketPath,
   set by MacServer) and makes `~/.visor/server.sock` a link to it, for SSH

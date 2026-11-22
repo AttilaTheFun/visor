@@ -56,14 +56,17 @@ public enum ServerAgentService {
     /// that bundle's; again while launchd has no process of it. What `Visor server-agent register` runs (the update's
     /// watcher, after an update or a rollback), and how the hand-over starts
     /// one that isn't running.
-    public static func reregister(bundleID: String, bundle: String = Bundle.main.bundlePath) async -> String? {
+    public static func reregister(bundleID: String, bundle: String = Bundle.main.bundlePath,
+                                  waiting: (String) -> Void = { _ in }) async -> String? {
         let label = ServerAgentJob.label(bundleID: bundleID)
         return await ServerAgentJob.reregister(refresh: { await launchServices(bundle) },
                                                unregister: { try? await service(bundleID: bundleID).unregister() },
                                                stop: { await Launchctl.stop(label: label) },
                                                register: { register(bundleID: bundleID) },
                                                running: { await Launchctl.pid(label: label) != nil },
-                                               pause: { try? await Task.sleep(for: registerPause) })
+                                               settle: registerPause,
+                                               pause: { try? await Task.sleep(for: $0) },
+                                               waiting: waiting)
     }
 
     /// How long a registration is given before launchd is asked whether it
@@ -109,6 +112,7 @@ public enum ServerAgentService {
     /// left), or stopped and unregistered. What was done.
     @discardableResult
     public static func settle(wanted: Bool, job: LaunchAgentJob, bundleID: String, executable: String?, why unwanted: String = "not wanted",
+                              notice: @escaping @Sendable (String) -> Void = { _ in },
                               log: @escaping @Sendable (String) -> Void) async -> LaunchAgentJob.Action {
         let legacy = FileManager.default.fileExists(atPath: ServerAgentJob.legacyPlistPath(bundleID: bundleID))
         let running = await Launchctl.runningState(label: job.label)
@@ -131,7 +135,7 @@ public enum ServerAgentService {
             await removeLegacy(job: job, bundleID: bundleID, log: log)
             // Not running: booted out and registered again, whatever bundle
             // it was registered from.
-            if let problem = await reregister(bundleID: bundleID) {
+            if let problem = await reregister(bundleID: bundleID, waiting: { log("\(job.name): " + $0); notice($0) }) {
                 log("\(job.name): couldn't be registered: \(problem)")
                 return .hold(problem)
             }

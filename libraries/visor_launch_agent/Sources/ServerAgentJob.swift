@@ -146,17 +146,51 @@ public enum ServerAgentJob {
     /// next registration made a new one and ran the new build. So it's
     /// tried again, once the record has had time to go, rather than left
     /// down.
-    public static func reregister(attempts: Int = 3, refresh: () async -> Void, unregister: () async -> Void, stop: () async -> Void,
-                                  register: () async -> String?, running: () async -> Bool,
-                                  pause: () async -> Void) async -> String? {
-        for _ in 0..<max(attempts, 1) {
+    ///
+    /// Registering can also be refused for a while ("Operation not
+    /// permitted": NCH's check of #491): just after 0.64's plist is removed,
+    /// Background Items still holds 0.64's item of the same identifier, and
+    /// smd says the job "is not allowed to bootstrap" until a later rescan
+    /// drops it. That's waited out (`waiting` told why), the registration
+    /// tried again after `refusedBackoff`'s pauses (about a minute and a
+    /// half), and only then given up, saying so.
+    public static func reregister(attempts: Int = 3, refusedBackoff: [Duration] = refusedBackoff, refresh: () async -> Void,
+                                  unregister: () async -> Void, stop: () async -> Void, register: () async -> String?,
+                                  running: () async -> Bool, settle: Duration = .seconds(8), pause: (Duration) async -> Void,
+                                  waiting: (String) -> Void = { _ in }) async -> String? {
+        var refusals = refusedBackoff[...]
+        var attempt = 0
+        while attempt < max(attempts, 1) {
             await refresh()
             await unregister()
             await stop()
-            if let problem = await register() { return problem }
-            await pause()
+            if let problem = await register() {
+                guard isRefusedForNow(problem) else { return problem }
+                guard let next = refusals.popFirst() else {
+                    return "macOS didn't let Visor's server start for about \(refusedBackoff.reduce(0) { $0 + $1.components.seconds }) seconds "
+                        + "(\(problem)): open Visor again, or allow it in System Settings › General › Login Items"
+                }
+                waiting("Waiting for macOS to let Visor's server start… (\(problem))")
+                await pause(next)
+                continue
+            }
+            attempt += 1
+            await pause(settle)
             if await running() { return nil }
         }
         return "launchd didn't start it after \(max(attempts, 1)) registrations (its launch constraint: the build registered isn't the one in place)"
+    }
+
+    /// The pauses between registrations macOS refuses for now: about a
+    /// minute and a half in all.
+    public static let refusedBackoff: [Duration] = [.seconds(2), .seconds(4), .seconds(8), .seconds(15), .seconds(15), .seconds(15),
+                                                     .seconds(15), .seconds(15)]
+
+    /// Whether a registration's refusal is macOS not allowing it yet (EPERM,
+    /// "not permitted", "not allowed"), which passes, rather than a refusal
+    /// for good.
+    public static func isRefusedForNow(_ problem: String) -> Bool {
+        let said = problem.lowercased()
+        return said.contains("not permitted") || said.contains("not allowed") || said.contains("eperm")
     }
 }

@@ -18,5 +18,6 @@ swift_test(
     deps = [
         "//:foundation",
         "//libraries/visor_launch_agent",
+        "//libraries/visor_server",
     ],
 )

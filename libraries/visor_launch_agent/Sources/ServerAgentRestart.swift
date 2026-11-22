@@ -51,19 +51,22 @@ public struct ServerAgentRestart: ServerLifecycle {
             if path != (destination as NSString).standardizingPath {
                 source = path
                 // The running bundle is moved aside, not removed: it is what
-                // comes back if the new one fails (AppRelauncher's place).
-                backup = VisorServer.rollbackNoteURL.deletingLastPathComponent()
-                    .appendingPathComponent("Previous", isDirectory: true)
-                    .appendingPathComponent((destination as NSString).lastPathComponent, isDirectory: true).path
+                // comes back if the new one fails, in a folder of this
+                // watch's own (RelaunchWatchLock).
+                backup = RelaunchWatchLock.backup(for: destination)
             }
         }
         let executable = (destination as NSString).appendingPathComponent("Contents/MacOS/" + executableName)
         if let problem = LaunchAgentJob.installProblem(executable) { return "The server agent can't restart itself: \(problem)" }
         let watch = ServerAgentWatch.launchd(job: job, serverPID: ProcessInfo.processInfo.processIdentifier, destination: destination,
                                              executable: executableName, source: source, backup: backup,
-                                             note: VisorServer.rollbackNoteURL.path, newVersion: newVersion, oldVersion: oldVersion)
+                                             note: VisorServer.rollbackNoteURL.path, newVersion: newVersion, oldVersion: oldVersion,
+                                             lock: RelaunchWatchLock.url.path)
         do {
-            _ = try POSIXDaemon.start("/bin/sh", ["-c", watch.script()], log: job.log)
+            let watcher = try POSIXDaemon.start("/bin/sh", ["-c", watch.script()], log: job.log)
+            // Held at once, before the watcher's own shell takes it: a
+            // restart asked of the next server meanwhile is refused.
+            try? Data("\(watcher) \(Int(Date().timeIntervalSince1970))\n".utf8).write(to: RelaunchWatchLock.url, options: .atomic)
         } catch {
             return "Could not start the server agent's watcher: \(error.localizedDescription)"
         }
