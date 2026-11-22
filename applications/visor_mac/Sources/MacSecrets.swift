@@ -6,16 +6,18 @@
 // with its profile), so no other process of the user's can ask for it
 // (NCH's review of visor#471); moved there from the login keychain the
 // first time it's read. Without the group (a build signed ad hoc) it stays
-// in the login keychain, as the log says. The other items stay there for
-// now.
+// in the login keychain, as the log says. So is the admin token itself
+// (0.65), which `Visor admin-token` prints (MacAdminTokenCommand). The
+// other items stay there for now.
 
 import Foundation
 import VisorServer
 import VisorServerApple
 
 enum MacSecrets {
-    /// The items kept in the data-protection keychain when the build can.
-    static let protectedNames: Set<String> = [MacAppKey.name]
+    /// The items kept in the data-protection keychain when the build can:
+    /// the app key, and the admin token itself (`Visor admin-token`).
+    static let protectedNames: Set<String> = [MacAppKey.name, VisorServer.adminTokenSecret]
 
     /// The server's secrets, the app key protected where it can be.
     static func make() -> any SecretStore {

@@ -5,8 +5,11 @@
 // the one before stops working at once. Compared in constant time.
 //
 // Where its hash lives is the binary's to say:
-// - Kept (the menu bar app): with the server's secrets (the keychain).
-//   Made only when there is none (`visor-server admin-token`, Settings ›
+// - Kept (the menu bar app): with the server's secrets (the keychain);
+//   and, where the binary asks (`keepingToken`: Visor.app, 0.65), the token
+//   itself beside it, in the data-protection keychain under the app's own
+//   group, for `Visor admin-token` to print to a script (so no .zshrc
+//   holds it). Made only when there is none (`visor-server admin-token`, Settings ›
 //   Create Admin Token…), rotated only by presenting it (`POST
 //   /api/admin-token/rotate`), reset without it only from the menu bar
 //   (`reset`, in the app's own process).
@@ -50,15 +53,20 @@ package final class AdminToken {
 
     /// Where its hash is kept among the server's secrets.
     package static let secretKey = "adminTokenHash"
+    /// Where the token itself is kept, when it is (`keepingToken`).
+    package nonisolated static let tokenKey = "adminToken"
 
     package let holding: Holding
     private let secrets: (any SecretStore)?
     private var hash: [UInt8]?
+    /// Whether the token itself is kept beside its hash (`tokenKey`).
+    private let keepsToken: Bool
 
-    /// Kept with `secrets`.
-    package init(keptIn secrets: any SecretStore) {
+    /// Kept with `secrets`; `keepingToken`, the token itself too.
+    package init(keptIn secrets: any SecretStore, keepingToken: Bool = false) {
         holding = .kept
         self.secrets = secrets
+        keepsToken = keepingToken
         hash = secrets.get(Self.secretKey).flatMap(Self.bytes(hex:))
     }
 
@@ -66,6 +74,7 @@ package final class AdminToken {
     package init(givenAtLaunch token: String?) {
         holding = .givenAtLaunch
         secrets = nil
+        keepsToken = false
         hash = token.flatMap { $0.isEmpty ? nil : Self.digest($0) }
     }
 
@@ -110,6 +119,7 @@ package final class AdminToken {
         let digest = Self.digest(token)
         hash = digest
         secrets?.set(Self.secretKey, Self.hex(digest))
+        if keepsToken { secrets?.set(Self.tokenKey, token) }
         return token
     }
 

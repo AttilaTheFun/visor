@@ -231,7 +231,7 @@ public final class VisorServer {
         sharedAgentToken = Self.keptSharedAgentToken()
         sessionAgentTokens = Self.keptSessionAgentTokens()
         runnerTokens = RunnerTokens(secrets: Self.secrets)
-        adminToken = AdminToken(keptIn: Self.secrets)
+        adminToken = AdminToken(keptIn: Self.secrets, keepingToken: Self.keepsAdminToken)
         // Its issuer is this server's id, made below the first time.
         agentTokens = AgentTokens(secrets: Self.secrets, issuer: "")
         Self.forgetRetiredSecrets()

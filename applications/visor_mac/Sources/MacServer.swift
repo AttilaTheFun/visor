@@ -53,6 +53,9 @@ enum MacServer {
         ServerCache.shared = .open(named: "messages", in: MacPlaces.folder("Server"))
         let agentProtocol = agentProtocol()
         agentProtocol.listen()
+        // The admin token itself kept beside its hash, for `Visor
+        // admin-token` (MacAdminTokenCommand).
+        VisorServer.keepsAdminToken = true
         let server = VisorServer.shared
         // Sessions moved in from another computer, and Super Compact's new
         // sessions, on the Sessions volume when it's there.
