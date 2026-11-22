@@ -13,7 +13,8 @@
 //
 // Either way the app is only ever the server's client: its window, its
 // menu, Settings, the welcome and its updates reach the server at its
-// socket file (`~/.visor/server.sock`, SocketFileURL), as an SSH client
+// socket file (`/Volumes/Visor/run/server.sock` on the Visor volume, else
+// `~/.visor/server.sock`: SocketFileURL), as an SSH client
 // does, with no password, through the same client (VisorAgentServer) that
 // reaches any other computer. The server in the app's process is made and
 // started here and touched by nothing else.
@@ -66,7 +67,13 @@ final class LocalServer {
 
     /// Whether the server runs as the agent: the app's default.
     static var wanted: Bool { UserDefaults.standard.bool(forKey: ServerAgentJob.defaultsKey) }
-    static var job: LaunchAgentJob { ServerAgentJob.job(bundleID: MacPlaces.own) }
+    static var job: LaunchAgentJob { ServerAgentJob.job(bundleID: MacPlaces.own, logs: MacPlaces.folders.logs.path) }
+
+    /// Whether the server will be made in the app at its launch: the agent
+    /// isn't wanted, nor registered (or 0.64's plist there).
+    static var runsInApp: Bool {
+        VisorFixture.active || (!wanted && !ServerAgentService.isRegisteredOrLegacy(bundleID: MacPlaces.own))
+    }
 
     /// How often the menu's word of the server is asked for again.
     static let refreshInterval: Duration = .seconds(3)
@@ -74,7 +81,7 @@ final class LocalServer {
     /// At the app's launch, before its window: the server made in the app,
     /// as before, unless the agent is wanted or there; then the hand-over.
     func begin() {
-        if VisorFixture.active || (!Self.wanted && !FileManager.default.fileExists(atPath: Self.job.plistPath)) {
+        if Self.runsInApp {
             server = MacServer.make()
             mode = .inApp
             return
@@ -170,11 +177,20 @@ final class LocalServer {
 
     private func handOver() async {
         let log: @Sendable (String) -> Void = { ServerPlatform.current.log($0) }
-        let steps = LaunchdHandOverSteps(job: Self.job, version: VisorMacApp.bundleVersion, log: log)
-        let outcome = await ServerHandOver.run(wanted: Self.wanted, hasPassword: MacServer.hasPassword, steps: steps, log: log)
+        // What macOS keeps it waiting on, in the menu meanwhile.
+        let steps = LaunchdHandOverSteps(job: Self.job, bundleID: MacPlaces.own, notice: { [weak self] text in
+            Task { @MainActor in self?.note = text }
+        }, log: log)
+        let outcome = await ServerHandOver.run(wanted: Self.wanted, steps: steps, log: log)
         switch outcome {
         case .agent(let pid):
             log("Visor is the client of the server agent (process \(pid)); no server is made in the app")
+            note = nil
+            mode = .agent
+        case .waiting(let why):
+            // Wanted: never a server here, never the agent stopped. Its
+            // socket file is asked every few seconds, as any computer's is.
+            note = why
             mode = .agent
         case .inApp(let why):
             if let why { log(why) }

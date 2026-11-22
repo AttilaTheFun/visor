@@ -25,4 +25,7 @@ public struct LocatedVolume: Equatable, Sendable {
 
     /// Whether Visor can use it: mounted.
     public var isReady: Bool { isMounted }
+
+    /// Its path when Visor can use it; nil when it isn't mounted.
+    public var readyPath: String? { isReady ? path : nil }
 }

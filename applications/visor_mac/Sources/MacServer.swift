@@ -1,10 +1,12 @@
 // The Mac's Visor server started: the one code path the server in the app
 // (VisorMacApp, LocalServer) and the server agent (`Visor --server`,
-// MacServerAgent) share. The same data folder (Application Support/Visor),
-// keychain items (MacPlaces' server service), message cache, ports (7433,
-// and agent_protocol's 7434), socket file and native runner, whichever
-// process runs it.
+// MacServerAgent) share. The same data folder (on the Visor volume once
+// it's there, else Application Support/Visor: MacPlaces), keychain items
+// (MacPlaces' server service), message cache, ports (7433, and
+// agent_protocol's 7434), socket file and native runner, whichever process
+// runs it.
 
+import DiskVolumes
 import Foundation
 import MessageCache
 import VisorDriver
@@ -18,8 +20,20 @@ enum MacServer {
     /// relauncher in the app, launchd's restart in the agent. Given in every
     /// process of the app's, even one whose server is the agent: its
     /// keychain items are read through it.
-    static func prepare(lifecycle: any ServerLifecycle = AppLifecycle(), log: (@Sendable (String) -> Void)? = nil) {
-        var platform = ServerPlatform.apple(secrets: MacSecrets.make(), lifecycle: lifecycle)
+    /// `runsServer`: this process will run the server, so what was in the
+    /// home folder moves onto the Visor volume first (MacPlaces.settle);
+    /// `client`: it's the app, whose own cache moves too. Whether the Visor
+    /// volume holding the data is missing.
+    @discardableResult
+    static func prepare(lifecycle: (any ServerLifecycle)? = nil, runsServer: Bool, client: Bool,
+                        log: (@Sendable (String) -> Void)? = nil) -> Bool {
+        let missing = MacPlaces.settle(runsServer: runsServer, client: client, log: { line in
+            NSLog("Visor: %@", line)
+            log?(line)
+        })
+        // The socket file on the Visor volume, when it's there.
+        VisorServer.placedSocketPath = MacPlaces.folders.socket
+        var platform = ServerPlatform.apple(secrets: MacSecrets.make(), lifecycle: lifecycle ?? AppLifecycle(), data: MacPlaces.data)
         if let log {
             let system = platform.log
             platform.log = { line in
@@ -28,6 +42,7 @@ enum MacServer {
             }
         }
         ServerPlatform.current = platform
+        return missing
     }
 
     /// The server made, with what runs beside it: its store, agent_protocol's
@@ -38,7 +53,13 @@ enum MacServer {
         ServerCache.shared = .open(named: "messages", in: MacPlaces.folder("Server"))
         let agentProtocol = agentProtocol()
         agentProtocol.listen()
+        // The admin token itself kept beside its hash, for `Visor
+        // admin-token` (MacAdminTokenCommand).
+        VisorServer.keepsAdminToken = true
         let server = VisorServer.shared
+        // Sessions moved in from another computer, and Super Compact's new
+        // sessions, on the Sessions volume when it's there.
+        server.arrivalRoot = DiskVolumes.locate(dataDirectory: MacPlaces.folders.data).sessions.readyPath
         // Visor.app is this server's client at its socket file, from the
         // start (password or none, sshEnabled or not), and its menu's own
         // calls are taken from it alone: by the key the keychain keeps.

@@ -18,10 +18,13 @@ extension ServerPlatform {
     }
 
     /// `lifecycle`: the app's relauncher, unless the server runs as the
-    /// server agent (`Visor --server`), which launchd restarts.
-    public static func apple(secrets: any SecretStore = KeychainSecrets(), lifecycle: any ServerLifecycle = AppRelauncher()) -> ServerPlatform {
+    /// server agent (`Visor --server`), which launchd restarts. `data`: the
+    /// data folder (Visor.app's on the Visor volume once it's there:
+    /// VisorFolders); Application Support's Visor unless given.
+    public static func apple(secrets: any SecretStore = KeychainSecrets(), lifecycle: any ServerLifecycle = AppRelauncher(),
+                             data given: URL? = nil) -> ServerPlatform {
         let logger = Logger(subsystem: "com.LoganShire.Visor", category: "server")
-        let data = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Visor")
+        let data = given ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Visor")
         return ServerPlatform(
             listening: NetworkListening(),
             processes: POSIXProcessSignals(),

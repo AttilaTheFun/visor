@@ -199,7 +199,6 @@ extension SessionRecord {
     /// Puts one row from the file into the transcript: a new row goes on the
     /// end, a row it already has (a reply growing) changes in place.
     func take(fileRow row: TranscriptEntry) -> Bool {
-        if row.role == .assistant { dropStream(carriedBy: row.id) }
         if let index = entries.firstIndex(where: { $0.id == row.id }) { entries[index] = row } else { entries.append(row) }
         if row.role == .user { settle(in: entries) }
         noteLatest()

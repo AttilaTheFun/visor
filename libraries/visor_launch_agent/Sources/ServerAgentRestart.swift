@@ -1,10 +1,11 @@
 // How the server agent (`Visor --server`, ServerAgentJob) is replaced and
 // ended: its ServerLifecycle. A restart, or an update (`POST /api/restart
-// {path}`), rewrites the job's plist to the new executable and version and
-// starts a detached watcher (ServerAgentWatch), which, once this process
-// has gone, puts the new bundle in place, starts the job again (`launchctl
-// kickstart -k`, or a fresh bootstrap when the plist changed) and watches it
-// for two minutes, putting the previous build back if it doesn't stay up.
+// {path}`), starts a detached watcher (ServerAgentWatch), which, once this
+// process has gone, puts the new bundle in place (its plist with it: the
+// job's plist is the bundle's own), starts the job again (`launchctl
+// kickstart -k`, or registered again from the bundle when launchd no
+// longer has it) and watches it for two minutes, putting the previous
+// build back if it doesn't stay up.
 // The agents' hosts outlive it, as an in-place relaunch leaves them
 // (VisorServer.relaunch), and the new server picks them up.
 //
@@ -50,39 +51,23 @@ public struct ServerAgentRestart: ServerLifecycle {
             if path != (destination as NSString).standardizingPath {
                 source = path
                 // The running bundle is moved aside, not removed: it is what
-                // comes back if the new one fails (AppRelauncher's place).
-                backup = VisorServer.rollbackNoteURL.deletingLastPathComponent()
-                    .appendingPathComponent("Previous", isDirectory: true)
-                    .appendingPathComponent((destination as NSString).lastPathComponent, isDirectory: true).path
+                // comes back if the new one fails, in a folder of this
+                // watch's own (RelaunchWatchLock).
+                backup = RelaunchWatchLock.backup(for: destination)
             }
         }
         let executable = (destination as NSString).appendingPathComponent("Contents/MacOS/" + executableName)
         if let problem = LaunchAgentJob.installProblem(executable) { return "The server agent can't restart itself: \(problem)" }
-        // The plist to the new executable and version; the one it replaces
-        // beside it, for the watcher to put back.
-        let previous = FileManager.default.contents(atPath: job.plistPath)
-        let previousPath = job.plistPath + ".previous"
-        let data: Data
-        do { data = try job.plistData(executable: executable, version: newVersion, settings: nil) } catch {
-            return "The server agent's plist couldn't be made: \(error)"
-        }
-        let reloads = previous != data
-        if reloads {
-            do {
-                if let previous { try previous.write(to: URL(fileURLWithPath: previousPath), options: .atomic) }
-                try data.write(to: URL(fileURLWithPath: job.plistPath), options: .atomic)
-            } catch {
-                return "The server agent's plist couldn't be written: \(error)"
-            }
-        }
         let watch = ServerAgentWatch.launchd(job: job, serverPID: ProcessInfo.processInfo.processIdentifier, destination: destination,
-                                             source: source, backup: backup, previousPlist: reloads && previous != nil ? previousPath : nil,
-                                             reloads: reloads, note: VisorServer.rollbackNoteURL.path, newVersion: newVersion,
-                                             oldVersion: oldVersion)
+                                             executable: executableName, source: source, backup: backup,
+                                             note: VisorServer.rollbackNoteURL.path, newVersion: newVersion, oldVersion: oldVersion,
+                                             lock: RelaunchWatchLock.url.path)
         do {
-            _ = try POSIXDaemon.start("/bin/sh", ["-c", watch.script()], log: job.log)
+            let watcher = try POSIXDaemon.start("/bin/sh", ["-c", watch.script()], log: job.log)
+            // Held at once, before the watcher's own shell takes it: a
+            // restart asked of the next server meanwhile is refused.
+            try? Data("\(watcher) \(Int(Date().timeIntervalSince1970))\n".utf8).write(to: RelaunchWatchLock.url, options: .atomic)
         } catch {
-            if reloads, let previous { try? previous.write(to: URL(fileURLWithPath: job.plistPath), options: .atomic) }
             return "Could not start the server agent's watcher: \(error.localizedDescription)"
         }
         if !sessions.isEmpty {

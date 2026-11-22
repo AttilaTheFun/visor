@@ -31,7 +31,7 @@ final class SignInFlowTests: XCTestCase {
         let login = TranscriptEntry(id: "sending-login", role: .user, text: "/login")
         transcript.sending.append(.init(id: login.id, entry: login, sinceRevision: transcript.revision))
 
-        var state = Envelope.ephemeral(session: "S", streams: [], status: [], activity: nil, busy: false, approval: nil, queued: [],
+        var state = Envelope.ephemeral(session: "S", turn: .idle, status: [], activity: nil, busy: false, approval: nil, queued: [],
                                        notice: nil, signIn: "https://claude.ai/oauth/authorize?code=true")
         transcript.apply(state)
         XCTAssertEqual(transcript.signIn, "https://claude.ai/oauth/authorize?code=true")

@@ -52,9 +52,6 @@ public protocol AgentServer: AnyObject {
     func subscribe(_ session: String)
     /// Stops following a session that was left.
     func unsubscribe(_ session: String)
-    /// Asks again for the state of a session followed, whole: the words
-    /// held of a reply being written don't meet what the server sent next.
-    func askState(_ session: String)
     /// The code a sign-in page showed, for the session's sign-in (`/login`).
     func signIn(_ session: String, code: String)
     /// The user has read what the session had to tell them.
@@ -247,12 +244,13 @@ public protocol AgentServer: AnyObject {
     /// Puts this device's SSH public key among the server's user's
     /// authorized keys, so this device comes in over SSH from now on.
     func authorizeSSHKey(_ line: String) async throws
+    /// "Forget this device": its SSH public key taken out of the server's
+    /// user's authorized keys, where Visor put it.
+    func forgetSSHKey(_ line: String) async throws
 }
 
 public extension AgentServer {
     var racesPaths: Bool { false }
-    /// Subscribing again brings the state whole, as the first time.
-    func askState(_ session: String) { subscribe(session) }
     func authenticate(_ record: AgentServerRecord, byFirstOf paths: [String], headStarts: [Int32],
                       timeouts: [Int32]) async throws -> (name: String?, path: String) {
         var record = record
@@ -313,4 +311,5 @@ public extension AgentServer {
     }
     var identity: ServerIdentity? { nil }
     func authorizeSSHKey(_ line: String) async throws { throw AgentServerError.unsupported }
+    func forgetSSHKey(_ line: String) async throws { throw AgentServerError.unsupported }
 }

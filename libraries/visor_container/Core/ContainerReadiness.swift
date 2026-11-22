@@ -1,5 +1,5 @@
 // Settings' readiness row for the Sessions container: this Mac (macOS 26
-// or later, Apple silicon, virtualization), the Containers volume, and the
+// or later, Apple silicon, virtualization), the Visor volume, and the
 // assets on it. The container can be turned on only where this Mac can run
 // it; the volume and the assets are made or fetched later (Visor Disk
 // Utility, and the engine when it first starts).
@@ -34,7 +34,7 @@ public struct ContainerReadiness: Equatable, Sendable {
             Check(name: "Virtualization", ok: host.virtualizationSupported,
                   detail: host.virtualizationSupported ? "This Mac can run virtual machines."
                                                        : "Virtualization isn't available here (a Mac VM can't run another)."),
-            Check(name: "Containers volume", ok: volume.isReady,
+            Check(name: "Visor volume", ok: volume.isReady,
                   detail: volume.isReady ? "Mounted at \(volume.path)." : "No volume at \(volume.path): make it with Visor Disk Utility."),
         ]
         if let assets {
@@ -42,7 +42,7 @@ public struct ContainerReadiness: Equatable, Sendable {
                                 detail: assets.isComplete ? "The kernel, the init filesystem and image \(assets.image?.short ?? "") are on the volume."
                                                           : "Missing \(Self.list(assets.missing)); fetched when the container first starts."))
         } else {
-            checks.append(Check(name: "Assets", ok: false, detail: "Fetched onto the Containers volume once there is one."))
+            checks.append(Check(name: "Assets", ok: false, detail: "Fetched onto the Visor volume once there is one."))
         }
         self.checks = checks
     }

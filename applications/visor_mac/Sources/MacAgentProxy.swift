@@ -21,12 +21,10 @@ import VisorServerApple
 
 @MainActor
 enum MacAgentProxy {
-    /// The server's data folder (ServerPlatform.apple's) and the egress
-    /// log beside the app's other logs.
+    /// The server's data folder (MacPlaces': on the Visor volume once it's
+    /// there) and the egress log beside Visor's other logs.
     static var places: AgentProxyHost.Places {
-        AgentProxyHost.Places(dataDirectory: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-                                  .appendingPathComponent("Visor"),
-                              egressLog: AgentProxyJob.egressLogPath())
+        AgentProxyHost.Places(dataDirectory: MacPlaces.data, egressLog: AgentProxyJob.egressLogPath(logs: MacPlaces.folders.logs.path))
     }
 
     /// Runs the proxy or its command when `arguments` ask for one, and
@@ -35,8 +33,10 @@ enum MacAgentProxy {
         let given = Array(arguments.dropFirst())
         let secrets = KeychainSecrets(service: MacPlaces.serverService)
         if given.first == AgentProxyJob.argument {
+            // Where Visor's things are; nothing moved here (the server's to do).
+            MacPlaces.settle(runsServer: false, client: false, log: { NSLog("Visor agent-proxy: %@", $0) })
             AgentProxyHost.run(AgentProxyHost.Launch(places: places, secrets: secrets, version: VisorMacApp.bundleVersion,
-                                                     logFile: AgentProxyJob.logPath()))
+                                                     logFile: AgentProxyJob.logPath(logs: MacPlaces.folders.logs.path)))
         }
         if given.first == "agent-proxy" {
             exit(AgentProxyCommand.main(Array(given.dropFirst()), secrets: secrets))
@@ -55,7 +55,7 @@ enum MacAgentProxy {
     static func foldIn(_ server: VisorServer) async {
         let log: @Sendable (String) -> Void = { ServerPlatform.current.log("agent-proxy: \($0)") }
         await AgentProxyJob.settle(bundleID: MacPlaces.own, version: VisorMacApp.bundleVersion, places: places, folded: true,
-                                   log: { ServerPlatform.current.log($0) })
+                                   logs: MacPlaces.folders.logs.path, log: { ServerPlatform.current.log($0) })
         foldedDigest = AgentProxyHost.digest(server.settings.agentProxy)
         guard let settings = server.settings.agentProxy else { return }
         folded = AgentProxyHost.start(settings, places: places, secrets: ServerPlatform.current.secrets, version: VisorMacApp.bundleVersion,
@@ -82,8 +82,9 @@ enum MacAgentProxy {
         let bundleID = MacPlaces.own
         let version = VisorMacApp.bundleVersion
         let places = places
+        let logs = MacPlaces.folders.logs.path
         Task.detached {
-            await AgentProxyJob.settle(bundleID: bundleID, version: version, places: places, log: { ServerPlatform.current.log($0) })
+            await AgentProxyJob.settle(bundleID: bundleID, version: version, places: places, logs: logs, log: { ServerPlatform.current.log($0) })
         }
     }
 }

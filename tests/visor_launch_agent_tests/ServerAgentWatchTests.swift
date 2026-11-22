@@ -11,6 +11,7 @@ import Glibc
 #endif
 import Testing
 @testable import VisorLaunchAgent
+import VisorServer
 
 @Suite(.serialized) struct ServerAgentWatchTests {
     /// A scratch folder, its stand-ins, and the watch's paths in it.
@@ -24,6 +25,7 @@ import Testing
         var note: String { root + "/relaunch-rollback.txt" }
         var pidFile: String { root + "/pid" }
         var answering: String { root + "/answering" }
+        var lock: String { root + "/relaunch-watch.lock" }
 
         init() throws {
             root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-agent-watch-" + UUID().uuidString).path
@@ -47,16 +49,16 @@ import Testing
 
         /// The watch, launchd played: the job is the destination's
         /// executable, run in the background, its pid in a file.
-        func watch(source: String?, previousPlist: String?) -> ServerAgentWatch {
+        func watch(source: String?, previousPlist: String?, beforeUndo: String = "") -> ServerAgentWatch {
             let start = "( '\(destination)/Contents/MacOS/run' >/dev/null 2>&1 & echo $! > '\(pidFile)' )"
             return ServerAgentWatch(serverPID: Self.gonePID(), destination: destination, source: source,
                                     backup: source == nil ? nil : backup, plist: plist, previousPlist: previousPlist, start: start, reload: start,
-                                    stop: "kill $(cat '\(pidFile)' 2>/dev/null) 2>/dev/null; rm -f '\(pidFile)'; sleep 0.2",
+                                    stop: "\(beforeUndo)kill $(cat '\(pidFile)' 2>/dev/null) 2>/dev/null; rm -f '\(pidFile)'; sleep 0.2",
                                     // A zombie (a container's first process may reap nothing) is gone.
                                     pid: "q=$(cat '\(pidFile)' 2>/dev/null); [ -n \"$q\" ] && kill -0 $q 2>/dev/null "
                                         + "&& ! grep -q '^State:.*Z' /proc/$q/status 2>/dev/null && echo $q",
                                     answers: "[ -f '\(answering)' ]", note: note, newVersion: "0.62.5", oldVersion: "0.62.4",
-                                    seconds: 4, firstAnswer: 4, settle: 1)
+                                    seconds: 4, firstAnswer: 4, settle: 1, lock: lock, bundleExecutable: "Contents/MacOS/run")
         }
 
         /// A process that has ended: the server the watcher waits for.
@@ -173,14 +175,89 @@ import Testing
         #expect(!FileManager.default.fileExists(atPath: scene.note), "nothing was put back")
     }
 
-    @Test func theLaunchdWatchStartsWithKickstartUnlessThePlistChanged() {
+    // NCH's check of #491: an update 43 seconds after another, the first
+    // one's watcher still watching, undid over the second's install and
+    // left no Visor.app at all.
+
+    /// Its own copy of the previous build gone by the time it would undo:
+    /// the bundle in place is left as it is.
+    @Test func anUndoWithItsBackupGoneLeavesTheBundleInPlace() throws {
+        let scene = try Scene()
+        defer { scene.cleanUp() }
+        try update(scene, newBody: scene.crashes)
+        let output = try scene.run(scene.watch(source: scene.source, previousPlist: nil, beforeUndo: "rm -rf '\(scene.backup)'; "))
+        #expect(output.contains("was left as it is"), "\(output)")
+        #expect(scene.read(scene.destination + "/name") == "new", "nothing removed")
+        #expect(!FileManager.default.fileExists(atPath: scene.note), "nothing said put back")
+    }
+
+    /// Another build put in place since this watch installed its own (a
+    /// later update's): left as it is, the backup kept for whoever owns it.
+    @Test func anUndoLeavesABundleItDidntInstall() throws {
+        let scene = try Scene()
+        defer { scene.cleanUp() }
+        try update(scene, newBody: scene.crashes)
+        let other = scene.root + "/Other.app"
+        try scene.app(at: other, name: "later", body: scene.serves)
+        let swap = "rm -rf '\(scene.destination)'; cp -R '\(other)' '\(scene.destination)'; "
+        let output = try scene.run(scene.watch(source: scene.source, previousPlist: nil, beforeUndo: swap))
+        #expect(output.contains("was left as it is"), "\(output)")
+        #expect(scene.read(scene.destination + "/name") == "later", "the later update's bundle is untouched")
+        #expect(scene.read(scene.backup + "/name") == "old", "and this watch's copy kept")
+    }
+
+    /// Back to back: a watch still holding the lock is stopped by the next
+    /// one, which holds it while it watches and lets it go at its end.
+    @Test func aSecondWatchStopsTheFirstAndHoldsTheLock() throws {
+        let scene = try Scene()
+        defer { scene.cleanUp() }
+        let earlier = Process()
+        earlier.executableURL = URL(fileURLWithPath: "/bin/sh")
+        earlier.arguments = ["-c", RelaunchWatchLock.take(scene.lock) + "\nexec sleep 60"]
+        try earlier.run()
+        for _ in 0..<50 where scene.read(scene.lock) == nil { Thread.sleep(forTimeInterval: 0.1) }
+        let held = try #require(scene.read(scene.lock).flatMap(RelaunchWatchLock.read))
+        #expect(held.pid == earlier.processIdentifier)
+        try scene.app(at: scene.destination, name: "same", body: scene.serves)
+        let output = try scene.run(scene.watch(source: nil, previousPlist: nil))
+        #expect(output.contains("stopping the watch of an earlier update (process \(earlier.processIdentifier))"), "\(output)")
+        earlier.waitUntilExit()
+        #expect(output.contains("stayed up"))
+        #expect(!FileManager.default.fileExists(atPath: scene.lock), "let go at its end")
+    }
+
+    @Test func theLockSaysWhoHoldsItAndForHowLong() {
+        #expect(RelaunchWatchLock.read("4242 1795000000\n")?.pid == 4242)
+        #expect(RelaunchWatchLock.read("nonsense") == nil)
+        #expect(RelaunchWatchLock.remaining("4242 1795000000", now: 1_795_000_100, isRunning: { $0 == 4242 }) == 620)
+        #expect(RelaunchWatchLock.remaining("4242 1795000000", now: 1_795_000_100, isRunning: { _ in false }) == nil, "a watcher gone holds nothing")
+        #expect(RelaunchWatchLock.remaining(nil, now: 0, isRunning: { _ in true }) == nil)
+        #expect(RelaunchWatchLock.remaining("4242 1795000000", now: 1_795_009_999, isRunning: { _ in true }) == 5)
+    }
+
+    @Test func theLaunchdWatchKickstartsARestartAndRegistersAfreshAfterAnUpdateOrARollback() {
         let job = ServerAgentJob.job(bundleID: "com.LoganShire.Visor", home: "/Users/me")
-        let same = ServerAgentWatch.launchd(job: job, serverPID: 1, destination: "/Applications/Visor.app", source: nil, backup: nil,
-                                            previousPlist: nil, reloads: false, note: "/n", newVersion: "1", oldVersion: "1")
-        #expect(same.start == "launchctl kickstart -k gui/$(id -u)/com.LoganShire.Visor.server")
-        let changed = ServerAgentWatch.launchd(job: job, serverPID: 1, destination: "/Applications/Visor.app", source: nil, backup: nil,
-                                               previousPlist: nil, reloads: true, note: "/n", newVersion: "2", oldVersion: "1")
-        #expect(changed.start.hasSuffix("launchctl bootstrap gui/$(id -u) '/Users/me/Library/LaunchAgents/com.LoganShire.Visor.server.plist'"))
-        #expect(changed.script().contains("while kill -0 1 2>/dev/null"), "it waits for the server to go first")
+        let register = "'/Applications/Visor.app/Contents/MacOS/Visor' server-agent register"
+        #expect(ServerAgentWatch.registerCommand(destination: "/Applications/Visor.app", executable: "Visor") == register)
+        let restart = ServerAgentWatch.launchd(job: job, serverPID: 1, destination: "/Applications/Visor.app", executable: "Visor",
+                                               source: nil, backup: nil, note: "/n", newVersion: "1", oldVersion: "1")
+        #expect(restart.start == "launchctl kickstart -k gui/$(id -u)/com.LoganShire.Visor.server 2>/dev/null || " + register)
+        // Another build in place, or the one before put back: booted out and
+        // registered again (`server-agent register`), never a kickstart.
+        let update = ServerAgentWatch.launchd(job: job, serverPID: 1, destination: "/Applications/Visor.app", executable: "Visor",
+                                              source: "/tmp/New/Visor.app", backup: "/tmp/Previous/Visor.app", note: "/n",
+                                              newVersion: "2", oldVersion: "1")
+        #expect(update.start == register)
+        #expect(update.reload == register)
+        #expect(restart.reload == register)
+        #expect(update.previousPlist == nil, "the plist is the bundle's: it comes back with it")
+        let script = update.script()
+        #expect(!script.contains("bootstrap"))
+        #expect(script.contains("while kill -0 1 2>/dev/null"), "it waits for the server to go first")
+        // The rollback: the bundle put back before it's registered afresh.
+        let undo = script.components(separatedBy: "rolled back")[0]
+        let putBack = undo.range(of: "mv '/tmp/Previous/Visor.app' '/Applications/Visor.app'")
+        let registered = script.range(of: register, options: .backwards)
+        #expect(putBack != nil && registered != nil && putBack!.lowerBound < registered!.lowerBound)
     }
 }

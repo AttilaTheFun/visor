@@ -2,7 +2,8 @@
 // docs/containers.md): VisorContainer's engine on Apple's Containerization,
 // given to the server as its SessionsContainer. Its settings are the
 // server's, resolved for this Mac (its cores, the memory free when it
-// starts); its assets and root filesystem on the Containers volume; its
+// starts); its assets and root filesystem on the Visor volume (Containers/),
+// Sessions and Sources shared at their paths as volumes.json has them; its
 // relay's socket in the data folder's run/ (this user's alone), carried to
 // agent-proxy's relay port in this same process with the relay's token from
 // the server's secrets; and the driver link's socket beside it, carried to
@@ -31,8 +32,10 @@ final class MacSessionsContainer: SessionsContainer {
     init(settings: ServerSettings, placed: @escaping @Sendable () async -> Int) {
         let kept = KeptSettings(settings)
         self.settings = kept
-        let data = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Visor")
+        let data = MacPlaces.data
+        let status = MacPlaces.folders.data
         let run = data.appendingPathComponent("run", isDirectory: true)
+        let volumes = DiskVolumes.locate(dataDirectory: status)
         let images = ContainerizationBackend()
         let token = KeptSecret(AgentProxySettings.relayTokenName, in: ServerPlatform.current.secrets)
         let resources = Bundle.main.resourceURL
@@ -40,22 +43,27 @@ final class MacSessionsContainer: SessionsContainer {
         let manifest = ContainerManifest.inResources(resources)
         engine = ContainerEngine(context: ContainerEngine.Context(
             host: .current,
-            locate: { try ContainerLayout.locate(DiskVolumes.locate(dataDirectory: data)) },
+            locate: { try ContainerLayout.locate(DiskVolumes.locate(dataDirectory: status)) },
             linuxPrograms: linux.flatMap { FileManager.default.fileExists(atPath: $0.path) ? $0 : nil },
             version: VisorMacApp.bundleVersion,
+            sessions: volumes.sessions.path,
             relaySocket: run.appendingPathComponent("relay.sock"),
             relayToken: { token.value },
             driverSocket: run.appendingPathComponent("driver.sock"),
             driverPort: MacServer.agentProtocolPort,
             assets: images,
             backend: ContainerizationMachines(images: images),
-            configuration: { Self.configuration(kept.current, manifest: manifest) },
+            configuration: {
+                Self.configuration(kept.current, manifest: manifest, sources: DiskVolumes.locate(dataDirectory: status).sources.readyPath)
+            },
             placedSessions: placed,
             log: { ServerPlatform.current.log($0) }))
     }
 
-    /// The settings as the engine takes them, for this Mac.
-    static func configuration(_ settings: ServerSettings, manifest: ContainerManifest?) -> ContainerEngineConfiguration {
+    /// The settings as the engine takes them, for this Mac: the checkouts'
+    /// folder the setting's, else the Sources volume when it's mounted
+    /// (`sources`), shared at the same path.
+    static func configuration(_ settings: ServerSettings, manifest: ContainerManifest?, sources: String?) -> ContainerEngineConfiguration {
         let container = settings.container ?? ContainerSettings()
         let info = ProcessInfo.processInfo
         return ContainerEngineConfiguration(
@@ -65,7 +73,7 @@ final class MacSessionsContainer: SessionsContainer {
             idleMinutes: container.idleMinutes,
             image: ContainerAssets.image(manifest: manifest, override: container.imageDigest),
             relayPort: settings.agentProxy?.relayPort,
-            checkouts: container.checkouts)
+            checkouts: container.checkouts ?? sources)
     }
 
     func status() async -> ContainerStatus { await engine.status() }
@@ -79,6 +87,8 @@ final class MacSessionsContainer: SessionsContainer {
     var sharedFolders: [String] { engine.sharedFolders(engine.context.configuration()) }
 
     func startAgent(_ agent: ContainerAgent) async throws -> any ContainerAgentRun { try await engine.startAgent(agent) }
+
+    func run(_ command: ContainerCommand) async throws -> ContainerCommandOutput { try await engine.run(command) }
 
     @MainActor
     func settingsChanged(_ settings: ServerSettings) {

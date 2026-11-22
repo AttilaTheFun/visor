@@ -1,6 +1,6 @@
 // Settings' Sessions container section (docs/containers.md): its switch,
 // the readiness row under it — this Mac (macOS 26 or later, Apple silicon,
-// virtualization), the Containers volume, and the assets on it — and the
+// virtualization), the Visor volume, and the assets on it — and the
 // container as the server's engine has it (`GET /api/container`: its state,
 // CPUs and memory, image, egress check and errors), with Start and Stop.
 // The switch is off, and can't be turned on, unless this Mac can run it.
@@ -138,13 +138,12 @@ struct ContainerSettingsSection: View {
 
     /// This Mac's readiness, and the image it would run.
     static func look(override: String) -> (readiness: ContainerReadiness, image: ImageDigest?) {
-        let data = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Visor")
-        let volumes = DiskVolumes.locate(dataDirectory: data)
+        let volumes = DiskVolumes.locate(dataDirectory: MacPlaces.folders.data)
         let image = ContainerAssets.image(manifest: ContainerManifest.inResources(Bundle.main.resourceURL),
                                           override: override.isEmpty ? nil : override)
         let assets = (try? ContainerLayout.locate(volumes)).map {
             ContainerAssets(layout: $0, image: image, backend: ContainerizationBackend()).status()
         }
-        return (ContainerReadiness(host: .current, volume: volumes.containers, assets: assets), image)
+        return (ContainerReadiness(host: .current, volume: volumes.visor, assets: assets), image)
     }
 }

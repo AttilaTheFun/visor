@@ -88,15 +88,35 @@ public final class ClaudeHarness: AgentHarness {
     /// still says so.
     public static func refreshModels() async -> ModelRefresh {
         guard let executable = ToolPath.resolve("claude") else { return .unchanged }
-        let request = #"{"type":"control_request","request_id":"visor-models","request":{"subtype":"initialize"}}"#
-        let parsed = await Command.ask(executable, ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose"],
-                                       saying: [request], environment: ToolPath.environment()) { line -> ModelList? in
-            guard let object = JSON.object(line), object["type"] as? String == "control_response",
-                  let response = object["response"] as? [String: Any],
-                  let list = ((response["response"] as? [String: Any]) ?? response)["models"] as? [[String: Any]] else { return nil }
-            // The answer, whatever it holds: an empty list ends the asking too.
-            return parse(models: list) ?? ModelList(models: [], defaultModel: nil)
+        let parsed = await Command.ask(executable, modelsArguments, saying: [modelsRequest], environment: ToolPath.environment()) { line in
+            models(inLine: line)
         }
+        return take(parsed)
+    }
+
+    /// `claude`'s arguments for the models' `initialize`, wherever it runs
+    /// (here, or in the Sessions container: VisorServer+ContainerClaude).
+    package static let modelsArguments = ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose"]
+    /// The `initialize` control request, a line of its standard input.
+    package static let modelsRequest = #"{"type":"control_request","request_id":"visor-models","request":{"subtype":"initialize"}}"#
+
+    /// The models in a line of what `claude` answered `initialize` with:
+    /// the answer, whatever it holds (an empty list ends the asking too);
+    /// nil for any other line.
+    package static func models(inLine line: String) -> ModelList? {
+        guard let object = JSON.object(line), object["type"] as? String == "control_response",
+              let response = object["response"] as? [String: Any],
+              let list = ((response["response"] as? [String: Any]) ?? response)["models"] as? [[String: Any]] else { return nil }
+        return parse(models: list) ?? ModelList(models: [], defaultModel: nil)
+    }
+
+    /// The models in what `claude` wrote, by line; nil when no line answered.
+    package static func models(inOutput text: String) -> ModelList? {
+        text.split(separator: "\n").lazy.compactMap { models(inLine: String($0)) }.first
+    }
+
+    /// An answer taken, as the list held is replaced or doubted.
+    package static func take(_ parsed: ModelList?) -> ModelRefresh {
         guard let parsed, !parsed.models.isEmpty else { return .unchanged }
         return asked.withLock { asked in
             if !accepts(parsed.models, over: asked.taken?.models), asked.doubted != parsed.models {

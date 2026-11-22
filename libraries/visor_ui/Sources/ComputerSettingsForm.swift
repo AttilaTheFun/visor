@@ -70,7 +70,7 @@ struct ComputerSettingsForm: View {
                          : "This computer does not know this device as its owner's. Type the password its Visor menu bar app shows and save.")
                 }
             }
-            if overSSH, VisorHost.ssh != nil { DeviceKeySection() }
+            if overSSH, VisorHost.ssh != nil { DeviceKeySection(host: host) }
             if !overSSH, VisorHost.ssh != nil, !host.sshPaths.isEmpty {
                 Section {
                     Button("Use SSH") {

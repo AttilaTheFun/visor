@@ -109,6 +109,12 @@ public final class VisorServer {
     /// A folder for each session (VISOR_SESSIONS_DIR): nil where sessions
     /// work where they are asked to.
     public var sessionFolders: SessionFolders?
+    /// Where a session moved here from another computer, and a Super
+    /// Compact's new session, gets its folder (`<root>/<Agent>/<id>`) when
+    /// the server keeps no folder for each session: the Sessions volume on
+    /// a Mac that has one (Visor.app's), else nil, the data folder's
+    /// `Sessions/` (VisorServer+MigrationArrival).
+    public var arrivalRoot: String?
     /// The front this server sits behind when its auth is `none`
     /// (VISOR_TRUST and the headers it names): why a request is let in,
     /// and whom it names. Nil: anyone who reaches it, as `owner`.
@@ -225,7 +231,7 @@ public final class VisorServer {
         sharedAgentToken = Self.keptSharedAgentToken()
         sessionAgentTokens = Self.keptSessionAgentTokens()
         runnerTokens = RunnerTokens(secrets: Self.secrets)
-        adminToken = AdminToken(keptIn: Self.secrets)
+        adminToken = AdminToken(keptIn: Self.secrets, keepingToken: Self.keepsAdminToken)
         // Its issuer is this server's id, made below the first time.
         agentTokens = AgentTokens(secrets: Self.secrets, issuer: "")
         Self.forgetRetiredSecrets()

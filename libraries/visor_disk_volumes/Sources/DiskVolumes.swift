@@ -1,31 +1,34 @@
-// How Visor finds its two volumes, read-only.
+// How Visor finds its three volumes, read-only.
 
 import Foundation
 
-/// Visor's two volumes as Visor's server finds them: volumes.json (Visor
+/// Visor's three volumes as Visor's server finds them: volumes.json (Visor
 /// Disk Utility's) for what they are, and the mount points themselves for
 /// whether they're there. Nothing here changes a disk or runs a tool.
 public struct DiskVolumes: Equatable, Sendable {
     public var sessions: LocatedVolume
-    public var containers: LocatedVolume
+    public var sources: LocatedVolume
+    public var visor: LocatedVolume
     /// volumes.json as read; nil when there's none, or it's unreadable or of
     /// a later format.
     public var status: VolumesStatus?
 
-    public init(sessions: LocatedVolume, containers: LocatedVolume, status: VolumesStatus?) {
+    public init(sessions: LocatedVolume, sources: LocatedVolume, visor: LocatedVolume, status: VolumesStatus?) {
         self.sessions = sessions
-        self.containers = containers
+        self.sources = sources
+        self.visor = visor
         self.status = status
     }
 
     public subscript(role: VolumeRole) -> LocatedVolume {
         switch role {
         case .sessions: sessions
-        case .containers: containers
+        case .sources: sources
+        case .visor: visor
         }
     }
 
-    /// Finds both, from volumes.json in Visor's data folder and the mount
+    /// Finds the three, from volumes.json in Visor's data folder and the mount
     /// points. `isMountPoint` is the check of a path (tests give their own).
     public static func locate(dataDirectory: URL,
                               isMountPoint: (String) -> Bool = DiskVolumes.isMountPoint) -> DiskVolumes {
@@ -35,7 +38,7 @@ public struct DiskVolumes: Equatable, Sendable {
             let path = record?.path ?? role.mountPoint
             return LocatedVolume(role: role, path: path, isMounted: isMountPoint(path), record: record)
         }
-        return DiskVolumes(sessions: located(.sessions), containers: located(.containers), status: status)
+        return DiskVolumes(sessions: located(.sessions), sources: located(.sources), visor: located(.visor), status: status)
     }
 
     /// volumes.json, if it's there and of a format this reads.

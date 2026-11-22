@@ -18,11 +18,6 @@ extension VisorAgentServer {
             send(.signIn(session: session, code: code))
         }
     }
-    /// By polling, every answer is the state whole, and words are never
-    /// streamed: nothing to ask.
-    public func askState(_ session: String) {
-        if polling == nil { send(.state(session: session)) }
-    }
     public func unsubscribe(_ session: String) {
         if let polling { polling.states.removeValue(forKey: session)?.cancel() } else { send(.unsubscribe(session: session)) }
     }
@@ -216,7 +211,16 @@ extension VisorAgentServer {
     public func authorizeSSHKey(_ line: String) async throws {
         var body = Envelope(type: "ssh")
         body.text = line
+        // The device its line is tagged with (`visor:<device>`).
+        body.title = VisorHost.deviceName
         let reply = try await call("POST", "/ssh/keys", body)
+        if let error = reply.error { throw AgentServerError.message(error) }
+    }
+
+    public func forgetSSHKey(_ line: String) async throws {
+        var body = Envelope(type: "ssh")
+        body.text = line
+        let reply = try await call("POST", "/ssh/keys/forget", body)
         if let error = reply.error { throw AgentServerError.message(error) }
     }
 }

@@ -8,15 +8,15 @@ import VisorContainerCore
 
 @Suite struct ReadinessTests {
     static let able = ContainerHost(systemVersion: "26.1", isMacOS26OrLater: true, isAppleSilicon: true, virtualizationSupported: true)
-    static let mounted = LocatedVolume(role: .containers, path: "/Volumes/Containers", isMounted: true, record: nil)
-    static let unmounted = LocatedVolume(role: .containers, path: "/Volumes/Containers", isMounted: false, record: nil)
+    static let mounted = LocatedVolume(role: .visor, path: "/Volumes/Visor", isMounted: true, record: nil)
+    static let unmounted = LocatedVolume(role: .visor, path: "/Volumes/Visor", isMounted: false, record: nil)
     static let image = ImageDigest("sha256:" + String(repeating: "ab", count: 32))!
     static let complete = ContainerAssetStatus(kernel: true, initfs: true, template: true, image: image)
 
     @Test func everythingThereIsReady() {
         let readiness = ContainerReadiness(host: Self.able, volume: Self.mounted, assets: Self.complete)
         #expect(readiness.canEnable && readiness.isReady)
-        #expect(readiness.checks.map(\.name) == ["macOS 26 or later", "Apple silicon", "Virtualization", "Containers volume", "Assets"])
+        #expect(readiness.checks.map(\.name) == ["macOS 26 or later", "Apple silicon", "Virtualization", "Visor volume", "Assets"])
         #expect(readiness.isEnabled(setting: true))
         #expect(!readiness.isEnabled(setting: false))
     }

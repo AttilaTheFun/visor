@@ -127,6 +127,25 @@ extension ServerTests {
         #expect(!server.adminToken.admits(first) && server.adminToken.admits(reset))
     }
 
+    /// Visor.app keeps the token itself too (`Visor admin-token` prints
+    /// it), in its own secrets; a server that doesn't ask keeps the hash
+    /// alone.
+    @Test func whereAskedTheTokenItselfIsKeptWithTheSecrets() throws {
+        #expect(VisorServer.secrets.get(VisorServer.adminTokenSecret) == nil)
+        let secrets = MemorySecrets()
+        let kept = AdminToken(keptIn: secrets, keepingToken: true)
+        guard case .success(let first) = kept.create() else { Issue.record("not made"); return }
+        #expect(secrets.get(VisorServer.adminTokenSecret) == first)
+        guard case .success(let second) = kept.rotate(presenting: first) else { Issue.record("not rotated"); return }
+        #expect(secrets.get(VisorServer.adminTokenSecret) == second, "the rotated one, in its place")
+        let reset = try #require(kept.reset())
+        #expect(secrets.get(VisorServer.adminTokenSecret) == reset)
+        #expect(AdminToken(keptIn: secrets).admits(reset), "and its hash, as always")
+        let hashOnly = MemorySecrets()
+        _ = AdminToken(keptIn: hashOnly).create()
+        #expect(hashOnly.get(VisorServer.adminTokenSecret) == nil)
+    }
+
     @Test func aTokenGivenAtLaunchIsHeldAsItsHashAloneAndNeverWritten() throws {
         let given = AdminToken.generate()
         server.useAdminTokenGivenAtLaunch(given)

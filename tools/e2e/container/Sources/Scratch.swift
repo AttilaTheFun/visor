@@ -21,7 +21,7 @@ struct Scratch {
     let root: URL
     /// The server's data folder, as agent-proxy keeps it.
     let data: URL
-    /// The Containers volume's Visor folder, as the engine lays it out:
+    /// The Visor volume's Containers folder, as the engine lays it out:
     /// the run's own, or the cache.
     let layout: ContainerLayout
     /// Whether `layout` is a cache kept between runs.
@@ -33,7 +33,7 @@ struct Scratch {
     init(sessions volume: String, cache: URL? = nil) {
         root = URL(fileURLWithPath: "/tmp/visor-e2e-container-\(id)", isDirectory: true)
         data = root.appendingPathComponent("data", isDirectory: true)
-        layout = ContainerLayout(root: cache ?? root.appendingPathComponent("Containers/Visor", isDirectory: true))
+        layout = ContainerLayout(root: cache ?? root.appendingPathComponent("Visor/Containers", isDirectory: true))
         cached = cache != nil
         relaySocket = root.appendingPathComponent("run/relay.sock")
         sessions = URL(fileURLWithPath: volume, isDirectory: true).appendingPathComponent(".visor-e2e-container-\(id)", isDirectory: true)

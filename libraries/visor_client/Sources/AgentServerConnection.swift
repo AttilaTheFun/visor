@@ -994,7 +994,6 @@ public final class AgentServerConnection: Identifiable {
         }
         transcript.info = sessions.first { $0.id == sessionID }
         transcript.children = children(of: sessionID)
-        transcript.askState = { [weak self] in self?.server.askState(sessionID) }
         transcripts[sessionID] = transcript
         startSyncing(sessionID, transcript)
         return transcript

@@ -7,8 +7,6 @@ import VisorProtocol
 
 extension VisorServer {
     func broadcast(_ envelope: Envelope, session: SessionRecord) {
-        // The words streamed before it go first (VisorServer+Streams).
-        if envelope.type != "delta" { flushStreams(session) }
         for key in session.subscribers {
             connections[key]?.send(envelope)
         }
@@ -17,6 +15,9 @@ extension VisorServer {
         if envelope.type != "entry", envelope.type != "transcript", envelope.type != "earlier" {
             stateChanged(session)
         }
+        // What it told may have moved the turn on (an approval asked or
+        // answered, a sign-in begun, the turn's end): told after it.
+        if envelope.type != "turn" { tellTurn(session) }
     }
 
     /// Nothing to say is nothing sent.
@@ -25,6 +26,10 @@ extension VisorServer {
     }
 
     func broadcastSessions() {
+        // A turn moved on by what wasn't an agent's event or an envelope
+        // (a session put away, ended, its agent replaced): told now, and
+        // listed as it stands.
+        for record in sessions { tellTurn(record, listed: true) }
         let envelope = Envelope.sessions(sessions.map(\.info))
         for connection in connections.values where connection.authenticated { connection.send(envelope) }
         sessionsChanged()

@@ -63,11 +63,6 @@ public enum VolumePlanner {
     static func caseNote(_ role: VolumeRole) -> String {
         let what = "It's case-insensitive APFS: names differing only in case (Makefile and makefile, Foo.h and foo.h) "
             + "are one file here, so a Linux checkout or build in the container can collide or fail where a Linux disk wouldn't."
-        switch role {
-        case .sessions:
-            return what + " It's adopted as it is, never reformatted. To change it, export the sessions, then remake the volume yourself."
-        case .containers:
-            return what + " Erase Containers… remakes it case-sensitive."
-        }
+        return what + " It's adopted as it is, never reformatted. To change it, move what's on it elsewhere, then remake the volume yourself."
     }
 }

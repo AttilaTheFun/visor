@@ -19,6 +19,7 @@ extension SessionInfo {
         if let loopWake { o["loopWake"] = .number(loopWake) }
         if let loopCron { o["loopCron"] = .string(loopCron) }
         if !background.isEmpty { o["background"] = .array(background.map(\.json)) }
+        if let turn, !turn.isIdle { o["turn"] = turn.json }
         if let memory { o["memory"] = .number(Double(memory)) }
         if let otherBranch { o["otherBranch"] = .string(otherBranch) }
         if let agentState { o["agentState"] = .string(agentState.rawValue) }
@@ -61,6 +62,7 @@ extension SessionInfo {
         loopWake = json["loopWake"].double
         loopCron = json["loopCron"].string
         background = json["background"].array?.compactMap(StatusItem.init(json:)) ?? []
+        turn = TurnState(json: json["turn"])
         memory = json["memory"].int64
         otherBranch = json["otherBranch"].string
         agentState = json["agentState"].string.flatMap(AgentState.init(rawValue:))

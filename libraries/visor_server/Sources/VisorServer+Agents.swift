@@ -349,6 +349,8 @@ extension VisorServer {
         }
         // A conversation carried on elsewhere is picked up on this branch.
         record.process.resume(at: record.wentOnElsewhere ? record.leaf : nil)
+        // On its way until the agent says its turn has begun.
+        if turn { record.sending = true }
         do {
             try record.process.send(forAgent)
             // The spawn happened inside `send`, so the pid is knowable
@@ -394,16 +396,18 @@ extension VisorServer {
         // (a goal's next step, a loop waking): the server's, not the
         // person's — and not the mail's it may follow.
         if case .busy(true) = event, !record.info.busy { record.info.turnOrigin = .system }
-        // Streamed words wait for the session's next flush; anything else
-        // tells what streamed before it first (VisorServer+Streams).
+        // Streamed words say only that the agent is responding: told
+        // once, when the turn's state moves to it (VisorServer+Turn); the
+        // pieces after the first do nothing at all.
         if case .delta = event {
+            guard !record.responding else { return }
             _ = record.apply(event)
-            flushStreamsSoon(record)
+            tellTurn(record)
             return
         }
-        flushStreams(record)
         // Nothing to say is nothing sent.
         broadcast(record.apply(event), session: record)
+        tellTurn(record)
         noteSubagents(after: event, of: record)
         // Nil once the agent has gone.
         if case .memory(nil) = event { noteAgentWent(record) }

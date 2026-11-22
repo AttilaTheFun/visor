@@ -20,9 +20,9 @@ import VisorServices
 /// Observed (Observation) through one counter, `tick`, advanced when views
 /// are told: every property a view reads touches it, and the state itself
 /// is kept untracked, so a frame's changes reach a view once. The reply
-/// being written (`responding`, SessionTranscript+Responding) has a
-/// counter and a faster frame of its own, `respondingTick` and
-/// `respondingFrame`: a second is too slow for words as they come.
+/// being written is not drawn: where the turn stands (`turnState`:
+/// sending, thinking, responding, waiting on something) is one line under
+/// the thread, and the reply appears when its row syncs.
 @MainActor
 @Observable
 public final class SessionTranscript {
@@ -106,38 +106,8 @@ public final class SessionTranscript {
     public func displayID(of entry: TranscriptEntry) -> String { displayIDs[entry.id] ?? entry.id }
 
     /// The ids of the rows the thread shows, in order: the record's under
-    /// their display ids, a reply of a turn that has ended and is not on
-    /// the record yet, what was just sent and is shown, then the reply
-    /// being written.
-    var shownIDs: [String] {
-        _entries.map(displayID(of:)) + respondingRows(ofEndedTurn: true).map(\.id) + _sending.filter(\.shown).map(\.id)
-            + respondingRows(ofEndedTurn: false).map(\.id)
-    }
-
-    /// Advanced when views are told of the replies being written: at most
-    /// once a `respondingFrame` (SessionTranscript+Responding).
-    var respondingTick = 0
-    /// How often, at most, views are told of the words of a reply being
-    /// written (nanoseconds): four times a second, a pace a reader follows
-    /// and a long reply's markdown is drawn again at without cost.
-    public static var respondingFrame: UInt64 = 250_000_000
-    /// The replies being written, by message id, in the order they began.
-    @ObservationIgnored var _responding: [Responding] = []
-    /// A responding frame is running, something changed in it, and what
-    /// ends it.
-    @ObservationIgnored var respondingFraming = false
-    @ObservationIgnored var respondingDirty = false
-    @ObservationIgnored var respondingFrameEnds: Task<Void, Never>?
-    /// How many times views have been told of the replies, for tests.
-    @ObservationIgnored var respondingAnnounced = 0
-    /// Words were the last thing the turn did: no tool or thinking since.
-    @ObservationIgnored var writingNow = false
-    /// Asks the server for the session's state again, whole: the words
-    /// held of a reply don't meet a `delta`'s `from`. Set by the
-    /// connection that owns this.
-    @ObservationIgnored var askState: (() -> Void)?
-    /// The state has been asked for and has not come yet.
-    @ObservationIgnored var stateAsked = false
+    /// their display ids, then what was just sent and is shown.
+    var shownIDs: [String] { _entries.map(displayID(of:)) + _sending.filter(\.shown).map(\.id) }
 
     /// A rebuilt set of rows: a row that is new here and has the same role
     /// and words as one that went takes that one's display id.
@@ -195,11 +165,31 @@ public final class SessionTranscript {
         get { _ = tick; return _activity }
         set { _activity = newValue; changed() }
     }
-    @ObservationIgnored var _busy: Bool = false
+    @ObservationIgnored private var _busy: Bool = false
     public var busy: Bool {
         get { _ = tick; return _busy }
-        set { _busy = newValue; changed() }
+        set {
+            _busy = newValue
+            // A turn running: what was sent has reached the agent.
+            if newValue { awaitingTurn = false }
+            changed()
+        }
     }
+    /// Where the turn stands as the server says (`ephemeral` and `turn`);
+    /// nil from a server before turn states, or before it has said.
+    @ObservationIgnored private var _toldTurn: TurnState? = nil
+    var toldTurn: TurnState? {
+        get { _ = tick; return _toldTurn }
+        set {
+            guard newValue != _toldTurn else { return }
+            _toldTurn = newValue
+            if newValue?.isIdle == false { awaitingTurn = false }
+            changed()
+        }
+    }
+    /// A message was put in the thread to go to an idle agent, and the
+    /// server has said nothing of a turn since: it is on its way.
+    @ObservationIgnored var awaitingTurn = false
     @ObservationIgnored private var _error: String? = nil
     public var error: String? {
         get { _ = tick; return _error }
@@ -286,7 +276,29 @@ public final class SessionTranscript {
     @ObservationIgnored private var _sending: [Outgoing] = []
     public var sending: [Outgoing] {
         get { _ = tick; return _sending }
-        set { _sending = newValue; changed() }
+        set {
+            // One more in the thread, for an idle agent: sending until the
+            // server says the turn has moved on (one put there once its
+            // turn is under way has got there).
+            let shown = Set(_sending.filter(\.shown).map(\.id))
+            if newValue.contains(where: { $0.shown && !shown.contains($0.id) }), !_busy, _toldTurn?.isIdle ?? true { awaitingTurn = true }
+            _sending = newValue
+            if !_sending.contains(where: \.shown) { awaitingTurn = false }
+            changed()
+        }
+    }
+
+    /// Where the turn stands, for the line under the thread: the server's
+    /// word (TurnState), or, from a server before turn states, what its
+    /// busy, status lines, approval, sign-in and background say
+    /// (TurnState+Precedence). A message this client just put in the
+    /// thread is `sending` until the server says more.
+    public var turnState: TurnState {
+        _ = tick
+        let told = _toldTurn ?? TurnState.of(approval: _pendingApproval, signIn: _signIn != nil, busy: _busy, sending: false,
+                                              responding: false, status: _turnStatus, background: _info?.background ?? [])
+        if told.isIdle, awaitingTurn { return TurnState(.sending) }
+        return told
     }
 
     /// The generation of the rows held; a different one in an answer means
@@ -465,7 +477,6 @@ public final class SessionTranscript {
         loaded = true
         keep?(write, SyncState(revision: revision, generation: generation))
         settleSending()
-        settleResponding()
         if first { flush() } else if wasCatchingUp && !catchingUp { endCatchUp() }
     }
 
@@ -475,8 +486,8 @@ public final class SessionTranscript {
     func release() {
         entries = []
         displayIDs = [:]
-        // Told again on subscribing (`ephemeral`), as the server has them.
-        clearResponding()
+        // Told again on subscribing (`ephemeral`), as the server has it.
+        toldTurn = nil
         loaded = false
         // Asked for whole again, unless the cache says where it stood.
         revision = 0
@@ -623,7 +634,7 @@ public final class SessionTranscript {
             // are taken here only before the first sync has answered.
             if !loaded { sync(envelope) }
             activity = envelope.activity
-            takeBusy(envelope.busy ?? false)
+            busy = envelope.busy ?? false
             error = envelope.error
             take(notice: envelope.notice)
         case "ephemeral":
@@ -631,30 +642,29 @@ public final class SessionTranscript {
             turnStatus = envelope.status ?? []
             activity = envelope.activity
             latestActivity = envelope.activity
-            takeBusy(envelope.busy ?? false)
-            // The replies being written, as the server has them now.
-            takeStreams(envelope.streams ?? [])
+            busy = envelope.busy ?? false
+            // Where the turn stands (none from a server before turn states).
+            toldTurn = envelope.turn
             pendingApproval = envelope.approval
             signIn = envelope.signIn
             take(notice: envelope.notice)
         case "status":
             turnStatus = envelope.status ?? []
-            // Thinking or a tool: the words have stopped for now.
-            writingNow = false
-        case "delta":
-            // More of a reply being written, drawn until its row is synced.
-            takeDelta(id: envelope.id ?? "stream", text: envelope.text ?? "", from: envelope.from)
-        case "streamEnd":
-            endStream(id: envelope.id)
+        case "turn":
+            toldTurn = envelope.turn
+        case "delta", "streamEnd":
+            // A reply's words as a server of 0.64.1 or before streams them: not
+            // drawn. Its row comes with the sync, and the turn's state says
+            // what the agent is doing meanwhile.
+            break
         case "entry":
             // Rows come from the record, over HTTP; the socket's copy is
             // not taken, so there is one source of them.
             break
         case "activity":
             setActivity(envelope.activity)
-            writingNow = false
         case "busy":
-            takeBusy(envelope.busy ?? false)
+            busy = envelope.busy ?? false
             if !busy { pendingApproval = nil }
         case "failure":
             error = envelope.message

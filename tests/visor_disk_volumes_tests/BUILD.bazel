@@ -1,10 +1,13 @@
 load("@rules_swift//swift:swift.bzl", "swift_test")
 load("//tools/swift:defs.bzl", "STRICT_SWIFT")
 
-# Visor's two volumes (libraries/visor_disk_volumes): diskutil's plists
+# Visor's three volumes (libraries/visor_disk_volumes): diskutil's plists
 # parsed (fixtures from a macOS 27 VM), the adopt-or-create decision, the
-# guard that never lets Sessions be erased, and volumes.json as Visor reads
-# it. Foundation alone: on Linux, in //tests:linux, and on a Mac.
+# guard that never lets Sessions be erased (nor any volume deleted unless
+# asked for), volumes.json as Visor reads it (0.64's `containers` as
+# `visor`), and Visor's folders on the Visor volume and the move onto it,
+# in scratch folders. Foundation alone: on Linux, in //tests:linux, and on
+# a Mac.
 swift_test(
     name = "visor_disk_volumes_tests",
     copts = STRICT_SWIFT,

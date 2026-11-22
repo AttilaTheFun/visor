@@ -32,9 +32,9 @@ wsSend({ type: 'login', password: PW, client: 'probe-order' });
 ws.onmessage = ev => {
   const e = JSON.parse(ev.data);
   if (e.session && e.session !== id) return;
-  if (e.type === 'delta') return log('ws delta', e.id?.slice(0, 14), JSON.stringify(e.text));
+  if (e.type === 'turn') return log('ws turn', e.turn?.phase, (e.turn?.waits ?? []).map(w => w.kind + ':' + w.label.slice(0, 24)).join(' | '));
   if (e.type === 'busy') { busy = e.busy; return log('ws busy', e.busy); }
-  if (['transcript', 'ephemeral', 'entry'].includes(e.type)) return log('ws', e.type, 'rev', e.revision, 'gen', e.generation, '[', rowsOf(e), ']', e.streams ? 'streams=' + e.streams.length : '');
+  if (['transcript', 'ephemeral', 'entry'].includes(e.type)) return log('ws', e.type, 'rev', e.revision, 'gen', e.generation, '[', rowsOf(e), ']', e.turn ? 'turn=' + e.turn.phase : '');
   if (e.type === 'status') return log('ws status', JSON.stringify((e.status ?? []).map(i => `${i.kind}:${i.running ? 'run' : 'done'}:${i.label.slice(0, 24)}`)));
   if (['activity', 'sessions', 'welcome'].includes(e.type)) return;
   log('ws', e.type, JSON.stringify(e).slice(0, 120));
@@ -67,6 +67,6 @@ await new Promise((resolve) => {
   w2.onopen = () => w2.send(JSON.stringify({ type: 'login', password: PW, client: 'probe-eph' }));
   w2.onmessage = ev => { const e = JSON.parse(ev.data);
     if (e.type === 'welcome') w2.send(JSON.stringify({ type: 'subscribe', session: id }));
-    if (e.type === 'ephemeral') { log('EPHEMERAL busy', e.busy, 'streams', (e.streams ?? []).map(s => s.id.slice(0, 14) + ':' + JSON.stringify(s.text.slice(0, 20))).join(' | ')); w2.close(); resolve(); } };
+    if (e.type === 'ephemeral') { log('EPHEMERAL busy', e.busy, 'turn', e.turn?.phase ?? '-', (e.turn?.waits ?? []).map(w => w.kind + ':' + JSON.stringify(w.label.slice(0, 20))).join(' | ')); w2.close(); resolve(); } };
 });
 done = true; log('end', (await rest('DELETE', `/sessions/${id}`)).slice(0, 40)); ws.close(); process.exit(0);

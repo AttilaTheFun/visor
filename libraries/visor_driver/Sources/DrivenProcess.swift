@@ -168,8 +168,14 @@ final class DrivenProcess: HandingBackProcess {
         if state.contextUsed != last.contextUsed || state.contextLimit != last.contextLimit, state.contextUsed > 0 {
             continuation.yield(.context(used: Int(state.contextUsed), limit: state.contextLimit > 0 ? Int(state.contextLimit) : nil))
         }
-        // Last, so a turn's end comes after what it did.
-        if state.busy != last.busy { continuation.yield(.busy(state.busy)) }
+        // Last, so a turn's end comes after what it did. A turn the
+        // wrapper says is running is one its agent has begun: the message
+        // it was sent is no longer on its way (agent_protocol has no word
+        // of its own for that).
+        if state.busy != last.busy {
+            continuation.yield(.busy(state.busy))
+            if state.busy { continuation.yield(.turnBegan) }
+        }
         last = state
     }
 
