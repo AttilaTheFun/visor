@@ -383,6 +383,8 @@ extension VisorServer {
     private func restRestart(_ call: RESTCall) -> HTTPResponse {
         var carry = sessions.filter(\.info.busy).map(\.info.id)
         if let named = call.body.session, !named.isEmpty, !carry.contains(named) { carry.append(named) }
+        // An earlier update's watch still running: refused, never two.
+        if let watched = relaunchWatched() { return HTTPResponse(409, Envelope.error(watched).encoded()) }
         if let message = relaunch(installing: call.body.path, carrying: carry) {
             return HTTPResponse(400, Envelope.error(message).encoded())
         }

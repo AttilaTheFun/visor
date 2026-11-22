@@ -15,14 +15,19 @@ public struct LaunchdHandOverSteps: ServerHandOverSteps {
     /// The app's executable.
     public let executable: String?
     public let port: UInt16
+    /// Told what the person should see while registering waits on macOS
+    /// ("Waiting for macOS to let Visor's server start…").
+    public let notice: @Sendable (String) -> Void
     public let log: @Sendable (String) -> Void
 
     public init(job: LaunchAgentJob, bundleID: String, executable: String? = LaunchAgentJob.ownExecutable,
-                port: UInt16 = Envelope.defaultPort, log: @escaping @Sendable (String) -> Void) {
+                port: UInt16 = Envelope.defaultPort, notice: @escaping @Sendable (String) -> Void = { _ in },
+                log: @escaping @Sendable (String) -> Void) {
         self.job = job
         self.bundleID = bundleID
         self.executable = executable
         self.port = port
+        self.notice = notice
         self.log = log
     }
 
@@ -31,7 +36,7 @@ public struct LaunchdHandOverSteps: ServerHandOverSteps {
     }
 
     public func install() async -> LaunchAgentJob.Action {
-        await ServerAgentService.settle(wanted: true, job: job, bundleID: bundleID, executable: executable, log: log)
+        await ServerAgentService.settle(wanted: true, job: job, bundleID: bundleID, executable: executable, notice: notice, log: log)
     }
 
     public func remove() async -> LaunchAgentJob.Action {
