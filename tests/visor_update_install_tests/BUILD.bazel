@@ -1,0 +1,21 @@
+load("@rules_swift//swift:swift.bzl", "swift_test")
+load("//tools/swift:defs.bzl", "STRICT_SWIFT")
+
+# Visor.app's check of a build Shireworks hands over
+# (libraries/visor_update_install): a link, or anything not a folder,
+# refused before anything runs; the copy out of the group's container,
+# codesign's check of it against Apple's Developer ID, Visor's identifier
+# and the running app's team (no requirement made without its markers),
+# and spctl's assessment, with cp, codesign and spctl played by a fake
+# runner, in a temporary folder.
+# Foundation alone: on Linux, in //tests:linux, and on a Mac.
+swift_test(
+    name = "visor_update_install_tests",
+    copts = STRICT_SWIFT,
+    srcs = glob(["*.swift"]),
+    module_name = "VisorUpdateInstallTests",
+    deps = [
+        "//:foundation",
+        "//libraries/visor_update_install",
+    ],
+)

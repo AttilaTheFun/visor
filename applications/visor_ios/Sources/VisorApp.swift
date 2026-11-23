@@ -7,6 +7,7 @@ import VisorProtocol
 import VisorServices
 import VisorUI
 #if os(iOS)
+import ShakeKit
 #endif
 
 #if os(iOS)
@@ -49,6 +50,9 @@ struct VisorApp: App {
                 // the camera opens this, and adds that computer;
                 // visor://sign-in shows a computer's settings.
                 .onOpenURL { url in store.open(url.absoluteString) }
+                // A shake files a bug report in this repository, as an
+                // issue (ShakeKit: on in every build, by its Info.plist).
+                .shakeToReport(repository: "AttilaTheFun/visor")
         }
     }
 }

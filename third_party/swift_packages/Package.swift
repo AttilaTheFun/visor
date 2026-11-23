@@ -52,10 +52,26 @@ let package = Package(
         // repository, 7 Nov 2026): the build this app is, written at launch to
         // the database it shares with Applications (in the app group its
         // Info.plist names, tools/signing). Applications alone tells of
-        // updates (0.17).
+        // updates (0.17). 0.18 adds UpdateKitInstall (a sandboxed app's
+        // installer service) and the zip hand-over, neither of which Visor.app
+        // asks for (no UpdateKitInstallsFromZip): it is handed the unpacked
+        // build as before (VisorUpdates).
         .package(
             url: "https://github.com/AttilaTheFun/update_kit.git",
-            exact: "0.17.0"
+            exact: "0.18.0"
+        ),
+        // ShakeKit: a shake (Help › Report a Bug… on a Mac) files a GitHub
+        // issue in this repository, with a screenshot and the app's logs.
+        // Visor.app and Visor for iOS alone (applications/visor_mac,
+        // visor_ios), at their root view and scene: nothing portable
+        // (visor_ui, visor_client) depends on it. Every build opts in
+        // (`ShakeKitScope` in their Info.plists); its only sign-in, the one
+        // Logan's apps share (Shireworks signed in on the same device), is
+        // stamped into his CI builds alone (tools/shared_sign_in), so
+        // anyone else's build reports nothing.
+        .package(
+            url: "https://github.com/AttilaTheFun/shake_kit.git",
+            exact: "0.3.0"
         ),
         // Apple's Containerization (docs/containers.md): the Sessions
         // container's image store, ext4 unpacking and init filesystem, and,

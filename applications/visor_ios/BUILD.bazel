@@ -4,10 +4,15 @@ load("@rules_apple//apple:ios.bzl", "ios_application", "ios_extension")
 load("@rules_swift//swift:swift.bzl", "swift_library")
 load("@rules_xcodeproj//xcodeproj:defs.bzl", "xcode_provisioning_profile")
 load("@visor_signing//:signing.bzl", "TEAM_ID")
-load("//tools/signing:defs.bzl", "update_entitlements", "update_group_entitlement", "update_infoplist")
+load("//tools/shared_sign_in:defs.bzl", "shared_sign_in_entitlements", "shared_sign_in_infoplist")
+load("//tools/signing:defs.bzl", "PLACEHOLDER", "update_entitlements", "update_group_entitlement", "update_infoplist")
 load("//tools/variant:defs.bzl", "variant_infoplist")
 
 package(default_visibility = ["//visibility:public"])
+
+# The Info.plist, for the test that holds ShakeKit on in every build
+# (tests/visor_macos_tests).
+exports_files(["Info.plist"])
 
 # Signing: the bundle id here, and your Apple team id in .bazelrc.user
 # (`common --repo_env=VISOR_TEAM_ID=<team>`, see tools/signing), which is
@@ -41,6 +46,23 @@ update_entitlements(
     template = "app.simulator.entitlements",
 )
 
+# CI's device build's (ci_device, below): the same, and, where the builder
+# has it (tools/shared_sign_in: CI's builds to publish), the keychain group
+# of the sign-in Logan's apps share (`<team>.com.LoganShire.github`,
+# ShakeKit's), its lock in UPDATE_APP_GROUP's container above. The App ID's profile
+# must grant both groups.
+shared_sign_in_entitlements(
+    name = "app_ci_entitlements",
+    substitutions = {PLACEHOLDER: update_group_entitlement()},
+    template = "app.entitlements",
+)
+
+# ShakeKit's shared sign-in (GitHubShared…): in CI's device build alone,
+# where the builder has it. It is ShakeKit's only sign-in (shake_kit 0.3):
+# every other build, or a device not signed in to Shireworks, reports
+# nothing.
+shared_sign_in_infoplist(name = "shared_sign_in_plist")
+
 # The client on a phone: compiled Swift, real SwiftUI, the shared VisorUI
 # screens. The host sources are shared with the Mac client (a filegroup);
 # only the @main is guarded by os().
@@ -56,6 +78,7 @@ swift_library(
     module_name = "VisorIOSHost",
     deps = [
         "//:foundation",
+        "@swiftpkg_shake_kit//:ShakeKit",
         "@swiftpkg_update_kit//:UpdateKit",
         "//libraries/visor_client",
         "//libraries/visor_protocol",
@@ -220,6 +243,7 @@ ios_application(
     app_icons = ["//artwork/app-icon:app_icon"],
     bundle_id = BUNDLE_ID,
     entitlements = select({
+        ":ci_device": ":app_ci_entitlements",
         "@apple_support//constraints:device": ":app_entitlements",
         "//conditions:default": ":app_simulator_entitlements",
     }),
@@ -232,7 +256,10 @@ ios_application(
         "Info.plist",
         ":update_plist",
         ":variant_plist",
-    ],
+    ] + select({
+        ":ci_device": [":shared_sign_in_plist"],
+        "//conditions:default": [],
+    }),
     minimum_os_version = "18.0",
     provisioning_profile = select({
         ":ci_device": ":ci_placeholder_profile",

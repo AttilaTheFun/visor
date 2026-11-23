@@ -181,6 +181,7 @@ use_repo(
     "swiftpkg_swift_nio",
     "swiftpkg_swift_nio_ssl",
     "swiftpkg_swift_nio_ssh",
+    "swiftpkg_shake_kit",
     "swiftpkg_swift_sql",
     "swiftpkg_update_kit",
 )
@@ -192,6 +193,12 @@ use_repo(signing, "visor_signing")
 # Visor's one team id (tools/team_id): VISOR_TEAM_ID's real value, or "".
 team_id = use_extension("//tools/team_id:extension.bzl", "team_id")
 use_repo(team_id, "visor_team_id")
+
+# The client id of the sign-in Logan's apps share (ShakeKit's GitHub
+# sign-in), from the builder's environment, not the repo: CI's builds to
+# publish set it from the repository's secrets (tools/shared_sign_in).
+shared_sign_in = use_extension("//tools/shared_sign_in:extension.bzl", "shared_sign_in")
+use_repo(shared_sign_in, "visor_shared_sign_in")
 
 # --- Isomer: SwiftUI for the web, Android, Linux and Windows, from the
 # --- project's registry. The client's libraries import SwiftUI and

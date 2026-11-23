@@ -8,6 +8,7 @@
 	<key>keychain-access-groups</key>
 	<array>
 		<string>$(AppIdentifierPrefix)com.LoganShire.Visor.shared</string>
+		<!-- SHARED_SIGN_IN_KEYCHAIN_GROUP -->
 	</array>
 </dict>
 </plist>

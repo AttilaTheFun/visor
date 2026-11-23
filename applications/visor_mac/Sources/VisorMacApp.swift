@@ -6,6 +6,7 @@
 // socket file (LocalServer).
 
 import AppKit
+import ShakeKit
 import SwiftUI
 import VisorClient
 import VisorProtocol
@@ -93,6 +94,10 @@ struct VisorMacApp: App {
                 .onOpenURL { url in store.open(url.absoluteString) }
                 .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
                 .background(SceneOpeners())
+                // Help › Report a Bug… (below) files one in this
+                // repository, as an issue (ShakeKit: on in every build, by
+                // its Info.plist).
+                .shakeToReport(repository: "AttilaTheFun/visor")
         }
         .handlesExternalEvents(matching: ["*"])
         // Shown at launch: a menu bar app's window is not, unless asked.
@@ -127,6 +132,8 @@ struct VisorMacApp: App {
                 Button(AgentServerProviderUIs.addTitle + "…") { store.addingServer = true }
                     .keyboardShortcut(",", modifiers: [.command, .shift])
             }
+            // Help › Report a Bug… (⌥⌘B).
+            ShakeKitCommands()
         }
         Settings {
             ServerSettingsPane(local: local)

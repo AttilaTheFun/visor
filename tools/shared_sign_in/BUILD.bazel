@@ -1,0 +1,2 @@
+# The sign-in Logan's apps share, stamped into his CI builds alone:
+# defs.bzl (the macros), extension.bzl (the values, from the environment).
