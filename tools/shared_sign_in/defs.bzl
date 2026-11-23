@@ -9,8 +9,9 @@ a lock in an app group's container they all carry too).
     shared_sign_in_infoplist(name = "shared_sign_in_plist")
 
 A build says it only when the builder has all of it (extension.bzl's
-CLIENT_ID and TEAM_ID, and tools/signing's UPDATE_APP_GROUP, the lock's
-group), which CI's builds to publish alone have; and the apps take it in
+CLIENT_ID, tools/team_id's TEAM_ID_REAL, and tools/signing's
+UPDATE_APP_GROUP, the lock's group), which CI's builds to publish alone
+have; and the apps take it in
 those builds alone (their `ci_signed`/`ci_device` selects), so a build to
 run here, and anyone else's, carries none of it. It is ShakeKit's only
 sign-in (shake_kit 0.3: signed in to Shireworks on the same phone or
@@ -25,8 +26,9 @@ it in, with the builder's team as the prefix).
 
 load("@bazel_skylib//rules:expand_template.bzl", "expand_template")
 load("@bazel_skylib//rules:write_file.bzl", "write_file")
-load("@visor_shared_sign_in//:values.bzl", "CLIENT_ID", "TEAM_ID")
+load("@visor_shared_sign_in//:values.bzl", "CLIENT_ID")
 load("@visor_signing//:signing.bzl", "UPDATE_APP_GROUP")
+load("//tools/team_id:defs.bzl", "TEAM_ID_REAL")
 
 # The template's line the shared keychain group takes.
 KEYCHAIN_PLACEHOLDER = "<!-- SHARED_SIGN_IN_KEYCHAIN_GROUP -->"
@@ -41,7 +43,7 @@ def _xml(text):
 def shared_sign_in():
     """Whether the builder has the shared sign-in: its client id, its team
     and the app group of its lock."""
-    return bool(CLIENT_ID and TEAM_ID and UPDATE_APP_GROUP)
+    return bool(CLIENT_ID and TEAM_ID_REAL and UPDATE_APP_GROUP)
 
 def shared_keychain_group(prefix):
     """The shared keychain group as an entry of `keychain-access-groups`,
@@ -58,7 +60,7 @@ def shared_sign_in_infoplist(name, **kwargs):
     if shared_sign_in():
         for key, value in [
             ("GitHubSharedClientID", CLIENT_ID),
-            ("GitHubSharedKeychainGroup", TEAM_ID + "." + KEYCHAIN_NAME),
+            ("GitHubSharedKeychainGroup", TEAM_ID_REAL + "." + KEYCHAIN_NAME),
             ("GitHubSharedLockGroup", UPDATE_APP_GROUP),
             ("GitHubSharedKeychainService", KEYCHAIN_NAME),
         ]:
