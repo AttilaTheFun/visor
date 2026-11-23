@@ -60,7 +60,8 @@ public enum ConversionCopy {
         let there = try entries(at: destination)
         if !there.isEmpty {
             guard replace else {
-                throw DiskVolumesError.blocked("\(destination) holds \(there.count) entries already (\(there.prefix(3).joined(separator: ", "))…): "
+                let listed = there.prefix(3).joined(separator: ", ") + (there.count > 3 ? ", …" : "")
+                throw DiskVolumesError.blocked("\(destination) holds \(there.count) entries already (\(listed)): "
                     + "a copy goes onto an empty volume. Run again with --replace to empty it first.")
             }
             for name in there { try files.removeItem(atPath: (destination as NSString).appendingPathComponent(name)) }
