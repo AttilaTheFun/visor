@@ -35,6 +35,9 @@ public struct UninstallStep: Equatable, Sendable {
         /// One of Visor's volumes deleted, by its APFS volume UUID
         /// (diskutil, as an administrator; VolumeGuard with it asked for).
         case deleteVolume(role: VolumeRole, uuid: String)
+        /// A volume a conversion kept (`Sessions-old-ci`, `Sessions-cs-failed`)
+        /// deleted, by its APFS volume UUID, with the volumes.
+        case deleteKept(name: String, uuid: String)
         /// Moved to the Trash (the apps, last).
         case trash(path: String)
         /// Said only: what a person undoes by hand, never run.

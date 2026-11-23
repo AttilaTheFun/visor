@@ -14,10 +14,13 @@ enum UninstallRunner {
     /// The plan for this Mac now: the disks surveyed for the volumes when
     /// their deletion is asked for.
     static func plan(deleteVolumes: Bool) throws -> UninstallPlan {
-        let volumes = deleteVolumes ? try DiskTool.survey() : nil
+        // The disks, for the volumes when their deletion is asked for, and
+        // always for the volumes a conversion kept (listed if not deleted).
+        let survey = deleteVolumes ? try DiskTool.survey() : try? DiskTool.survey()
         let planner = UninstallPlanner(home: NSHomeDirectory(), app: installed("Visor.app"), diskUtility: ownBundle,
                                        accessGroup: MacUninstallKeychain.ownAccessGroup(bundleID: visorID),
-                                       volumes: volumes.map { survey in VolumeRole.allCases.map { survey.state(for: $0) } } ?? [],
+                                       volumes: deleteVolumes ? survey.map { survey in VolumeRole.allCases.map { survey.state(for: $0) } } ?? [] : [],
+                                       kept: survey.map(KeptVolume.found(in:)) ?? [],
                                        deleteVolumes: deleteVolumes)
         return planner.plan(files: MacUninstallFiles(), keychain: MacUninstallKeychain())
     }
@@ -35,7 +38,7 @@ enum UninstallRunner {
     /// told each step's outcome, a line each.
     static func run(_ plan: UninstallPlan, typed: String?, route: PrivilegeRoute, say: (String) -> Void) {
         // The volumes together, once, where their stage comes.
-        var volumesDone = plan.volumes.isEmpty
+        var volumesDone = plan.steps(.volumes).isEmpty
         for step in plan.steps {
             if step.stage >= .volumes, !volumesDone {
                 deleteVolumes(plan, typed: typed, route: route, say: say)
@@ -58,13 +61,21 @@ enum UninstallRunner {
             say("not done: the volumes weren't deleted: \"\(UninstallConfirmation.phrase(for: roles))\" wasn't typed")
             return
         }
+        var kept: [String] = []
         let commands = plan.steps(.volumes).compactMap { step -> DiskCommand? in
-            guard case let .deleteVolume(role, uuid) = step.action else { return nil }
-            return try? DiskCommand.deleteVolume(role, uuid: uuid)
+            switch step.action {
+            case let .deleteVolume(role, uuid):
+                return try? DiskCommand.deleteVolume(role, uuid: uuid)
+            case let .deleteKept(name, uuid):
+                kept.append(name)
+                return DiskCommand(arguments: ["apfs", "deleteVolume", uuid])
+            default:
+                return nil
+            }
         }
         do {
-            _ = try DiskTool.change(commands, route: route, deleting: Set(roles))
-            say("done: deleted " + roles.map(\.volumeName).joined(separator: ", "))
+            _ = try DiskTool.change(commands, route: route, deleting: Set(roles), deletingKept: Set(kept))
+            say("done: deleted " + (roles.map(\.volumeName) + kept).joined(separator: ", "))
         } catch DiskVolumesError.cancelled {
             say("not done: the volumes weren't deleted (the administrator prompt was cancelled)")
         } catch {
@@ -98,7 +109,7 @@ enum UninstallRunner {
             try files.removeItem(atPath: path)
         case let .trash(path):
             try files.trashItem(at: URL(fileURLWithPath: path), resultingItemURL: nil)
-        case .list, .keep, .note, .deleteVolume:
+        case .list, .keep, .note, .deleteVolume, .deleteKept:
             break
         }
     }

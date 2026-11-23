@@ -28,6 +28,10 @@ enum DiskTool {
                 inTheWay.insert(role.mountPoint)
             }
         }
+        // A staged copy's mount point taken by something else stops Stage.
+        for role in VolumeRole.convertible where !infos.contains(where: { $0.mountPoint == role.stagedMountPoint }) {
+            if FileManager.default.fileExists(atPath: role.stagedMountPoint) { inTheWay.insert(role.stagedMountPoint) }
+        }
         var freeSpace: [String: Int64] = [:]
         for mountPoint in infos.compactMap(\.mountPoint) {
             let free = (try? FileManager.default.attributesOfFileSystem(forPath: mountPoint))?[.systemFreeSize] as? NSNumber
@@ -40,9 +44,10 @@ enum DiskTool {
     /// them against a fresh survey and volumes.json's record of Visor's own
     /// volumes; then the disks as they are after.
     static func change(_ commands: [DiskCommand], route: PrivilegeRoute, deleting: Set<VolumeRole> = [],
-                       fixing: Set<VolumeRole> = []) throws -> DiskSurvey {
+                       fixing: Set<VolumeRole> = [], converting: [VolumeRole: ConversionStep] = [:],
+                       deletingKept: Set<String> = []) throws -> DiskSurvey {
         try VolumeGuard.check(commands, against: survey(), recorded: DiskVolumes.readStatus(at: statusURL), deleting: deleting,
-                              user: user, fixing: fixing)
+                              user: user, fixing: fixing, converting: converting, deletingKept: deletingKept)
         for invocation in route.invocations(of: commands.map(\.argv)) {
             do {
                 _ = try run(invocation)
@@ -109,11 +114,32 @@ enum DiskTool {
 
     /// A program's standard output; throws with its error output if it fails.
     static func run(_ argv: [String]) throws -> Data {
+        let (status, data, said) = try outcome(argv)
+        guard status == 0 else {
+            let message = String(decoding: said.isEmpty ? data : said, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+            throw DiskVolumesError.failed(message.isEmpty ? "\(argv[0]) exited with \(status)." : message)
+        }
+        return data
+    }
+
+    /// A program's exit status, standard output and error output, however
+    /// it exits.
+    static func outcome(_ argv: [String]) throws -> (status: Int32, output: Data, errors: Data) {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: argv[0])
         process.arguments = Array(argv.dropFirst())
         let output = Pipe()
-        let errors = Pipe()
+        // The error output to a file of its own, so a long one (ditto's,
+        // lsof's) never fills a pipe no one reads while the output is read.
+        let errorsURL = FileManager.default.temporaryDirectory.appendingPathComponent("visor-disk-utility-\(UUID().uuidString).err")
+        guard FileManager.default.createFile(atPath: errorsURL.path, contents: nil),
+              let errors = try? FileHandle(forWritingTo: errorsURL) else {
+            throw DiskVolumesError.failed("\(argv[0]) couldn't be started: no file for its error output.")
+        }
+        defer {
+            try? errors.close()
+            try? FileManager.default.removeItem(at: errorsURL)
+        }
         process.standardOutput = output
         process.standardError = errors
         process.standardInput = FileHandle.nullDevice
@@ -123,12 +149,8 @@ enum DiskTool {
             throw DiskVolumesError.failed("\(argv[0]) couldn't be started: \(error.localizedDescription)")
         }
         let data = output.fileHandleForReading.readDataToEndOfFile()
-        let said = errors.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
-        guard process.terminationStatus == 0 else {
-            let message = String(decoding: said.isEmpty ? data : said, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
-            throw DiskVolumesError.failed(message.isEmpty ? "\(argv[0]) exited with \(process.terminationStatus)." : message)
-        }
-        return data
+        let said = (try? Data(contentsOf: errorsURL)) ?? Data()
+        return (process.terminationStatus, data, said)
     }
 }

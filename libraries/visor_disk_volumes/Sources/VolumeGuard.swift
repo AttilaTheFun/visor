@@ -11,7 +11,12 @@
 /// an adopted one of Visor's own the caller names in `fixing`), ever pass. Anything
 /// that would erase or delete Sessions (by name, by mount point, by disk or
 /// by UUID) throws, whoever built the command, unless Sessions itself is
-/// asked for; and so does any argument that's exactly `&&`.
+/// asked for; and so does any argument that's exactly `&&`. A conversion's
+/// commands (VolumeGuard+Conversion: `<Name>-new` added, the swap's and
+/// unswap's renames, unmounts and mounts) pass only for a role named in
+/// `converting`, and only exactly as ConversionPlanner plans that step
+/// from the survey; a kept volume (`<Name>-old-ci`, `<Name>-cs-failed`) is
+/// deleted only when its name is in `deletingKept`.
 public enum VolumeGuard {
     /// What joins commands in the administrator prompt's one shell
     /// (PrivilegeRoute's AppleScript passes it through unquoted): never an
@@ -35,17 +40,30 @@ public enum VolumeGuard {
     /// Visor Disk Utility, the only owner a mount point is given (nil: no
     /// chown at all). `fixing`: the adopted volumes whose mount points'
     /// owner and mode may be put right (Fix, on the card).
+    /// `converting`: the roles whose conversion step this run is (Stage,
+    /// Swap In, unswap). `deletingKept`: the kept volumes' names whose
+    /// deletion was asked for, each typed.
     public static func check(_ commands: [DiskCommand], against survey: DiskSurvey, recorded: VolumesStatus? = nil,
-                             deleting: Set<VolumeRole> = [], user: String? = nil, fixing: Set<VolumeRole> = []) throws {
+                             deleting: Set<VolumeRole> = [], user: String? = nil, fixing: Set<VolumeRole> = [],
+                             converting: [VolumeRole: ConversionStep] = [:], deletingKept: Set<String> = []) throws {
         let sessions = survey.state(for: .sessions)
         var deleted: Set<String> = []
         // The roles an addVolume before it in this run makes.
         var made: Set<VolumeRole> = []
-        for command in commands {
+        // The roles whose conversion step has been matched.
+        var converted: Set<VolumeRole> = []
+        if let joined = commands.first(where: { $0.arguments.contains(commandJoiner) }) {
+            throw DiskVolumesError.notAllowed("\(joined.description) (an argument is exactly \(commandJoiner), "
+                + "which would start another command in the administrator prompt's shell)")
+        }
+        var index = 0
+        while index < commands.count {
+            let command = commands[index]
             let arguments = command.arguments
-            if arguments.contains(commandJoiner) {
-                throw DiskVolumesError.notAllowed("\(command.description) (an argument is exactly \(commandJoiner), "
-                    + "which would start another command in the administrator prompt's shell)")
+            index += 1
+            if isConversionCommand(command) {
+                index += try matchConversion(commands, at: index - 1, survey: survey, converting: converting, used: &converted, user: user) - 1
+                continue
             }
             if command.program == DiskCommand.mdutil {
                 try checkSpotlightOff(arguments, survey: survey, made: made, command: command)
@@ -68,8 +86,10 @@ public enum VolumeGuard {
                 if let role = VolumeRole.allCases.first(where: { $0.volumeName == arguments[4] }) { made.insert(role) }
             case ["apfs", "deleteVolume"]:
                 guard arguments.count == 3 else { throw DiskVolumesError.notAllowed(command.description) }
-                let role = try checkDelete(arguments[2], survey: survey, recorded: recorded, deleting: deleting)
-                deleted.insert(role.volumeName)
+                if let role = try checkDelete(arguments[2], survey: survey, recorded: recorded, deleting: deleting,
+                                              deletingKept: deletingKept) {
+                    deleted.insert(role.volumeName)
+                }
             default:
                 throw DiskVolumesError.notAllowed(command.description)
             }
@@ -85,13 +105,17 @@ public enum VolumeGuard {
     /// A disk (`disk3s8`) is refused: its number can change between this
     /// look and the command. The role deleted.
     private static func checkDelete(_ target: String, survey: DiskSurvey, recorded: VolumesStatus?,
-                                    deleting: Set<VolumeRole>) throws -> VolumeRole {
+                                    deleting: Set<VolumeRole>, deletingKept: Set<String>) throws -> VolumeRole? {
         guard DiskCommand.isVolumeUUID(target) else {
             throw DiskVolumesError.wrongTarget("\(target) isn't an APFS volume UUID: Visor's volumes are deleted by their UUIDs alone, "
                 + "never by a disk number, which can change. Nothing was deleted.")
         }
         guard let (volume, _) = survey.volume(uuid: target) else {
             throw DiskVolumesError.wrongTarget("No APFS volume here has the UUID \(target) now. Nothing was deleted.")
+        }
+        if let kept = KeptVolume.found(in: survey).first(where: { $0.volume.uuid.caseInsensitiveCompare(target) == .orderedSame }) {
+            try checkKeptDelete(kept, deletingKept: deletingKept)
+            return nil
         }
         guard let role = VolumeRole.allCases.first(where: { $0.volumeName == volume.name }), volume.roles.isEmpty else {
             throw DiskVolumesError.wrongTarget("\(volume.device) (\(target)) is \(volume.name), not one of Visor's volumes. Nothing was deleted.")

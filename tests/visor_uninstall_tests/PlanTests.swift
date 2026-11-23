@@ -166,6 +166,24 @@ import VisorUninstall
         #expect(plan.dryRun.contains("Deleted, as you asked"))
     }
 
+    /// The volumes a conversion kept (`Sessions-old-ci`): a line each when
+    /// the volumes stay, deleted with them when they go.
+    @Test func theVolumesAConversionKeptAreListedOrDeletedWithTheVolumes() throws {
+        let kept = KeptVolume(role: .sessions, kind: .rollback,
+                              volume: APFSVolume(device: "disk3s7", name: "Sessions-old-ci", uuid: "68AEACEE-B314-4A78-ADAF-789D4F4FDA99"))
+        let staying = UninstallPlanner(home: Self.home, accessGroup: Self.group, kept: [kept]).plan(files: Self.usedMac(), keychain: Self.keychain)
+        #expect(staying.steps(.kept).map(\.action) == [.keep(path: "Sessions-old-ci")])
+        #expect(staying.dryRun.contains("Kept: Sessions-old-ci (disk3s7, not mounted): kept for rollback (Sessions as it was, case-insensitive). "
+            + "Delete it in Visor Disk Utility (Delete…), or with --delete-volumes"))
+        #expect(staying.steps(.volumes).isEmpty)
+        let going = UninstallPlanner(home: Self.home, accessGroup: Self.group, kept: [kept], deleteVolumes: true)
+            .plan(files: Self.usedMac(), keychain: Self.keychain)
+        #expect(going.steps(.volumes).map(\.action) == [.deleteKept(name: "Sessions-old-ci", uuid: "68AEACEE-B314-4A78-ADAF-789D4F4FDA99")])
+        #expect(going.steps(.kept).isEmpty)
+        #expect(going.volumes.isEmpty, "the phrase names the roles' volumes alone")
+        #expect(going.dryRun.contains("Sessions-old-ci (disk3s7, 68AEACEE-B314-4A78-ADAF-789D4F4FDA99), kept by a conversion of Sessions"))
+    }
+
     @Test func theVolumesTakeTheirNamesTyped() {
         #expect(UninstallConfirmation.phrase(for: [.sessions, .sources, .visor]) == "delete Sessions, Sources and Visor")
         #expect(UninstallConfirmation.phrase(for: [.visor]) == "delete Visor")

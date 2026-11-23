@@ -20,8 +20,15 @@ import VisorUninstall
 /// last; with `--delete-volumes`, the three volumes too, once their names
 /// are typed on standard input as the dry run asks (or given with
 /// `--confirm "<that>"`).
+///
+/// A case-insensitive Sessions or Sources converted (DiskUtilityCLI+Conversion,
+/// docs/volume-conversion.md): `… stage sessions|sources|both`, `…
+/// copy-staged sessions|sources|both [--replace]` (as the person, never
+/// root), `… swap sessions|sources|both`, `… unswap sessions|sources|both`
+/// and `… delete-kept <name> --confirm "delete <name>"`.
 enum DiskUtilityCLI {
     static let verbs: Set<String> = ["status", "create", "erase-containers", "fix-owner", "exclude-visor", "uninstall"]
+        .union(conversionVerbs)
 
     /// Runs and exits when the arguments are a command; else returns, for
     /// the app.
@@ -39,6 +46,7 @@ enum DiskUtilityCLI {
     private static func run(_ arguments: [String]) throws {
         let route: PrivilegeRoute = arguments.contains("--sudo") ? .sudo : .administratorPrompt
         if arguments[0] == "uninstall" { return try uninstall(arguments, route: route) }
+        if conversionVerbs.contains(arguments[0]) { return try report(convert(arguments, route: route)) }
         var survey = try DiskTool.survey()
         switch arguments[0] {
         case "create":
@@ -69,6 +77,11 @@ enum DiskUtilityCLI {
         default:
             break
         }
+        try report(survey)
+    }
+
+    /// The volumes as they are, their conversions, and volumes.json written.
+    static func report(_ survey: DiskSurvey) throws {
         for role in VolumeRole.allCases {
             print(describe(survey.state(for: role)))
             if survey.state(for: role).inPlaceUUID != nil, let owner = DiskTool.owner(of: role.mountPoint), owner != DiskTool.user {
@@ -81,6 +94,10 @@ enum DiskUtilityCLI {
             if exclusions.timeMachineExcluded == false {
                 print("  note: leave it out in System Settings › General › Time Machine › Options… › + › Visor (no app may: macOS 27)")
             }
+        }
+        for status in DiskTool.conversionStatuses(survey) {
+            print("\(status.role.volumeName) conversion: \(status.summary)")
+            status.kept.forEach { print("  kept: \($0.summary)") }
         }
         print("wrote \(try DiskTool.writeStatus(survey).path)")
     }
