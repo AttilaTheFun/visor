@@ -43,11 +43,12 @@ public enum VolumeGuard {
     /// `converting`: the roles whose conversion step this run is (Stage,
     /// Swap In, unswap). `deletingKept`: the kept volumes' names whose
     /// deletion was asked for, each typed. `checker`: Visor Disk Utility's
-    /// own executable, whose root check a swap or unswap must start with.
+    /// own bundle and designated requirement, whose root check (from a
+    /// verified root-owned copy) a swap or unswap must start with.
     public static func check(_ commands: [DiskCommand], against survey: DiskSurvey, recorded: VolumesStatus? = nil,
                              deleting: Set<VolumeRole> = [], user: String? = nil, fixing: Set<VolumeRole> = [],
                              converting: [VolumeRole: ConversionStep] = [:], deletingKept: Set<String> = [],
-                             checker: String? = nil) throws {
+                             checker: ConversionChecker? = nil) throws {
         let sessions = survey.state(for: .sessions)
         var deleted: Set<String> = []
         // The roles an addVolume before it in this run makes.

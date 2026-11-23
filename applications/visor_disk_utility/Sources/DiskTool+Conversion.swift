@@ -8,6 +8,7 @@
 import Darwin
 import DiskVolumes
 import Foundation
+import Security
 
 extension DiskTool {
     /// The staged copy's marker, at `/Volumes/<Name>-new`; nil when there's
@@ -53,11 +54,15 @@ extension DiskTool {
         // source's listing, before and after the copy, catches a write by
         // any other, and Swap In checks again as root.
         try refuseOpenFiles(on: [role.mountPoint, role.stagedMountPoint])
+        // A copy with no quota (its source had none) shares the container's
+        // free space with the Mac: a tenth of it, at least 20 GB, stays free.
+        let free = freeSpace(role.stagedMountPoint)
+        let keepFree = pair.staged.quota > 0 ? 0 : free.map { ConversionPlanner.keptFree(containerFree: $0) } ?? 0
         say("copying \(role.mountPoint) (\(pair.source.device), \(pair.source.uuid)) onto \(role.stagedMountPoint) "
             + "(\(pair.staged.device), \(pair.staged.uuid))")
         return try ConversionCopy.copyAndVerify(role: role, from: role.mountPoint, to: role.stagedMountPoint, sourceUUID: pair.source.uuid,
                                                 newUUID: pair.staged.uuid, owner: currentOwner(), inspector: DarwinFileInspector(),
-                                                destinationFree: freeSpace(role.stagedMountPoint), replace: replace,
+                                                destinationFree: free, keepFree: keepFree, replace: replace,
                                                 run: { _ = try run($0) }, say: say)
     }
 
@@ -74,9 +79,55 @@ extension DiskTool {
         return FileOwner(uid: getuid(), groups: Set(groups.prefix(Int(max(0, read)))).union([getgid()]))
     }
 
-    /// Visor Disk Utility's own executable: the root's check before a swap
-    /// or unswap is it, run in the administrator prompt.
-    static var checker: String? { Bundle.main.executablePath }
+    /// Visor Disk Utility's own bundle and designated requirement: the
+    /// root's check before a swap or unswap is a copy of it, made by root
+    /// in a root-owned folder and verified against that requirement before
+    /// it runs (ConversionChecker), never the bundle as it is, which the
+    /// person (or any process of theirs) can write.
+    static func verifiedChecker() throws -> ConversionChecker {
+        let bundle = Bundle.main.bundleURL.path
+        guard let executable = Bundle.main.executableURL?.lastPathComponent else {
+            throw DiskVolumesError.blocked("Visor Disk Utility can't find its own executable for the root's check.")
+        }
+        let signature = try ownSignature()
+        #if DEBUG
+        let debugBuild = true
+        #else
+        let debugBuild = false
+        #endif
+        return try ConversionChecker(bundle: bundle, executable: executable, requirement: signature.requirement, team: signature.team,
+                                     debugBuild: debugBuild)
+    }
+
+    /// The running app's designated requirement as text, and its team (nil
+    /// when it's signed ad hoc).
+    static func ownSignature() throws -> (requirement: String, team: String?) {
+        var code: SecCode?
+        var staticCode: SecStaticCode?
+        var requirement: SecRequirement?
+        var text: CFString?
+        guard SecCodeCopySelf([], &code) == errSecSuccess, let code,
+              SecCodeCopyStaticCode(code, [], &staticCode) == errSecSuccess, let staticCode,
+              SecCodeCopyDesignatedRequirement(staticCode, [], &requirement) == errSecSuccess, let requirement,
+              SecRequirementCopyString(requirement, [], &text) == errSecSuccess, let text else {
+            throw DiskVolumesError.blocked("Visor Disk Utility's own signature couldn't be read: the root's check can't be verified.")
+        }
+        var information: CFDictionary?
+        _ = SecCodeCopySigningInformation(staticCode, SecCSFlags(rawValue: kSecCSSigningInformation), &information)
+        let team = (information as? [String: Any])?[kSecCodeInfoTeamIdentifier as String] as? String
+        return (text as String, team)
+    }
+
+    /// For a test machine: the app's own bundle changed between the guard's
+    /// look and the prompt (`VISOR_CONVERSION_TEST_TAMPER`: a file added to
+    /// its Resources), as a process of the person's could, so the root's
+    /// check can be shown to refuse a copy that fails its verification.
+    static func testTamper() {
+        guard ProcessInfo.processInfo.environment["VISOR_CONVERSION_TEST_TAMPER"] == "1",
+              let resources = Bundle.main.resourceURL else { return }
+        print("changing \(resources.path) before the prompt (VISOR_CONVERSION_TEST_TAMPER)")
+        try? Data("tampered\n".utf8).write(to: resources.appendingPathComponent("tampered"))
+    }
 
     /// Swap In: for each role, its marker checked (these two volumes, at
     /// most two hours old) and its volume unchanged since the copy, then
@@ -85,7 +136,7 @@ extension DiskTool {
     /// disk, in one administrator prompt; then the marker removed.
     static func swap(_ roles: [VolumeRole], route: PrivilegeRoute) throws -> DiskSurvey {
         let disks = try survey()
-        guard let checker else { throw DiskVolumesError.blocked("Visor Disk Utility can't find its own executable for the root's check.") }
+        let checker = try verifiedChecker()
         var steps: [VolumeRole: ConversionStep] = [:]
         var digests: [(role: VolumeRole, digest: String)] = []
         var commands: [DiskCommand] = []
@@ -152,7 +203,7 @@ extension DiskTool {
     /// one renamed `<Name>-cs-failed` and unmounted; one administrator
     /// prompt.
     static func unswap(_ roles: [VolumeRole], force: Bool, route: PrivilegeRoute, say: (String) -> Void = { _ in }) throws -> DiskSurvey {
-        guard let checker else { throw DiskVolumesError.blocked("Visor Disk Utility can't find its own executable for the root's check.") }
+        let checker = try verifiedChecker()
         let disks = try survey()
         let commands = try roles.flatMap { try ConversionPlanner.unswapCommands($0, in: disks) }
         let notes = ConversionNote.read(at: noteURL)

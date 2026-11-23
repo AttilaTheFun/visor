@@ -39,21 +39,21 @@ public enum ConversionPlanner {
         guard DiskCommand.isUserName(user) else { throw DiskVolumesError.blocked("\(user) isn't a user's name.") }
         var arguments = ["apfs", "addVolume", source.container.reference, role.personality, role.stagedName]
         if source.volume.reserve > 0 { arguments += ["-reserve", ByteSize.argument(source.volume.reserve)] }
-        arguments += ["-quota", ByteSize.argument(stagedQuota(source.volume, container: source.container))]
+        if source.volume.quota > 0 { arguments += ["-quota", ByteSize.argument(source.volume.quota)] }
         return [DiskCommand(arguments: arguments),
                 DiskCommand(program: DiskCommand.chown, arguments: [user + ":staff", role.stagedMountPoint]),
                 DiskCommand(program: DiskCommand.chmod, arguments: ["775", role.stagedMountPoint])]
     }
 
-    /// The staged copy's quota: the role volume's own; with none, the
-    /// container's free space less a margin (a tenth of it, at least
-    /// 20 GB), in whole 10 GB, so a copy that runs over (clones copied in
-    /// full) stops before it fills the disk.
-    public static func stagedQuota(_ volume: APFSVolume, container: APFSContainer) -> Int64 {
-        if volume.quota > 0 { return volume.quota }
-        let step = 10 * ByteSize.gigabyte
-        let room = container.free - max(20 * ByteSize.gigabyte, container.free / 10)
-        return max(step, room / step * step)
+    /// What must stay free in the container once a copy onto a staged
+    /// volume with no quota of its own is made: a tenth of the free space,
+    /// at least 20 GB. (The copy gets its source's quota, and none when the
+    /// source has none: a quota can't be changed or removed once a volume
+    /// is made, by diskutil or any tool, and the copy becomes the volume
+    /// Visor uses. So it isn't bounded by one; copy-staged refuses a copy
+    /// that would leave less than this free instead.)
+    public static func keptFree(containerFree: Int64) -> Int64 {
+        max(20 * ByteSize.gigabyte, containerFree / 10)
     }
 
     /// Throws unless Stage may run for the role: its volume there,
@@ -160,20 +160,21 @@ public enum ConversionPlanner {
     /// The verb of Visor Disk Utility's own command that checks, as root,
     /// in the administrator prompt's shell just before the first rename,
     /// that nothing has changed since the person's checks and nothing is
-    /// open (DiskTool.conversionCheck).
+    /// open (DiskTool.conversionCheck); run from a verified root-owned copy
+    /// of the app (ConversionChecker).
     public static let checkVerb = "conversion-check"
 
     /// The check that comes first in Swap In's prompt: for each role, the
     /// sha256 of its marker's file, which the check reads again, with its
     /// UUIDs, age and the source's listing.
-    public static func swapCheck(checker: String, markers: [(role: VolumeRole, digest: String)]) -> DiskCommand {
-        DiskCommand(program: checker, arguments: [checkVerb, "swap"] + markers.flatMap { [$0.role.rawValue, $0.digest] })
+    public static func swapCheck(checker: ConversionChecker, markers: [(role: VolumeRole, digest: String)]) -> DiskCommand {
+        checker.command([checkVerb, "swap"] + markers.flatMap { [$0.role.rawValue, $0.digest] })
     }
 
     /// The check that comes first in unswap's prompt: nothing open on the
     /// volumes, and Visor stopped.
-    public static func unswapCheck(checker: String, roles: [VolumeRole]) -> DiskCommand {
-        DiskCommand(program: checker, arguments: [checkVerb, "unswap"] + roles.map(\.rawValue))
+    public static func unswapCheck(checker: ConversionChecker, roles: [VolumeRole]) -> DiskCommand {
+        checker.command([checkVerb, "unswap"] + roles.map(\.rawValue))
     }
 
     /// The commands that undo a swap, if the old volume is still there

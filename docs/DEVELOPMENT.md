@@ -710,7 +710,18 @@ removed (still only when `agentProxy` is set).
   listings unchanged, and its prompt starts with Visor Disk Utility's own
   `conversion-check` run as root (VolumeGuard requires it first): the
   marker file's sha256, its UUIDs and age, both listings, Visor stopped
-  and root's lsof, again, before the first rename. Swap In leaves a note
+  and root's lsof, again, before the first rename. Never the bundle as it
+  is, which the person can write: ConversionChecker's script (`/bin/sh -c`,
+  exact) copies it as root into a root-owned `mktemp -d` folder under
+  /private/var/tmp, verifies the copy with `codesign --verify --strict -R`
+  against the running app's designated requirement (Security's
+  SecCodeCopyDesignatedRequirement; a team-signed build's must name Apple's
+  anchor, its identifier and team, an ad hoc one's cdhash passes only in a
+  debug build), runs the copy, and removes it. No quota is set on a copy
+  whose source has none (no tool can remove a quota later, and the copy
+  becomes the live volume); copy-staged keeps a tenth of the container's
+  free space (20 GB at least) free instead. Extended attributes or an ACL
+  that can't be read are refused, never compared. Swap In leaves a note
   (`volume-conversions.json` in the data folder) that unswap compares the
   converted volume with: changed, it wants `--force`. Uninstall…'s typed
   phrase names the kept volumes it deletes. visor_disk_volumes uses

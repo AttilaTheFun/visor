@@ -52,8 +52,9 @@ public enum ConversionCopy {
 
     /// What stops a copy as the person keeping every file as it is: a
     /// file or folder of another owner (ditto as the person makes it
-    /// theirs), of a group the person isn't in, that they can't read, with
-    /// a flag only root can set, or whose data isn't here (dataless); and a
+    /// theirs), of a group the person isn't in, that they can't read, whose
+    /// extended attributes or ACL can't be read (so neither side's could be
+    /// compared), with a flag only root can set, or whose data isn't here (dataless); and a
     /// hard link shared between two entries at the root (each entry is
     /// copied on its own, so the link would be split). A line each, at most
     /// `limit`, and how many there are in all.
@@ -67,11 +68,13 @@ public enum ConversionCopy {
         }
         // Each shared inode: the root entry it was first seen under.
         var entryOf: [UInt64: (entry: String, path: String)] = [:]
-        try VolumeTree.walk(root, inspector: inspector) { path, file in
+        try VolumeTree.walk(root, inspector: inspector, failed: { path, _ in note("\(path): its metadata can't be read") }) { path, file in
             if file.kind == .socket { return false }
             if file.uid != owner.uid { note("\(path): owned by uid \(file.uid), not \(owner.uid)") }
             if file.kind != .link, !owner.groups.contains(file.gid) { note("\(path): group \(file.gid), not one of yours") }
             if file.kind != .link, !file.readable { note("\(path): you can't read it") }
+            if file.kind != .link, file.xattrs == FileInspection.unreadable { note("\(path): its extended attributes can't be read") }
+            if file.kind != .link, file.acl == FileInspection.unreadable { note("\(path): its ACL can't be read") }
             if file.flags & FileInspection.systemFlags != 0 {
                 note("\(path): flags only root can set (0x\(String(file.flags & FileInspection.systemFlags, radix: 16)))")
             }
@@ -143,7 +146,8 @@ public enum ConversionCopy {
     /// `destination` (its staged copy), as `owner`, and checks it: first,
     /// that nothing on the source can't be copied as it is by the person
     /// (`obstacles`: refused, with the list) and that the copy fits
-    /// (`destinationFree`, its bytes free); then the copy; then both
+    /// (`destinationFree`, its bytes free, `keepFree` of them left over);
+    /// then the copy; then both
     /// sides' manifests identical (data, mode, owner, group, flags,
     /// extended attributes, ACLs, hard links) and the source unchanged
     /// meanwhile (its listing, before and after). Only then the marker,
@@ -154,7 +158,7 @@ public enum ConversionCopy {
     @discardableResult
     public static func copyAndVerify(role: VolumeRole, from source: String, to destination: String, sourceUUID: String, newUUID: String,
                                      owner: FileOwner, inspector: some FileInspecting = FoundationFileInspector(),
-                                     destinationFree: Int64? = nil, replace: Bool = false, now: () -> Date = Date.init,
+                                     destinationFree: Int64? = nil, keepFree: Int64 = 0, replace: Bool = false, now: () -> Date = Date.init,
                                      run: ([String]) throws -> Void, say: (String) -> Void = { _ in }) throws -> ConversionMarker {
         let files = FileManager.default
         let marker = ConversionMarker.path(atRoot: destination)
@@ -182,10 +186,13 @@ public enum ConversionCopy {
         }
         if let destinationFree {
             let needed = try bytesNeeded(at: source, inspector: inspector)
-            // A little room for the folders' own blocks and the marker.
+            // A little room for the folders' own blocks and the marker, and
+            // what must stay free beside it (`keepFree`: a copy with no
+            // quota shares the container's free space with the system).
             let margin = max(Int64(100_000_000), needed / 50)
-            guard needed + margin <= destinationFree else {
-                throw DiskVolumesError.blocked("The copy needs about \(ByteSize.describe(needed + margin)) (clones copied in full), "
+            guard needed + margin + keepFree <= destinationFree else {
+                let kept = keepFree > 0 ? ", leaving \(ByteSize.describe(keepFree)) free for the rest of the Mac," : ""
+                throw DiskVolumesError.blocked("The copy needs about \(ByteSize.describe(needed + margin)) (clones copied in full)\(kept) "
                     + "and \(destination) has \(ByteSize.describe(destinationFree)) free. Nothing was copied.")
             }
         }

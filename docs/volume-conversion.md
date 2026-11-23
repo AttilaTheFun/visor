@@ -53,7 +53,9 @@ listing (below), and Swap In checks again as root. Then:
   the person would quietly make it theirs: a container's or another uid's
   files), of a group the person isn't in, one they can't read, one with a
   flag only root can set (`schg`, `sappnd`, restricted…) or whose data
-  isn't on the Mac (dataless), and a hard link shared between two entries
+  isn't on the Mac (dataless), one whose extended attributes or ACL can't
+  be read (an error other than "none" from listxattr or acl_get_link_np:
+  neither side's could be compared), and a hard link shared between two entries
   at the root (each root entry is copied on its own, which would split
   it). The copy isn't done as root instead: copy-staged is NCH's, over
   SSH, with no administrator. Put them right first, as Logan (`sudo chown
@@ -108,8 +110,19 @@ person's to write, so the copy itself is checked too); no `<Name>-old-ci`
 exists; and, as for the copy, Visor is stopped and nothing has either
 volume open. Then, in the administrator prompt's one shell:
 
-1. **as root, first:** `Visor Disk Utility conversion-check swap <role>
-   <the marker file's sha256>…` checks it all again: the marker is still
+1. **as root, first, from a verified copy of the app:** the bundle Logan
+   runs is his to write, and so any process of his (an agent's) could
+   change it between Visor Disk Utility's look and the prompt. So the
+   prompt's script copies the bundle, as root, into a fresh root-owned
+   folder (`mktemp -d /private/var/tmp/visor-check.XXXXXXXX`, 0700),
+   verifies the copy against the running app's own designated requirement
+   (`codesign --verify --strict -R=<requirement>`: for a Developer ID build,
+   Apple's anchor, its identifier and its team; an ad hoc build, its cdhash,
+   which only a debug build accepts), runs the copy's `conversion-check swap
+   <role> <the marker file's sha256>…`, and removes the folder whatever
+   happens. A copy that fails its verification is refused ("conversion-check
+   refused: the copy of Visor Disk Utility failed its signature check …
+   Nothing was changed"). The check then checks it all again: the marker is still
    the file checked before the prompt, names the volumes there now and
    isn't too old; both listings are unchanged; Visor's processes are gone;
    and root's `lsof` (which sees every process, the container engine's and
@@ -125,8 +138,9 @@ volume open. Then, in the administrator prompt's one shell:
 
 VolumeGuard plans the same commands again from the disks just before the
 prompt runs, with the marker checked again by this Mac's clock, and passes
-them only if they're identical and the check is first, by Visor Disk
-Utility's own executable. The box and the command line then say what's
+them only if they're identical and the check is first, in exactly that
+copy-verify-run shape, for Visor Disk Utility's own bundle and
+requirement. The box and the command line then say what's
 there: "Sessions: Case-sensitive APFS, mounted at /Volumes/Sessions, owned
 by logan", and the volume kept. `volumes.json` records the new volume as
 Visor's own.
@@ -159,10 +173,16 @@ unmounted, to be copied out by hand. The `-cs-failed` copy is listed for
 Delete… like a kept one, its sheet saying it may hold the newest data. To
 convert again after an unswap: delete both kept volumes, then Stage.
 
-**Stage's quota.** The copy gets the role volume's own quota; a volume with
-none gives it the container's free space less a tenth (at least 20 GB), in
-whole 10 GB, so a copy that runs over (clones are copied in full) stops
-before it fills the disk. copy-staged checks the copy fits before it starts.
+**Stage's quota.** The copy gets the role volume's own quota and reserve
+(the Mini's: 40 GB and 120 GB, no reserve), and **no quota when the role
+volume has none**: a quota can't be changed or removed once a volume is
+made (`diskutil` has no verb for it on macOS 27, and no other tool does),
+and the copy becomes the volume Visor uses, so a quota set only to bound
+the copy would stay on the live Sessions or Sources and fill it early. A
+copy with no quota shares the container's free space with the rest of the
+Mac instead, so copy-staged refuses one that would leave less than a tenth
+of it free (at least 20 GB); with a quota, the copy must fit in it. Either
+way it counts the bytes it writes first (clones in full).
 
 ## The window, step by step (the Mini)
 

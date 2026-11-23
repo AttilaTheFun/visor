@@ -45,9 +45,10 @@ enum DiskTool {
     /// volumes; then the disks as they are after.
     static func change(_ commands: [DiskCommand], route: PrivilegeRoute, deleting: Set<VolumeRole> = [],
                        fixing: Set<VolumeRole> = [], converting: [VolumeRole: ConversionStep] = [:],
-                       deletingKept: Set<String> = [], checker: String? = nil) throws -> DiskSurvey {
+                       deletingKept: Set<String> = [], checker: ConversionChecker? = nil) throws -> DiskSurvey {
         try VolumeGuard.check(commands, against: survey(), recorded: DiskVolumes.readStatus(at: statusURL), deleting: deleting,
                               user: user, fixing: fixing, converting: converting, deletingKept: deletingKept, checker: checker)
+        if checker != nil { testTamper() }
         for invocation in route.invocations(of: commands.map(\.argv)) {
             do {
                 _ = try run(invocation)

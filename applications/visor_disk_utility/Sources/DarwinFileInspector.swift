@@ -33,7 +33,7 @@ struct DarwinFileInspector: FileInspecting {
             changed: "\(info.st_ctimespec.tv_sec).\(info.st_ctimespec.tv_nsec)",
             mode: UInt32(info.st_mode & 0o7777), uid: info.st_uid, gid: info.st_gid, flags: info.st_flags,
             inode: info.st_ino, linkCount: UInt64(info.st_nlink), rdev: kind == .other ? UInt64(UInt32(bitPattern: info.st_rdev)) : 0,
-            xattrs: try Self.xattrs(path), acl: Self.acl(path))
+            xattrs: Self.xattrs(path), acl: Self.acl(path))
         switch kind {
         case .link:
             inspection.linkTarget = try? FileManager.default.destinationOfSymbolicLink(atPath: path)
@@ -48,25 +48,24 @@ struct DarwinFileInspector: FileInspecting {
     }
 
     /// The sha256 of the extended attributes' names and values, sorted by
-    /// name ("-" with none).
-    static func xattrs(_ path: String) throws -> String {
+    /// name: "-" with none (or on a filesystem with none), `unreadable`
+    /// when they can't be read (EPERM, EACCES, or any other error), which
+    /// copy-staged refuses rather than compare as alike.
+    static func xattrs(_ path: String) -> String {
         let size = listxattr(path, nil, 0, XATTR_NOFOLLOW)
-        guard size > 0 else {
-            if size < 0, errno != ENOTSUP, errno != EPERM, errno != EACCES {
-                throw DiskVolumesError.failed("\(path)'s extended attributes couldn't be listed: \(String(cString: strerror(errno)))")
-            }
-            return size == 0 ? "-" : "?"
-        }
+        if size == 0 { return "-" }
+        guard size > 0 else { return errno == ENOTSUP ? "-" : FileInspection.unreadable }
         var names = [CChar](repeating: 0, count: size)
         let listed = listxattr(path, &names, size, XATTR_NOFOLLOW)
-        guard listed >= 0 else { return "?" }
+        guard listed >= 0 else { return FileInspection.unreadable }
         let all = names.prefix(listed).split(separator: 0).map { String(decoding: $0.map { UInt8(bitPattern: $0) }, as: UTF8.self) }
         var data = Data()
         for name in all.sorted() {
             let length = getxattr(path, name, nil, 0, 0, XATTR_NOFOLLOW)
-            var value = [UInt8](repeating: 0, count: max(0, length))
+            guard length >= 0 else { return FileInspection.unreadable }
+            var value = [UInt8](repeating: 0, count: length)
             let read = length > 0 ? getxattr(path, name, &value, length, 0, XATTR_NOFOLLOW) : 0
-            guard read >= 0 else { return "?" }
+            guard read >= 0 else { return FileInspection.unreadable }
             data.append(Data(name.utf8))
             data.append(0)
             data.append(Data("\(read)".utf8))
@@ -76,12 +75,16 @@ struct DarwinFileInspector: FileInspecting {
         return VolumeManifest.digest(data)
     }
 
-    /// The sha256 of the ACL's text ("-" with none).
+    /// The sha256 of the ACL's text: "-" with none (ENOENT), `unreadable`
+    /// on any other error.
     static func acl(_ path: String) -> String {
-        guard let acl = acl_get_link_np(path, ACL_TYPE_EXTENDED) else { return "-" }
+        errno = 0
+        guard let acl = acl_get_link_np(path, ACL_TYPE_EXTENDED) else {
+            return errno == ENOENT ? "-" : FileInspection.unreadable
+        }
         defer { acl_free(UnsafeMutableRawPointer(acl)) }
         var length = 0
-        guard let text = acl_to_text(acl, &length) else { return "?" }
+        guard let text = acl_to_text(acl, &length) else { return FileInspection.unreadable }
         defer { acl_free(UnsafeMutableRawPointer(text)) }
         return VolumeManifest.digest(Data(bytes: text, count: length))
     }

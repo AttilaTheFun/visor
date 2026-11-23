@@ -56,10 +56,10 @@ import Testing
         var markerPath: String { ConversionMarker.path(atRoot: copy) }
 
         func copyAndVerify(replace: Bool = false, inspector: some FileInspecting = FoundationFileInspector(), free: Int64? = nil,
-                           said: Said? = nil, run: ([String]) throws -> Void = CopyTests.run) throws -> ConversionMarker {
+                           keepFree: Int64 = 0, said: Said? = nil, run: ([String]) throws -> Void = CopyTests.run) throws -> ConversionMarker {
             try ConversionCopy.copyAndVerify(role: .sessions, from: source, to: copy, sourceUUID: ConversionDisks.sessionsUUID,
                                              newUUID: ConversionDisks.sessionsNewUUID, owner: owner, inspector: inspector,
-                                             destinationFree: free, replace: replace, now: { ConversionDisks.now }, run: run,
+                                             destinationFree: free, keepFree: keepFree, replace: replace, now: { ConversionDisks.now }, run: run,
                                              say: { said?.lines.append($0) })
         }
     }
@@ -285,12 +285,18 @@ import Testing
         let inspector = ObstacleInspector(source: scratch.source)
         let error = #expect(throws: DiskVolumesError.self) { try scratch.copyAndVerify(inspector: inspector) }
         let said = error?.description ?? ""
-        #expect(said.contains("holds 6 things the person can't copy as they are"))
+        #expect(said.contains("holds 9 things the person can't copy as they are"))
         #expect(said.contains("Claude/abc/notes.md: owned by uid 4242"))
         #expect(said.contains(".claude/settings.json: group 4343, not one of yours"))
         #expect(said.contains("top.txt: you can't read it"))
         #expect(said.contains("empty: flags only root can set (0x20000)"))
         #expect(said.contains("a hard link to") && said.contains("in another entry at the root"))
+        // Extended attributes or an ACL that couldn't be read: never taken as alike on both sides.
+        #expect(said.contains("Claude/abc/.fseventsd: its extended attributes can't be read"))
+        #expect(said.contains("Claude/abc/odd\nname: its ACL can't be read"))
+        #expect(!said.contains("dangling"), "a link's ACL isn't compared")
+        // One whose metadata can't be read at all: listed, not the end of the list.
+        #expect(said.contains("checkouts: its metadata can't be read"))
         #expect(said.contains("Nothing was copied."))
         #expect(try ConversionCopy.entries(at: scratch.copy).isEmpty, "nothing copied")
         #expect(!FileManager.default.fileExists(atPath: scratch.markerPath))
@@ -307,7 +313,10 @@ import Testing
         let error = #expect(throws: DiskVolumesError.self) { try scratch.copyAndVerify(free: 1_000_000) }
         #expect(error?.description.contains("The copy needs about 100 MB") == true)
         #expect(try ConversionCopy.entries(at: scratch.copy).isEmpty, "nothing copied")
-        try scratch.copyAndVerify(free: 10_000_000_000)
+        // What must stay free beside a copy with no quota counts too.
+        let kept = #expect(throws: DiskVolumesError.self) { try scratch.copyAndVerify(free: 10_000_000_000, keepFree: 9_900_000_000) }
+        #expect(kept?.description.contains("leaving 9.9 GB free for the rest of the Mac") == true)
+        try scratch.copyAndVerify(free: 10_000_000_000, keepFree: 5_000_000_000)
     }
 
     @Test func whatsLeftOutAndLinksThatNeedCaseInsensitivityAreSaid() throws {
@@ -366,8 +375,9 @@ private struct DifferingInspector: FileInspecting {
 }
 
 /// Foundation's inspector, with what the person can't copy as it is: a
-/// file of another owner, one of another group, an unreadable one, and a
-/// folder with a flag only root can set.
+/// file of another owner, one of another group, an unreadable one, a
+/// folder with a flag only root can set, and extended attributes and an
+/// ACL that couldn't be read.
 private struct ObstacleInspector: FileInspecting {
     let source: String
 
@@ -378,6 +388,10 @@ private struct ObstacleInspector: FileInspecting {
         case source + "/.claude/settings.json": file.gid = 4343
         case source + "/top.txt": file.readable = false
         case source + "/empty": file.flags = 0x0002_0000
+        case source + "/Claude/abc/.fseventsd": file.xattrs = FileInspection.unreadable
+        case source + "/Claude/abc/dangling", source + "/Claude/abc/link-to-notes": file.acl = FileInspection.unreadable
+        case source + "/Claude/abc/odd\nname": file.acl = FileInspection.unreadable
+        case source + "/checkouts": throw DiskVolumesError.failed("\(path) couldn't be read: Permission denied")
         default: break
         }
         return file

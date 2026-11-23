@@ -32,10 +32,17 @@ public struct FileInspection: Equatable, Sendable {
     /// A device's number (`st_rdev`).
     public var rdev: UInt64
     /// The sha256 of the extended attributes' names and values, sorted by
-    /// name; "-" with none; nil when this inspector can't read them.
+    /// name; "-" with none; `unreadable` when they couldn't be read (EPERM,
+    /// EACCES…: a copy as the person can't be checked against them); nil
+    /// when this inspector doesn't read them (Foundation's).
     public var xattrs: String?
-    /// The sha256 of the ACL's text; "-" with none; nil when unknown.
+    /// The sha256 of the ACL's text; "-" with none; `unreadable` when it
+    /// couldn't be read; nil when this inspector doesn't read it.
     public var acl: String?
+
+    /// What an inspector says of extended attributes or an ACL it tried and
+    /// failed to read.
+    public static let unreadable = "?"
     /// A link's target.
     public var linkTarget: String?
     /// Whether the person can read it (a folder: read and search).
