@@ -42,6 +42,28 @@ public struct ConversionChecker: Equatable, Sendable {
             + "and certificate leaf[subject.OU] = \"\(team)\" and cdhash H\"\(cdhash)\""
     }
 
+    /// The team the copy must be signed by: the one compiled in (the team
+    /// Logan's builds are made for); with none compiled in (a builder with
+    /// no VISOR_TEAM_ID), the running process's own, but only where
+    /// `fallback` allows it (a dev build, or a test build): an optimized
+    /// build without the team refuses, since a bundle replaced before
+    /// launch would bring its own. A running team that differs from the
+    /// compiled one refuses too. nil: no team (ad hoc, a test build's).
+    public static func team(compiled: String?, running: String?, fallback: Bool) throws -> String? {
+        if let compiled, !compiled.isEmpty {
+            if let running, running != compiled {
+                throw DiskVolumesError.blocked("Visor Disk Utility runs signed by team \(running), not \(compiled), the team it was built for: "
+                    + "the root's check isn't run. Nothing was changed.")
+            }
+            return compiled
+        }
+        guard fallback else {
+            throw DiskVolumesError.blocked("This Visor Disk Utility was built without Logan's team (VISOR_TEAM_ID), so the root's check "
+                + "can't verify its copy: Swap In and unswap aren't run. Nothing was changed.")
+        }
+        return running
+    }
+
     /// Whether `team` is a team identifier: ten letters and digits.
     public static func isTeam(_ team: String) -> Bool {
         team.count == 10 && team.allSatisfy { $0.isASCII && ($0.isUppercase || $0.isNumber) }

@@ -702,11 +702,24 @@
     "//tools/signing:extension.bzl%signing": {
       "general": {
         "bzlTransitiveDigest": "dSr3GkO2vhyxmc87InZ9I0svVrbdp7988KIWluLAdAk=",
-        "usagesDigest": "VR3F0NeEUunsGktnVrOg3dw8h8i2Q/FfGGxK8C77Zpg=",
+        "usagesDigest": "gOMhX2DtQwWCDbWE3/NmPU0rDTI1N7p6+r7O9lQ8Smo=",
         "recordedInputs": [],
         "generatedRepoSpecs": {
           "visor_signing": {
             "repoRuleId": "@@//tools/signing:extension.bzl%_signing",
+            "attributes": {}
+          }
+        }
+      }
+    },
+    "//tools/team_id:extension.bzl%team_id": {
+      "general": {
+        "bzlTransitiveDigest": "8gO49ZyRE2NqYoHs0v+qdskHp0qnYcjjhVhJM2iPeOo=",
+        "usagesDigest": "uxKJdU133AwajV+UR1txg5raJ+/6PNrhl5LewCvPUEM=",
+        "recordedInputs": [],
+        "generatedRepoSpecs": {
+          "visor_team_id": {
+            "repoRuleId": "@@//tools/team_id:extension.bzl%_team_id",
             "attributes": {}
           }
         }
@@ -728,7 +741,7 @@
     "@@isomer+//tools/android:extensions.bzl%android_tools": {
       "os:linux,arch:aarch64": {
         "bzlTransitiveDigest": "fQQ4tcvpXIll2SShkelhgy80kaCU2XOZbujRrEXigtI=",
-        "usagesDigest": "eKoZwtcFeg1Qo6S985U1RHHi/m7BKwCcKcSVYH+g+mQ=",
+        "usagesDigest": "2zw/kaN7mYyBXuV/hp9RbA8SPxq3RaI5JDo3kLDmTpE=",
         "recordedInputs": [
           "REPO_MAPPING:isomer+,bazel_tools bazel_tools"
         ],
@@ -977,7 +990,7 @@
     "@@rules_android+//rules/android_sdk_repository:rule.bzl%android_sdk_repository_extension": {
       "general": {
         "bzlTransitiveDigest": "qHbR00gVzVzkxX+PRtv4UGcUFMtBz7TK9CNYUWH8nIE=",
-        "usagesDigest": "ImLg3XXVAcahhwlxcMuN5o1+RKEwwUEtjpT8hY5+vUA=",
+        "usagesDigest": "6OS2U6ovSK9km2rp2cTsRhbJNIIrZo+OoD3LxAJzMNY=",
         "recordedInputs": [],
         "generatedRepoSpecs": {
           "androidsdk": {
@@ -990,7 +1003,7 @@
     "@@rules_applecross+//toolchain:extensions.bzl%apple_cross_toolchain": {
       "general": {
         "bzlTransitiveDigest": "oyYy8cnTR2kIjRK9j7Fuwd3yG/85ziub42dq2MY6h48=",
-        "usagesDigest": "Wij/QCmXC5Pu+ZrH4FFSAwHdKwFq/48IrN4KGsMjpXY=",
+        "usagesDigest": "WZBZCpRyDHniRVGrQCEiahut8DfwEOqtugiuWBEQYk4=",
         "recordedInputs": [
           "REPO_MAPPING:rules_applecross+,bazel_tools bazel_tools",
           "REPO_MAPPING:rules_applecross+,rules_swift rules_swift+",
@@ -1093,7 +1106,7 @@
     "@@rules_swift_package_manager+//:extensions.bzl%swift_deps": {
       "general": {
         "bzlTransitiveDigest": "B2aTY3dA0RubUZkTqFdg+fxS3ocQQeeog6AzCPaqDXY=",
-        "usagesDigest": "PkBqO4MlOVAeyC5PIY6ykTImMf+I14srL6L/TwP/3eU=",
+        "usagesDigest": "rpcV0a8zKOYXQW8mOEul3bIIeTI8fEvi7K/vVYpVpTA=",
         "recordedInputs": [
           "REPO_MAPPING:rules_swift_package_manager+,bazel_skylib bazel_skylib+",
           "REPO_MAPPING:rules_swift_package_manager+,bazel_tools bazel_tools",
