@@ -1,0 +1,4 @@
+# Visor's one team id, from the VISOR_TEAM_ID repo_env (extension.bzl,
+# defs.bzl).
+
+exports_files(["defs.bzl"])

@@ -710,7 +710,29 @@ removed (still only when `agentProxy` is set).
   listings unchanged, and its prompt starts with Visor Disk Utility's own
   `conversion-check` run as root (VolumeGuard requires it first): the
   marker file's sha256, its UUIDs and age, both listings, Visor stopped
-  and root's lsof, again, before the first rename. Swap In leaves a note
+  and root's lsof, again, before the first rename. Never the bundle as it
+  is, which the person can write: ConversionChecker's script (`/bin/sh -c`,
+  exact) copies it as root into a root-owned `mktemp -d` folder under
+  /private/var/tmp, verifies the copy with `codesign --verify --strict -R`
+  against a requirement built from constants (ConversionChecker:
+  Developer ID anchor and leaf, the identifier, the team compiled in
+  (SigningTeam, from tools/signing's TEAM_ID: VISOR_TEAM_ID, which CI's
+  alpha-apple and release-apple pass as a repo_env from the repository's
+  VISOR_TEAM_ID variable; an optimized build without it refuses, a dev or
+  test build falls back to the running process's entitlements),
+  and the running process's own cdhash, as the kernel holds it
+  (`csops(CS_OPS_CDHASH)`: SecCodeCopySelf's signing information is read
+  from the disk, and a bundle replaced after launch passed by it in a
+  leased VM; the disk's must match the kernel's, or nothing runs); never
+  read from the bundle), runs the copy, and removes it.
+  Ad hoc signatures, and the test hooks, are only in a build with
+  `--config=visor_test_signing` (VISOR_TEST_SIGNING); shipped builds are
+  `--compilation_mode=opt` (alpha-apple, release-apple), and DEBUG is no
+  gate (rules_swift defines it in fastbuild too). No quota is set on a copy
+  whose source has none (no tool can remove a quota later, and the copy
+  becomes the live volume); copy-staged keeps a tenth of the container's
+  free space (20 GB at least) free instead. Extended attributes or an ACL
+  that can't be read are refused, never compared. Swap In leaves a note
   (`volume-conversions.json` in the data folder) that unswap compares the
   converted volume with: changed, it wants `--force`. Uninstall…'s typed
   phrase names the kept volumes it deletes. visor_disk_volumes uses

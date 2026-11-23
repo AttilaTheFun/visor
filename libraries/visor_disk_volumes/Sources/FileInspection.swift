@@ -17,6 +17,9 @@ public struct FileInspection: Equatable, Sendable {
     /// What an `.other` is (`fifo`, `characterSpecial`…).
     public var typeName: String
     public var size: Int64
+    /// The bytes it takes on disk (`st_blocks` × 512): what a copy of it
+    /// writes, a small file's block among them.
+    public var allocated: Int64
     /// The modification and status-change times as text (exactly as read);
     /// nil when unknown (Foundation has no status-change time).
     public var modified: String
@@ -32,21 +35,29 @@ public struct FileInspection: Equatable, Sendable {
     /// A device's number (`st_rdev`).
     public var rdev: UInt64
     /// The sha256 of the extended attributes' names and values, sorted by
-    /// name; "-" with none; nil when this inspector can't read them.
+    /// name; "-" with none; `unreadable` when they couldn't be read (EPERM,
+    /// EACCES…: a copy as the person can't be checked against them); nil
+    /// when this inspector doesn't read them (Foundation's).
     public var xattrs: String?
-    /// The sha256 of the ACL's text; "-" with none; nil when unknown.
+    /// The sha256 of the ACL's text; "-" with none; `unreadable` when it
+    /// couldn't be read; nil when this inspector doesn't read it.
     public var acl: String?
+
+    /// What an inspector says of extended attributes or an ACL it tried and
+    /// failed to read.
+    public static let unreadable = "?"
     /// A link's target.
     public var linkTarget: String?
     /// Whether the person can read it (a folder: read and search).
     public var readable: Bool
 
-    public init(kind: Kind, typeName: String = "", size: Int64 = 0, modified: String = "", changed: String? = nil, mode: UInt32 = 0,
+    public init(kind: Kind, typeName: String = "", size: Int64 = 0, allocated: Int64? = nil, modified: String = "", changed: String? = nil, mode: UInt32 = 0,
                 uid: UInt32 = 0, gid: UInt32 = 0, flags: UInt32 = 0, inode: UInt64 = 0, linkCount: UInt64 = 1, rdev: UInt64 = 0,
                 xattrs: String? = nil, acl: String? = nil, linkTarget: String? = nil, readable: Bool = true) {
         self.kind = kind
         self.typeName = typeName
         self.size = size
+        self.allocated = allocated ?? Self.blocks(size)
         self.modified = modified
         self.changed = changed
         self.mode = mode
@@ -60,6 +71,13 @@ public struct FileInspection: Equatable, Sendable {
         self.acl = acl
         self.linkTarget = linkTarget
         self.readable = readable
+    }
+
+    /// A size rounded up to whole 4 KiB blocks (APFS's), where the blocks
+    /// themselves can't be read (Foundation).
+    public static func blocks(_ size: Int64) -> Int64 {
+        let block: Int64 = 4096
+        return (max(0, size) + block - 1) / block * block
     }
 
     // The BSD file flags (sys/stat.h) a copy is held to. Those the system

@@ -33,6 +33,7 @@ public struct FoundationFileInspector: FileInspecting {
         }
         var inspection = FileInspection(
             kind: kind, typeName: type?.rawValue ?? "unknown", size: (attributes[.size] as? NSNumber)?.int64Value ?? 0,
+            allocated: kind == .directory ? 0 : nil,
             modified: (attributes[.modificationDate] as? Date).map { String($0.timeIntervalSince1970) } ?? "?",
             mode: UInt32(truncatingIfNeeded: number(.posixPermissions)), uid: UInt32(truncatingIfNeeded: number(.ownerAccountID)),
             gid: UInt32(truncatingIfNeeded: number(.groupOwnerAccountID)), inode: number(.systemFileNumber),

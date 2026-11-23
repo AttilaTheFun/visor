@@ -725,6 +725,19 @@
         }
       }
     },
+    "//tools/team_id:extension.bzl%team_id": {
+      "general": {
+        "bzlTransitiveDigest": "8gO49ZyRE2NqYoHs0v+qdskHp0qnYcjjhVhJM2iPeOo=",
+        "usagesDigest": "uxKJdU133AwajV+UR1txg5raJ+/6PNrhl5LewCvPUEM=",
+        "recordedInputs": [],
+        "generatedRepoSpecs": {
+          "visor_team_id": {
+            "repoRuleId": "@@//tools/team_id:extension.bzl%_team_id",
+            "attributes": {}
+          }
+        }
+      }
+    },
     "@@cgrindel_bazel_starlib+//tools/git:extensions.bzl%local_git_ext": {
       "general": {
         "bzlTransitiveDigest": "Q/NQyKFI2DljjsevKbLpWlOrT/bOsP3m/A8uvcXQb40=",
