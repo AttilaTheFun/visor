@@ -47,7 +47,7 @@ public struct HandedOverBuild: Sendable {
 
     /// `run` runs the commands (`processes`, or a fake); `kind` says what a
     /// file is (`kind(at:)`, or a fake).
-    public init(run: @escaping Run, kind: @escaping @Sendable (String) -> Kind = Self.kind(at:)) {
+    public init(run: @escaping Run, kind: @escaping @Sendable (String) -> Kind = { HandedOverBuild.kind(at: $0) }) {
         self.run = run
         self.kind = kind
     }
