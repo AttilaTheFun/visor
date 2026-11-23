@@ -22,7 +22,9 @@
 //   the Sessions volume (`~/.claude/projects/-Volumes-Sessions-…`), which
 //   Move Back left in this Mac's Claude Code.
 // - Only when asked, with the volumes' names typed: the three volumes,
-//   by their APFS volume UUIDs.
+//   by their APFS volume UUIDs, and the volumes a conversion kept
+//   (`Sessions-old-ci`, `Sessions-cs-failed`); not asked, those are listed
+//   as kept, a line each.
 // - Last: Visor.app and Visor Disk Utility to the Trash.
 // - Printed, never run: how to undo a `tailscale serve` of port 7433 and
 //   a `.zshrc` export of the admin token, if they were done by hand.
@@ -46,11 +48,13 @@ public struct UninstallPlanner: Sendable {
     /// The volumes found, to delete when `deleteVolumes` (Visor's own
     /// alone: named for their roles, with UUIDs).
     public var volumes: [VolumeState]
+    /// The volumes a conversion of Sessions or Sources kept beside them.
+    public var kept: [KeptVolume]
     public var deleteVolumes: Bool
 
     public init(bundleID: String = "com.LoganShire.Visor", diskUtilityID: String = "com.LoganShire.Visor.DiskUtility", home: String,
                 app: String = "/Applications/Visor.app", diskUtility: String = "/Applications/Visor Disk Utility.app",
-                accessGroup: String?, volumes: [VolumeState] = [], deleteVolumes: Bool = false) {
+                accessGroup: String?, volumes: [VolumeState] = [], kept: [KeptVolume] = [], deleteVolumes: Bool = false) {
         self.bundleID = bundleID
         self.diskUtilityID = diskUtilityID
         self.home = home
@@ -58,6 +62,7 @@ public struct UninstallPlanner: Sendable {
         self.diskUtility = diskUtility
         self.accessGroup = accessGroup
         self.volumes = volumes
+        self.kept = kept
         self.deleteVolumes = deleteVolumes
     }
 
@@ -151,6 +156,17 @@ public struct UninstallPlanner: Sendable {
                       DiskCommand.isVolumeUUID(volume.uuid) else { continue }
                 steps.append(UninstallStep(.deleteVolume(role: state.role, uuid: volume.uuid), stage: .volumes,
                                            what: "\(state.role.volumeName) (\(volume.device), \(volume.uuid)), at \(state.path)"))
+            }
+        }
+        // The volumes a conversion kept: deleted with the volumes, else a
+        // line each, so none is forgotten.
+        for kept in kept where DiskCommand.isVolumeUUID(kept.volume.uuid) {
+            if deleteVolumes {
+                steps.append(UninstallStep(.deleteKept(name: kept.name, uuid: kept.volume.uuid), stage: .volumes,
+                                           what: "\(kept.name) (\(kept.volume.device), \(kept.volume.uuid)), kept by a conversion of \(kept.role.volumeName)"))
+            } else {
+                steps.append(UninstallStep(.keep(path: kept.name), stage: .kept,
+                                           what: "Kept: \(kept.summary). Delete it in Visor Disk Utility (Delete…), or with --delete-volumes"))
             }
         }
 

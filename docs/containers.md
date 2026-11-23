@@ -76,6 +76,20 @@ anything an app starts, root or not: Nimbus found it so), so that part is
 the person's, in Time Machine's settings (Options… › + › Visor), which the
 button opens.
 
+A Sessions or Sources made by hand before Visor Disk Utility, as plain
+case-insensitive APFS, is adopted as it is and never reformatted: its card
+says so, and Visor Disk Utility converts it by a copy
+(docs/volume-conversion.md). **Stage** makes `<Name>-new`, case-sensitive,
+beside it, with its quota and reserve (one administrator prompt);
+**copy-staged**, run as the person over SSH with Visor stopped, copies
+everything onto it, checks every file's sha256 and every link's target on
+both sides, and leaves a marker (`.visor-conversion-verified`) naming both
+volumes' UUIDs; **Swap In** (one prompt), with that marker at most two
+hours old, renames the old volume `<Name>-old-ci` and unmounts it, and
+mounts the copy as `<Name>` at the same path, each by its disk. The old
+volume is kept for a rollback (`unswap`) until its Delete…, and Uninstall…
+lists it.
+
 The engine and the container runner take Sessions' and Sources' paths from
 `volumes.json` (DiskVolumes), never a path assumed. Once the Visor volume is
 there, the process about to run the server moves what was in the home
@@ -463,11 +477,12 @@ as a defence beside it. Visor adopts it once #17 lands in a release.
 
 ## Still open
 
-- **Case sensitivity of the Macs' volumes today.** Both Macs' Sessions
-  and Sources are case-insensitive, and virtiofs passes that to Linux,
-  where `Foo.h` and `foo.h` are two files. Visor Disk Utility makes new
-  ones case-sensitive and adopts an existing one as it is, with a note;
-  converting the Mini's is a window of its own (the volumes plan's §2).
+- **Case sensitivity of the Mini's volumes today.** Its Sessions and
+  Sources are case-insensitive, and virtiofs passes that to Linux, where
+  `Foo.h` and `foo.h` are two files. Visor Disk Utility makes new ones
+  case-sensitive and adopts an existing one as it is, with a note; it
+  converts the Mini's in a window of their own (Stage, copy-staged, Swap
+  In: docs/volume-conversion.md).
 
 ## What's next
 

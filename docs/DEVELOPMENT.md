@@ -677,6 +677,44 @@ removed (still only when `agentProxy` is set).
   them only as exactly that, at a role's mount point, for a volume made
   earlier in the same run, or for an adopted one of Visor's own when its
   card's Fix (or `fix-owner <role>`) names it in `fixing`.
+- **Sessions and Sources converted to case-sensitive (0.67;
+  docs/volume-conversion.md):** a hand-made case-insensitive Sessions or
+  Sources is converted by a copy, never reformatted. ConversionPlanner
+  (libraries/visor_disk_volumes) plans each step from the survey: Stage
+  (`stage sessions|sources|both`, the window's Stage: `apfs addVolume
+  <container> "Case-sensitive APFS" <Name>-new` with the role volume's own
+  quota and reserve, then its chown and chmod), Swap In (`swap …`: the old
+  volume renamed `<Name>-old-ci` and unmounted, the copy renamed `<Name>`,
+  unmounted and mounted, by disk) and `unswap …` (the old one put back, the
+  copy renamed `<Name>-cs-failed`). VolumeGuard passes a rename, unmount,
+  mount or `<Name>-new` addVolume only for a role the caller names in
+  `converting`, and only exactly as the planner plans that step again from
+  a fresh survey (Swap In's marker checked again); a kept volume is deleted
+  only by its UUID, its name in `deletingKept` (Delete…, `delete-kept`, or
+  Uninstall… with the volumes). `copy-staged …` runs as the person, never
+  root: Visor's processes and port, and `lsof -F pcn` of both volumes
+  (Spotlight and the system's root folders aside; as the person, their
+  processes alone), first; then ConversionCopy: what the person can't copy
+  as it is refused with a list (other owners and groups, unreadable, root's
+  flags, dataless, hard links across root entries), the bytes needed
+  against the copy's free space, `ditto` each root entry (`cp -P -p` a
+  root link, `chflags` a root folder's own flags), VolumeManifest's
+  manifest of both sides identical (sha256, mode, owner, group, flags,
+  extended attributes' and ACL's sha256 from FileInspecting: the Mac's
+  DarwinFileInspector in the app, Foundation's in tests; hard-link groups;
+  the system's root folders left out), the source's size-and-times
+  listing unchanged, and only then ConversionMarker
+  (`.visor-conversion-verified`: both UUIDs, the counts, the manifest's
+  and both listings' sha256, the time). Swap In wants that marker for
+  these two UUIDs, at most two hours old by the Mac's clock, and both
+  listings unchanged, and its prompt starts with Visor Disk Utility's own
+  `conversion-check` run as root (VolumeGuard requires it first): the
+  marker file's sha256, its UUIDs and age, both listings, Visor stopped
+  and root's lsof, again, before the first rename. Swap In leaves a note
+  (`volume-conversions.json` in the data folder) that unswap compares the
+  converted volume with: changed, it wants `--force`. Uninstall…'s typed
+  phrase names the kept volumes it deletes. visor_disk_volumes uses
+  swift-crypto's SHA-256.
 - **The Visor volume out of backups and search (0.65):** Visor Disk
   Utility makes Visor with Spotlight off (`mdutil -i off /Volumes/Visor`
   after `diskutil apfs addVolume`, one administrator prompt; VolumeGuard

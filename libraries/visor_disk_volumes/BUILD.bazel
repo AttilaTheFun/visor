@@ -11,12 +11,19 @@ package(default_visibility = ["//visibility:public"])
 # Visor (volumes.json). DiskVolumes, the read-only side, is what Visor's
 # server finds them with; VisorFolders is where Visor keeps its things, on
 # the Visor volume once it's there, and VisorFolderMove what moves them
-# there once. Foundation alone, with nothing run here: the same on Linux,
-# where its tests run.
+# there once. The conversion of a case-insensitive Sessions or Sources
+# (ConversionPlanner: Stage, copy-staged's copy and check with its marker,
+# Swap In, unswap; docs/volume-conversion.md) is planned and checked here
+# too, its copy run only through a caller's function. Foundation and
+# swift-crypto's SHA-256 (the copy's manifest), with nothing run here: the
+# same on Linux, where its tests run.
 swift_library(
     name = "visor_disk_volumes",
     copts = STRICT_SWIFT,
     srcs = glob(["Sources/*.swift"]),
     module_name = "DiskVolumes",
-    deps = ["//:foundation"],
+    deps = [
+        "//:foundation",
+        "@swiftpkg_swift_crypto//:Crypto",
+    ],
 )

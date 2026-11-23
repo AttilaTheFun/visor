@@ -5,9 +5,12 @@ load("//tools/swift:defs.bzl", "STRICT_SWIFT")
 # parsed (fixtures from a macOS 27 VM), the adopt-or-create decision, the
 # guard that never lets Sessions be erased (nor any volume deleted unless
 # asked for), volumes.json as Visor reads it (0.64's `containers` as
-# `visor`), and Visor's folders on the Visor volume and the move onto it,
-# in scratch folders. Foundation alone: on Linux, in //tests:linux, and on
-# a Mac.
+# `visor`), Visor's folders on the Visor volume and the move onto it, in
+# scratch folders, and a case-insensitive Sessions or Sources converted
+# (Stage's, Swap In's and unswap's commands, refusals and guard, the
+# marker, and copy-staged's copy and check on scratch folders, `cp -a`
+# standing in for ditto where there's none). On Linux, in //tests:linux,
+# and on a Mac.
 swift_test(
     name = "visor_disk_volumes_tests",
     copts = STRICT_SWIFT,

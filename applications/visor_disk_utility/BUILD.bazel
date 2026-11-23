@@ -20,9 +20,12 @@ variant_infoplist(
 # with macOS's administrator prompt for diskutil, and writes volumes.json
 # for Visor, and Uninstall… (libraries/visor_uninstall: a dry run first,
 # then everything Visor left on the Mac outside its volumes, the volumes
-# only when asked and their names typed, the apps to the Trash last). Its
-# command line (`status`, `create`, `erase-containers`, `uninstall`) runs
-# the same code, for scripts and test machines.
+# only when asked and their names typed, the apps to the Trash last), and
+# the conversion of a case-insensitive Sessions or Sources (Stage, Swap In,
+# a kept volume's Delete…: docs/volume-conversion.md). Its command line
+# (`status`, `create`, `erase-containers`, `uninstall`, `stage`,
+# `copy-staged`, `swap`, `unswap`, `delete-kept`) runs the same code, for
+# scripts, NCH over SSH and test machines.
 swift_library(
     name = "disk_utility_lib",
     copts = STRICT_SWIFT,

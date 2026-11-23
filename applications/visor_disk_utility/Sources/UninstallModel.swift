@@ -20,16 +20,13 @@ final class UninstallModel: Identifiable {
     private(set) var failure: String?
 
     /// The phrase to type for the volumes the plan would delete.
-    var phrase: String? {
-        guard let plan, !plan.volumes.isEmpty else { return nil }
-        return UninstallConfirmation.phrase(for: plan.volumes)
-    }
+    var phrase: String? { plan?.phrase }
 
     /// Whether Uninstall may run: a plan made, and the volumes' names typed
     /// when they're to go.
     var canRun: Bool {
         guard let plan, !isBusy, done.isEmpty else { return false }
-        return plan.volumes.isEmpty || UninstallConfirmation.matches(typed, roles: plan.volumes)
+        return plan.phrase == nil || plan.confirms(typed)
     }
 
     /// The dry run made again (the volumes' toggle changed, say).
@@ -53,7 +50,7 @@ final class UninstallModel: Identifiable {
         let typed = typed
         let lines = await Task.detached { () -> [String] in
             var said: [String] = []
-            UninstallRunner.run(plan, typed: plan.volumes.isEmpty ? nil : typed, route: .administratorPrompt) { said.append($0) }
+            UninstallRunner.run(plan, typed: plan.phrase == nil ? nil : typed, route: .administratorPrompt) { said.append($0) }
             return said
         }.value
         done = lines

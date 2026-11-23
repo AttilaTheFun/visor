@@ -23,6 +23,12 @@ final class VolumesModel {
     /// Whether the Visor volume is left out of Time Machine and Spotlight,
     /// as last looked; nil without it.
     private(set) var visorExclusions: VolumeExclusions?
+    /// Where Sessions' and Sources' conversions stand, as last looked.
+    private(set) var conversions: [VolumeRole: ConversionStatus] = [:]
+    /// What the last Swap In or unswap left, a line a volume.
+    var conversionResult: [String] = []
+    /// The disks as last looked.
+    private(set) var survey: DiskSurvey?
 
     init() {
         for role in VolumeRole.allCases {
@@ -92,24 +98,40 @@ final class VolumesModel {
     }
 
     /// Runs a look or a change off the main actor, then shows the disks as
-    /// they are and writes volumes.json, and looks at Visor's exclusions.
-    private func perform(_ work: @escaping @Sendable () throws -> DiskSurvey) async {
+    /// they are and writes volumes.json, and looks at Visor's exclusions
+    /// and the conversions. Whether the work was done (not failed, nor
+    /// cancelled at the prompt).
+    @discardableResult
+    func perform(_ work: @escaping @Sendable () throws -> DiskSurvey) async -> Bool {
         isBusy = true
         defer { isBusy = false }
         do {
             let survey = try await Task.detached(operation: work).value
             apply(survey)
+            await lookAtConversions(survey)
             owners = Dictionary(uniqueKeysWithValues: VolumeRole.allCases.compactMap { role in
                 survey.state(for: role).inPlaceUUID == nil ? nil : DiskTool.owner(of: role.mountPoint).map { (role, $0) }
             })
             let inPlace = survey.state(for: .visor).isMountedInPlace
             visorExclusions = inPlace ? await Task.detached { DiskTool.exclusions() }.value : nil
+            return true
         } catch DiskVolumesError.cancelled {
             // The person said no at the prompt: nothing to report.
+            return false
         } catch {
             failure = "\(error)"
-            if let survey = try? await Task.detached(operation: { try DiskTool.survey() }).value { apply(survey) }
+            if let survey = try? await Task.detached(operation: { try DiskTool.survey() }).value {
+                apply(survey)
+                await lookAtConversions(survey)
+            }
+            return false
         }
+    }
+
+    private func lookAtConversions(_ survey: DiskSurvey) async {
+        self.survey = survey
+        let statuses = await Task.detached { DiskTool.conversionStatuses(survey) }.value
+        conversions = Dictionary(uniqueKeysWithValues: statuses.map { ($0.role, $0) })
     }
 
     private func apply(_ survey: DiskSurvey) {
