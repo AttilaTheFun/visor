@@ -3,6 +3,8 @@ load("@rules_apple//apple:macos.bzl", "macos_application")
 load("@rules_swift//swift:swift.bzl", "swift_library")
 load("//tools/app_groups:defs.bzl", "app_group_entitlements")
 load("//tools/variant:defs.bzl", "variant_infoplist")
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@visor_signing//:signing.bzl", "TEAM_ID")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -26,10 +28,27 @@ variant_infoplist(
 # (`status`, `create`, `erase-containers`, `uninstall`, `stage`,
 # `copy-staged`, `swap`, `unswap`, `delete-kept`) runs the same code, for
 # scripts, NCH over SSH and test machines.
+# The team this build is made for (tools/signing: VISOR_TEAM_ID, never in
+# the repository), compiled in: the root's check's copy must be signed by it
+# (ConversionChecker). nil with the placeholder (CI's builds, whose signer
+# stamps the team later): then the running process's own entitlement says it.
+write_file(
+    name = "signing_team",
+    out = "SigningTeam.swift",
+    content = [
+        "// Made by applications/visor_disk_utility/BUILD.bazel from the builder's VISOR_TEAM_ID.",
+        "",
+        "enum SigningTeam {",
+        "    static let compiled: String? = %s" % ("nil" if TEAM_ID == "YOUR_TEAM_ID" else repr(TEAM_ID).replace("'", "\"")),
+        "}",
+        "",
+    ],
+)
+
 swift_library(
     name = "disk_utility_lib",
     copts = STRICT_SWIFT,
-    srcs = glob(["Sources/*.swift"]),
+    srcs = glob(["Sources/*.swift"]) + [":signing_team"],
     module_name = "VisorDiskUtility",
     deps = [
         "//:foundation",

@@ -64,10 +64,12 @@ extension VolumeGuard {
     /// How many of the commands, from the first, are the root's check a
     /// swap or unswap starts with (0 or 1): with a role swapping or
     /// unswapping, the run must start with exactly the check planned for
-    /// those roles, by Visor Disk Utility's own executable (`checker`), so
-    /// that nothing is renamed unless it passes. Swap and unswap aren't
-    /// mixed in one run.
-    static func checkFirst(_ commands: [DiskCommand], converting: [VolumeRole: ConversionStep], checker: String?) throws -> Int {
+    /// those roles, in exactly ConversionChecker's shape (Visor Disk
+    /// Utility's bundle copied as root into a root-owned folder, the copy
+    /// verified against its designated requirement, then run), so that
+    /// nothing is renamed unless it passes and nothing the person could
+    /// change runs as root. Swap and unswap aren't mixed in one run.
+    static func checkFirst(_ commands: [DiskCommand], converting: [VolumeRole: ConversionStep], checker: ConversionChecker?) throws -> Int {
         var swaps: [(role: VolumeRole, digest: String)] = []
         var unswaps: [VolumeRole] = []
         for role in VolumeRole.convertible {
@@ -79,7 +81,7 @@ extension VolumeGuard {
         }
         guard !swaps.isEmpty || !unswaps.isEmpty else { return 0 }
         guard swaps.isEmpty || unswaps.isEmpty else { throw DiskVolumesError.notAllowed("a swap and an unswap in one run") }
-        guard let checker, checker.hasPrefix("/") else {
+        guard let checker else {
             throw DiskVolumesError.notAllowed("a swap or unswap without the root's check before it")
         }
         let planned = swaps.isEmpty ? ConversionPlanner.unswapCheck(checker: checker, roles: unswaps)

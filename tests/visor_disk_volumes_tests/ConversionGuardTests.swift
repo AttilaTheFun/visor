@@ -59,10 +59,23 @@ import Testing
         }
     }
 
-    /// Visor Disk Utility's own executable, which a swap's and an
-    /// unswap's prompt start with, as root.
-    private let checker = "/Applications/Visor Disk Utility.app/Contents/MacOS/Visor Disk Utility"
+    /// Visor Disk Utility's bundle and requirement: a swap's and an
+    /// unswap's prompt start with a verified root-owned copy of it, run.
+    private let checker: ConversionChecker
     private let digest = String(repeating: "9f", count: 32)
+
+    init() throws {
+        checker = try ConversionChecker(bundle: "/Applications/Visor Disk Utility.app", executable: "Visor Disk Utility",
+                                        team: "TEAMID0000", cdhash: Self.cdhash, adHocAllowed: false)
+    }
+
+    static let cdhash = "3bc302846ae6cd4e9b5d1c76f7829052ec6ae1d5"
+
+    /// The requirement the copy must satisfy, built from constants (a
+    /// placeholder team).
+    static let requirement = "anchor apple generic and identifier \"com.LoganShire.Visor.DiskUtility\" and certificate "
+        + "leaf[field.1.2.840.113635.100.6.1.13] exists and certificate leaf[subject.OU] = \"TEAMID0000\" "
+        + "and cdhash H\"3bc302846ae6cd4e9b5d1c76f7829052ec6ae1d5\""
 
     private func swapping(_ roles: [VolumeRole], minutesOld: Double = 10) -> [VolumeRole: ConversionStep] {
         Dictionary(uniqueKeysWithValues: roles.map {
@@ -78,7 +91,8 @@ import Testing
         let staged = ConversionDisks.staged()
         let marker = ConversionDisks.marker(.sessions, now: now)
         let swap = try ConversionPlanner.swapCommands(.sessions, in: staged, marker: marker, now: now)
-        #expect(check([.sessions]).argv == [checker, "conversion-check", "swap", "sessions", digest])
+        #expect(check([.sessions]).argv == ["/bin/sh", "-c", ConversionChecker.script, "visor-check", "/Applications/Visor Disk Utility.app",
+                                            Self.requirement, "Visor Disk Utility", "conversion-check", "swap", "sessions", digest])
         try VolumeGuard.check([check([.sessions])] + swap, against: staged, converting: swapping([.sessions]), checker: checker)
         let both = swap + (try ConversionPlanner.swapCommands(.sources, in: staged, marker: ConversionDisks.marker(.sources, now: now), now: now))
         try VolumeGuard.check([check([.sessions, .sources])] + both, against: staged, converting: swapping([.sessions, .sources]), checker: checker)
@@ -89,9 +103,23 @@ import Testing
             }
         }
         #expect(throws: DiskVolumesError.self) { try VolumeGuard.check([check([.sessions])] + swap, against: staged, converting: swapping([.sessions])) }
-        let elsewhere = DiskCommand(program: "/tmp/other", arguments: check([.sessions]).arguments)
-        #expect(throws: DiskVolumesError.self) {
-            try VolumeGuard.check([elsewhere] + swap, against: staged, converting: swapping([.sessions]), checker: checker)
+        // Anything but the verify-then-run shape: the bundle's executable
+        // run as it is, another script, another requirement or bundle.
+        let planned = check([.sessions])
+        var shapes = [DiskCommand(program: "/Applications/Visor Disk Utility.app/Contents/MacOS/Visor Disk Utility",
+                                  arguments: ["conversion-check", "swap", "sessions", digest])]
+        for (index, replacement) in [(1, "set -e; \"$1/Contents/MacOS/$3\" \"$@\""), (3, "/tmp/Other.app"),
+                                     (4, Self.requirement + " or anchor apple generic"),
+                                     (4, Self.requirement.replacingOccurrences(of: Self.cdhash, with: String(repeating: "0", count: 40))),
+                                     (5, "../../bin/sh")] {
+            var shape = planned
+            shape.arguments[index] = replacement
+            shapes.append(shape)
+        }
+        for shape in shapes {
+            #expect(throws: DiskVolumesError.self, "\(shape.arguments.prefix(6))") {
+                try VolumeGuard.check([shape] + swap, against: staged, converting: swapping([.sessions]), checker: checker)
+            }
         }
         // The check alone, unasked: never run.
         #expect(throws: DiskVolumesError.self) { try VolumeGuard.check([check([.sessions])], against: staged, checker: checker) }
@@ -118,7 +146,7 @@ import Testing
     @Test func renameUnmountAndMountRunForTheseNamesAndDisksAlone() throws {
         let staged = ConversionDisks.staged()
         let marker = ConversionDisks.marker(.sessions, now: now)
-        var planned = try ConversionPlanner.swapCommands(.sessions, in: staged, marker: marker, now: now)
+        let planned = try ConversionPlanner.swapCommands(.sessions, in: staged, marker: marker, now: now)
         for (index, replacement) in [(0, command("rename", "disk3s7", "Sessions-old")), (0, command("rename", "disk3s7", "Visor")),
                                      (0, command("rename", "disk3s9", "Sessions-old-ci")), (0, command("rename", "/Volumes/Sessions", "Sessions-old-ci")),
                                      (1, command("unmount", "force", "disk3s7")), (1, command("unmount", "/Volumes/Sessions")),
@@ -132,10 +160,10 @@ import Testing
             }
         }
         // None of them alone, whatever the caller says it's doing.
-        planned = [command("mount", "disk3s10")]
+        let mounted = [command("mount", "disk3s10")]
         for converting: [VolumeRole: ConversionStep] in [[:], swapping([.sessions]), [.sessions: .unswap], [.sessions: .stage]] {
             #expect(throws: DiskVolumesError.self) {
-                try VolumeGuard.check(planned, against: staged, user: "logan", converting: converting, checker: checker)
+                try VolumeGuard.check(mounted, against: staged, user: "logan", converting: converting, checker: checker)
             }
         }
         #expect(throws: DiskVolumesError.notAllowed("diskutil rename disk3s7 Sessions-old-ci")) {
@@ -147,7 +175,8 @@ import Testing
         let swapped = ConversionDisks.swapped()
         let unswap = try ConversionPlanner.unswapCommands(.sessions, in: swapped)
         let first = ConversionPlanner.unswapCheck(checker: checker, roles: [.sessions])
-        #expect(first.argv == [checker, "conversion-check", "unswap", "sessions"])
+        #expect(Array(first.argv.suffix(3)) == ["conversion-check", "unswap", "sessions"])
+        #expect(first.program == "/bin/sh")
         try VolumeGuard.check([first] + unswap, against: swapped, converting: [.sessions: .unswap], checker: checker)
         #expect(throws: DiskVolumesError.self) { try VolumeGuard.check(unswap, against: swapped, converting: [.sessions: .unswap], checker: checker) }
         #expect(throws: DiskVolumesError.self) { try VolumeGuard.check([first] + unswap, against: swapped, checker: checker) }

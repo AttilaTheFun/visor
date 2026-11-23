@@ -7,13 +7,14 @@ public enum VolumeTree {
     /// Calls `visit` with each path under `root` (relative, `a/b`) and
     /// what `inspector` says of it; a folder is gone into when `visit`
     /// says so and it's readable. Throws when a folder that's gone into
-    /// can't be listed.
-    public static func walk(_ root: String, inspector: some FileInspecting,
+    /// can't be listed, or a path can't be inspected; with `failed`, a path
+    /// that can't be inspected is told to it instead, and passed over.
+    public static func walk(_ root: String, inspector: some FileInspecting, failed: ((String, Error) -> Void)? = nil,
                             visit: (String, FileInspection) throws -> Bool) throws {
-        try walk(root: root, relative: "", inspector: inspector, visit: visit)
+        try walk(root: root, relative: "", inspector: inspector, failed: failed, visit: visit)
     }
 
-    private static func walk(root: String, relative: String, inspector: some FileInspecting,
+    private static func walk(root: String, relative: String, inspector: some FileInspecting, failed: ((String, Error) -> Void)?,
                              visit: (String, FileInspection) throws -> Bool) throws {
         let folder = relative.isEmpty ? root : (root as NSString).appendingPathComponent(relative)
         let names: [String]
@@ -25,9 +26,16 @@ public enum VolumeTree {
         for name in names {
             if relative.isEmpty, VolumeManifest.leftOutAtRoot.contains(name) { continue }
             let path = relative.isEmpty ? name : relative + "/" + name
-            let file = try inspector.inspect((root as NSString).appendingPathComponent(path))
+            let file: FileInspection
+            do {
+                file = try inspector.inspect((root as NSString).appendingPathComponent(path))
+            } catch {
+                guard let failed else { throw error }
+                failed(path, error)
+                continue
+            }
             if try visit(path, file), file.kind == .directory, file.readable {
-                try walk(root: root, relative: path, inspector: inspector, visit: visit)
+                try walk(root: root, relative: path, inspector: inspector, failed: failed, visit: visit)
             }
         }
     }

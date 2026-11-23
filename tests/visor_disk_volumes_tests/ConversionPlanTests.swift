@@ -22,15 +22,14 @@ import Testing
         var reserved = mini
         reserved.containers[0].volumes[2].reserve = 20 * ByteSize.gigabyte
         reserved.containers[0].volumes[2].quota = 0
-        // With no quota of its own, the copy's is the container's free
-        // space less a tenth (at least 20 GB), in whole 10 GB: 408 GB free, 360 GB.
+        // With no quota of its own, the copy has none either: no tool can
+        // change a quota once a volume is made, and the copy becomes the
+        // volume Visor uses. copy-staged keeps a tenth of the free space
+        // (at least 20 GB) free instead.
         #expect(try ConversionPlanner.stageCommands(.sessions, in: reserved, user: "logan")[0].description
-                == "diskutil apfs addVolume disk3 Case-sensitive APFS Sessions-new -reserve 20000000000b -quota 360000000000b")
-        let volume = APFSVolume(device: "disk3s7", name: "Sessions")
-        #expect(ConversionPlanner.stagedQuota(volume, container: APFSContainer(reference: "disk3", free: 100 * ByteSize.gigabyte))
-                == 80 * ByteSize.gigabyte)
-        #expect(ConversionPlanner.stagedQuota(volume, container: APFSContainer(reference: "disk3", free: 25 * ByteSize.gigabyte))
-                == 10 * ByteSize.gigabyte)
+                == "diskutil apfs addVolume disk3 Case-sensitive APFS Sessions-new -reserve 20000000000b")
+        #expect(ConversionPlanner.keptFree(containerFree: 408 * ByteSize.gigabyte) == 40_800_000_000)
+        #expect(ConversionPlanner.keptFree(containerFree: 100 * ByteSize.gigabyte) == 20 * ByteSize.gigabyte)
         #expect(ConversionPlanner.status(.sessions, in: mini, marker: nil, now: now).canStage)
     }
 
