@@ -16,10 +16,16 @@ enum UninstallRunner {
     static func plan(deleteVolumes: Bool) throws -> UninstallPlan {
         // The disks, for the volumes when their deletion is asked for, and
         // always for the volumes a conversion kept (listed if not deleted).
-        let survey = deleteVolumes ? try DiskTool.survey() : try? DiskTool.survey()
+        let survey: DiskSurvey?
+        if deleteVolumes {
+            survey = try DiskTool.survey()
+        } else {
+            survey = try? DiskTool.survey()
+        }
+        let volumes = deleteVolumes ? VolumeRole.allCases.compactMap { survey?.state(for: $0) } : []
         let planner = UninstallPlanner(home: NSHomeDirectory(), app: installed("Visor.app"), diskUtility: ownBundle,
                                        accessGroup: MacUninstallKeychain.ownAccessGroup(bundleID: visorID),
-                                       volumes: deleteVolumes ? survey.map { survey in VolumeRole.allCases.map { survey.state(for: $0) } } ?? [] : [],
+                                       volumes: volumes,
                                        kept: survey.map(KeptVolume.found(in:)) ?? [],
                                        deleteVolumes: deleteVolumes)
         return planner.plan(files: MacUninstallFiles(), keychain: MacUninstallKeychain())
