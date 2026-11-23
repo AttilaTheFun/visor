@@ -677,6 +677,30 @@ removed (still only when `agentProxy` is set).
   them only as exactly that, at a role's mount point, for a volume made
   earlier in the same run, or for an adopted one of Visor's own when its
   card's Fix (or `fix-owner <role>`) names it in `fixing`.
+- **Sessions and Sources converted to case-sensitive (0.67;
+  docs/volume-conversion.md):** a hand-made case-insensitive Sessions or
+  Sources is converted by a copy, never reformatted. ConversionPlanner
+  (libraries/visor_disk_volumes) plans each step from the survey: Stage
+  (`stage sessions|sources|both`, the window's Stage: `apfs addVolume
+  <container> "Case-sensitive APFS" <Name>-new` with the role volume's own
+  quota and reserve, then its chown and chmod), Swap In (`swap …`: the old
+  volume renamed `<Name>-old-ci` and unmounted, the copy renamed `<Name>`,
+  unmounted and mounted, by disk) and `unswap …` (the old one put back, the
+  copy renamed `<Name>-cs-failed`). VolumeGuard passes a rename, unmount,
+  mount or `<Name>-new` addVolume only for a role the caller names in
+  `converting`, and only exactly as the planner plans that step again from
+  a fresh survey (Swap In's marker checked again); a kept volume is deleted
+  only by its UUID, its name in `deletingKept` (Delete…, `delete-kept`, or
+  Uninstall… with the volumes). `copy-staged …` runs as the person, never
+  root: Visor's processes and port, and `lsof` of both volumes (Spotlight
+  aside), first; then ConversionCopy: `ditto` each root entry (`cp -P -p`
+  a root link), VolumeManifest's sha256 manifest of both sides (files,
+  links' targets, folders; the system's root folders left out) identical,
+  the source's size-and-time listing unchanged, and only then
+  ConversionMarker (`.visor-conversion-verified`: both UUIDs, the counts,
+  the manifest's and the listing's sha256, the time). Swap In wants that
+  marker for these two UUIDs, at most two hours old, and the listing
+  still the same. visor_disk_volumes now uses swift-crypto's SHA-256.
 - **The Visor volume out of backups and search (0.65):** Visor Disk
   Utility makes Visor with Spotlight off (`mdutil -i off /Volumes/Visor`
   after `diskutil apfs addVolume`, one administrator prompt; VolumeGuard
