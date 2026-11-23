@@ -63,8 +63,8 @@ enum UninstallRunner {
     /// The volumes deleted, if their names were typed.
     private static func deleteVolumes(_ plan: UninstallPlan, typed: String?, route: PrivilegeRoute, say: (String) -> Void) {
         let roles = plan.volumes
-        guard let typed, UninstallConfirmation.matches(typed, roles: roles) else {
-            say("not done: the volumes weren't deleted: \"\(UninstallConfirmation.phrase(for: roles))\" wasn't typed")
+        guard let typed, plan.confirms(typed) else {
+            say("not done: the volumes weren't deleted: \"\(plan.phrase ?? "")\" wasn't typed")
             return
         }
         var kept: [String] = []

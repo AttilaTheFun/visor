@@ -34,11 +34,15 @@ public struct ConversionMarker: Codable, Equatable, Sendable {
     /// In takes it again, as root just before the first rename, and refuses
     /// if anything changed since the copy.
     public var sourceListingSHA256: String
+    /// The sha256 of the copy's listing once it was checked: Swap In takes
+    /// it again too (the marker is the person's to write, so the copy
+    /// itself must still be as checked).
+    public var copyListingSHA256: String
     /// When the check passed.
     public var verified: Date
 
     public init(version: Int = Self.currentVersion, role: VolumeRole, sourceUUID: String, newUUID: String, files: Int, links: Int,
-                directories: Int, hardLinks: Int = 0, manifestSHA256: String, sourceListingSHA256: String, verified: Date) {
+                directories: Int, hardLinks: Int = 0, manifestSHA256: String, sourceListingSHA256: String, copyListingSHA256: String, verified: Date) {
         self.version = version
         self.role = role
         self.sourceUUID = sourceUUID
@@ -49,12 +53,14 @@ public struct ConversionMarker: Codable, Equatable, Sendable {
         self.hardLinks = hardLinks
         self.manifestSHA256 = manifestSHA256
         self.sourceListingSHA256 = sourceListingSHA256
+        self.copyListingSHA256 = copyListingSHA256
         self.verified = verified
     }
 
     /// Throws unless it's the marker of this role's copy from `sourceUUID`
-    /// to `newUUID`, of a format this reads, and at most two hours old.
-    public func check(role: VolumeRole, sourceUUID: String, newUUID: String, now: Date) throws {
+    /// to `newUUID`, of a format this reads, and at most two hours old by
+    /// this Mac's clock now (`now` is for tests alone).
+    public func check(role: VolumeRole, sourceUUID: String, newUUID: String, now: Date = Date()) throws {
         let name = role.stagedName
         guard version <= Self.currentVersion else {
             throw DiskVolumesError.blocked("\(name)'s marker is of a later format (\(version)): use a newer Visor Disk Utility.")

@@ -23,7 +23,7 @@ import Testing
         let json = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: ConversionMarker.path(atRoot: root))))
             as? [String: Any])
         #expect(Set(json.keys) == ["version", "role", "sourceUUID", "newUUID", "files", "links", "directories", "hardLinks", "manifestSHA256",
-                                   "sourceListingSHA256", "verified"])
+                                   "sourceListingSHA256", "copyListingSHA256", "verified"])
         #expect(json["role"] as? String == "sources")
         #expect(json["verified"] as? String == "2026-11-18T10:56:40Z")
     }
@@ -40,5 +40,19 @@ import Testing
             try later.check(role: .sessions, sourceUUID: ConversionDisks.sessionsUUID, newUUID: ConversionDisks.sessionsNewUUID, now: ConversionDisks.now)
         }
         #expect(error?.description.contains("later format") == true)
+    }
+
+    @Test func swapInsNotesRoundTripBesideEachOther() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("visor-notes-\(UUID().uuidString)/volume-conversions.json")
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        #expect(ConversionNote.read(at: url).isEmpty)
+        let sessions = ConversionNote(role: .sessions, swapped: ConversionDisks.now, newUUID: ConversionDisks.sessionsNewUUID,
+                                      oldUUID: ConversionDisks.sessionsUUID, listingSHA256: "a")
+        let sources = ConversionNote(role: .sources, swapped: ConversionDisks.now, newUUID: ConversionDisks.sourcesNewUUID,
+                                     oldUUID: ConversionDisks.sourcesUUID, listingSHA256: "b")
+        try sessions.save(at: url)
+        try sources.save(at: url)
+        #expect(ConversionNote.read(at: url) == ["sessions": sessions, "sources": sources])
+        #expect(ConversionNote.url(inDataDirectory: url.deletingLastPathComponent()) == url)
     }
 }

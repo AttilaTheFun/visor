@@ -24,8 +24,8 @@ import VisorUninstall
 /// A case-insensitive Sessions or Sources converted (DiskUtilityCLI+Conversion,
 /// docs/volume-conversion.md): `… stage sessions|sources|both`, `…
 /// copy-staged sessions|sources|both [--replace]` (as the person, never
-/// root), `… swap sessions|sources|both`, `… unswap sessions|sources|both`
-/// and `… delete-kept <name> --confirm "delete <name>"`.
+/// root), `… swap sessions|sources|both`, `… unswap sessions|sources|both
+/// [--force]` and `… delete-kept <name> --confirm "delete <name>"`.
 enum DiskUtilityCLI {
     static let verbs = Set(["status", "create", "erase-containers", "fix-owner", "exclude-visor", "uninstall"]).union(conversionVerbs)
 
@@ -114,8 +114,7 @@ enum DiskUtilityCLI {
             return
         }
         var typed: String?
-        if !plan.volumes.isEmpty {
-            let phrase = UninstallConfirmation.phrase(for: plan.volumes)
+        if let phrase = plan.phrase {
             if let index = arguments.firstIndex(of: "--confirm"), index + 1 < arguments.count {
                 typed = arguments[index + 1]
             } else {

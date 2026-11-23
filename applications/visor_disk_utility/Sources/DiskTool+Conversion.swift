@@ -17,12 +17,12 @@ extension DiskTool {
     }
 
     /// Where Sessions' and Sources' conversions stand.
-    static func conversionStatuses(_ survey: DiskSurvey, now: Date = Date()) -> [ConversionStatus] {
+    static func conversionStatuses(_ survey: DiskSurvey) -> [ConversionStatus] {
         VolumeRole.convertible.map { role in
             var marker: ConversionMarker?
             var problem: String?
             do { marker = try self.marker(for: role) } catch { problem = "\(error)" }
-            return ConversionPlanner.status(role, in: survey, marker: marker, markerError: problem, now: now)
+            return ConversionPlanner.status(role, in: survey, marker: marker, markerError: problem)
         }
     }
 
@@ -57,7 +57,13 @@ extension DiskTool {
             + "(\(pair.staged.device), \(pair.staged.uuid))")
         return try ConversionCopy.copyAndVerify(role: role, from: role.mountPoint, to: role.stagedMountPoint, sourceUUID: pair.source.uuid,
                                                 newUUID: pair.staged.uuid, owner: currentOwner(), inspector: DarwinFileInspector(),
-                                                replace: replace, run: { _ = try run($0) }, say: say)
+                                                destinationFree: freeSpace(role.stagedMountPoint), replace: replace,
+                                                run: { _ = try run($0) }, say: say)
+    }
+
+    /// The bytes free on the volume at a path, as its filesystem says.
+    static func freeSpace(_ path: String) -> Int64? {
+        ((try? FileManager.default.attributesOfFileSystem(forPath: path))?[.systemFreeSize] as? NSNumber)?.int64Value
     }
 
     /// The person running it: their user id and groups.
@@ -77,7 +83,7 @@ extension DiskTool {
     /// the old volume renamed `<Name>-old-ci` and unmounted, the copy
     /// renamed `<Name>` and mounted again at `/Volumes/<Name>`, each by its
     /// disk, in one administrator prompt; then the marker removed.
-    static func swap(_ roles: [VolumeRole], route: PrivilegeRoute, now: Date = Date()) throws -> DiskSurvey {
+    static func swap(_ roles: [VolumeRole], route: PrivilegeRoute) throws -> DiskSurvey {
         let disks = try survey()
         guard let checker else { throw DiskVolumesError.blocked("Visor Disk Utility can't find its own executable for the root's check.") }
         var steps: [VolumeRole: ConversionStep] = [:]
@@ -85,10 +91,10 @@ extension DiskTool {
         var commands: [DiskCommand] = []
         for role in roles {
             let marker = try self.marker(for: role)
-            commands += try ConversionPlanner.swapCommands(role, in: disks, marker: marker, now: now)
+            commands += try ConversionPlanner.swapCommands(role, in: disks, marker: marker)
             if let marker {
                 let digest = try ConversionMarker.fileDigest(atRoot: role.stagedMountPoint)
-                steps[role] = .swap(marker, markerDigest: digest, now: now)
+                steps[role] = .swap(marker, markerDigest: digest)
                 digests.append((role, digest))
             }
         }
@@ -97,7 +103,7 @@ extension DiskTool {
         try refuseWhileVisorRuns()
         try refuseOpenFiles(on: roles.flatMap { [$0.mountPoint, $0.stagedMountPoint] })
         for role in roles {
-            guard case let .swap(marker, _, _)? = steps[role] else { continue }
+            guard case let .swap(marker, _)? = steps[role] else { continue }
             try checkListings(role, marker: marker)
         }
         testPause()
@@ -113,9 +119,18 @@ extension DiskTool {
         }
         for role in roles {
             try? FileManager.default.removeItem(atPath: ConversionMarker.path(atRoot: role.mountPoint))
+            // What it holds now, for unswap to tell whether it changed since.
+            if let new = after.state(for: role).volume, let old = KeptVolume.found(in: after).first(where: { $0.role == role && $0.kind == .rollback }),
+               let listing = try? VolumeManifest.make(of: role.mountPoint, .listing, inspector: DarwinFileInspector()) {
+                try? ConversionNote(role: role, swapped: Date(), newUUID: new.uuid, oldUUID: old.volume.uuid, listingSHA256: listing.sha256)
+                    .save(at: noteURL)
+            }
         }
         return after
     }
+
+    /// Swap In's notes, in Visor's data folder.
+    static var noteURL: URL { ConversionNote.url(inDataDirectory: VisorFolders.locate().data) }
 
     /// What Swap In left, a line a role: its personality, mount point and
     /// owner, and the volume kept for rollback.
@@ -136,10 +151,21 @@ extension DiskTool {
     /// unswap: the old volume put back at `/Volumes/<Name>`, the converted
     /// one renamed `<Name>-cs-failed` and unmounted; one administrator
     /// prompt.
-    static func unswap(_ roles: [VolumeRole], route: PrivilegeRoute) throws -> DiskSurvey {
+    static func unswap(_ roles: [VolumeRole], force: Bool, route: PrivilegeRoute, say: (String) -> Void = { _ in }) throws -> DiskSurvey {
         guard let checker else { throw DiskVolumesError.blocked("Visor Disk Utility can't find its own executable for the root's check.") }
         let disks = try survey()
         let commands = try roles.flatMap { try ConversionPlanner.unswapCommands($0, in: disks) }
+        let notes = ConversionNote.read(at: noteURL)
+        for role in roles {
+            // The converted volume where Visor looks, if it's there.
+            let state = disks.state(for: role)
+            guard state.isMountedInPlace, state.isCaseSensitive == true, let volume = state.volume else { continue }
+            let listing = try VolumeManifest.make(of: role.mountPoint, .listing, inspector: DarwinFileInspector())
+            if let warning = ConversionPlanner.unswapWarning(role, note: notes[role.rawValue], uuid: volume.uuid, listing: listing.sha256) {
+                guard force else { throw DiskVolumesError.blocked(warning) }
+                say("warning (--force): " + warning)
+            }
+        }
         try refuseWhileVisorRuns()
         try refuseOpenFiles(on: roles.flatMap { [$0.mountPoint, "/Volumes/" + $0.keptName] })
         do {
@@ -150,12 +176,18 @@ extension DiskTool {
         }
     }
 
-    /// The source's listing (sizes, times) as the marker recorded it: else
-    /// it changed since the copy, and isn't swapped.
+    /// The source's and the copy's listings (sizes, times) as the marker
+    /// recorded them: else one changed since the copy was checked, and
+    /// isn't swapped.
     static func checkListings(_ role: VolumeRole, marker: ConversionMarker) throws {
-        let listing = try VolumeManifest.make(of: role.mountPoint, .listing, inspector: DarwinFileInspector())
-        guard listing.sha256 == marker.sourceListingSHA256 else {
+        let source = try VolumeManifest.make(of: role.mountPoint, .listing, inspector: DarwinFileInspector())
+        guard source.sha256 == marker.sourceListingSHA256 else {
             throw DiskVolumesError.blocked("\(role.mountPoint) has changed since it was copied (a file added, removed, written or changed): "
+                + "run copy-staged \(role.rawValue) --replace again, then Swap In. Nothing was swapped.")
+        }
+        let copy = try VolumeManifest.make(of: role.stagedMountPoint, .listing, inspector: DarwinFileInspector())
+        guard copy.sha256 == marker.copyListingSHA256 else {
+            throw DiskVolumesError.blocked("\(role.stagedMountPoint) has changed since it was checked: "
                 + "run copy-staged \(role.rawValue) --replace again, then Swap In. Nothing was swapped.")
         }
     }
@@ -174,8 +206,8 @@ extension DiskTool {
     /// first, so the renames after it run only if it passes. A swap's
     /// marker must still be the file the person's checks read (its
     /// sha256), name the volumes there now and be at most two hours old by
-    /// this Mac's clock, and the source's listing must still be the
-    /// marker's; for both, Visor stopped and nothing open on the volumes,
+    /// this Mac's clock, and the source's and the copy's listings must
+    /// still be the marker's; for both, Visor stopped and nothing open on the volumes,
     /// as root's lsof sees every process. Throws, saying nothing was
     /// changed, otherwise.
     static func conversionCheck(_ arguments: [String]) throws {
@@ -197,7 +229,7 @@ extension DiskTool {
                           let marker = try marker(for: role[0]) else {
                         throw DiskVolumesError.blocked("\(role[0].stagedName)'s marker isn't the one checked before the prompt")
                     }
-                    try marker.check(role: role[0], sourceUUID: pair.source.uuid, newUUID: pair.staged.uuid, now: Date())
+                    try marker.check(role: role[0], sourceUUID: pair.source.uuid, newUUID: pair.staged.uuid)
                     try checkListings(role[0], marker: marker)
                     mounts += [role[0].mountPoint, role[0].stagedMountPoint]
                 }

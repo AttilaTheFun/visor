@@ -79,9 +79,9 @@ enum ConversionDisks {
     /// A marker of the role's copy, `minutes` old at `now`.
     static func marker(_ role: VolumeRole, minutesOld minutes: Double = 10, now: Date = ConversionDisks.now) -> ConversionMarker {
         ConversionMarker(role: role, sourceUUID: role == .sessions ? sessionsUUID : sourcesUUID,
-                         newUUID: role == .sessions ? sessionsNewUUID : sourcesNewUUID, files: 1204, links: 31, directories: 211,
+                         newUUID: role == .sessions ? sessionsNewUUID : sourcesNewUUID, files: 1204, links: 31, directories: 211, hardLinks: 2,
                          manifestSHA256: String(repeating: "ab", count: 32), sourceListingSHA256: String(repeating: "cd", count: 32),
-                         verified: now.addingTimeInterval(-minutes * 60))
+                         copyListingSHA256: String(repeating: "ef", count: 32), verified: now.addingTimeInterval(-minutes * 60))
     }
 
     /// A whole second, as the marker's file keeps it.

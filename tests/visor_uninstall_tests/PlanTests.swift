@@ -180,7 +180,13 @@ import VisorUninstall
             .plan(files: Self.usedMac(), keychain: Self.keychain)
         #expect(going.steps(.volumes).map(\.action) == [.deleteKept(name: "Sessions-old-ci", uuid: "68AEACEE-B314-4A78-ADAF-789D4F4FDA99")])
         #expect(going.steps(.kept).isEmpty)
-        #expect(going.volumes.isEmpty, "the phrase names the roles' volumes alone")
+        // The phrase names it: after a swap that stopped part-way, it may be the only original.
+        #expect(going.volumes.isEmpty)
+        #expect(going.keptVolumes == ["Sessions-old-ci"])
+        #expect(going.phrase == "delete Sessions-old-ci")
+        #expect(going.confirms("delete Sessions-old-ci") && !going.confirms("delete "))
+        #expect(UninstallConfirmation.phrase(for: [.sessions, .sources, .visor], kept: ["Sessions-old-ci"])
+                == "delete Sessions, Sources, Visor and Sessions-old-ci")
         #expect(going.dryRun.contains("Sessions-old-ci (disk3s7, 68AEACEE-B314-4A78-ADAF-789D4F4FDA99), kept by a conversion of Sessions"))
     }
 

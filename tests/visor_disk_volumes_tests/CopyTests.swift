@@ -55,11 +55,12 @@ import Testing
 
         var markerPath: String { ConversionMarker.path(atRoot: copy) }
 
-        func copyAndVerify(replace: Bool = false, inspector: some FileInspecting = FoundationFileInspector(),
-                           run: ([String]) throws -> Void = CopyTests.run) throws -> ConversionMarker {
+        func copyAndVerify(replace: Bool = false, inspector: some FileInspecting = FoundationFileInspector(), free: Int64? = nil,
+                           said: Said? = nil, run: ([String]) throws -> Void = CopyTests.run) throws -> ConversionMarker {
             try ConversionCopy.copyAndVerify(role: .sessions, from: source, to: copy, sourceUUID: ConversionDisks.sessionsUUID,
-                                             newUUID: ConversionDisks.sessionsNewUUID, owner: owner, inspector: inspector, replace: replace,
-                                             now: { ConversionDisks.now }, run: run)
+                                             newUUID: ConversionDisks.sessionsNewUUID, owner: owner, inspector: inspector,
+                                             destinationFree: free, replace: replace, now: { ConversionDisks.now }, run: run,
+                                             say: { said?.lines.append($0) })
         }
     }
 
@@ -103,6 +104,7 @@ import Testing
         let source = try VolumeManifest.make(of: scratch.source, .content)
         #expect(marker.manifestSHA256 == source.sha256)
         #expect(marker.sourceListingSHA256 == (try VolumeManifest.make(of: scratch.source, .listing)).sha256)
+        #expect(marker.copyListingSHA256 == (try VolumeManifest.make(of: scratch.copy, .listing)).sha256)
         // The marker isn't part of what's compared.
         #expect(try VolumeManifest.make(of: scratch.copy, .content) == source)
 
@@ -293,6 +295,48 @@ import Testing
         #expect(try ConversionCopy.entries(at: scratch.copy).isEmpty, "nothing copied")
         #expect(!FileManager.default.fileExists(atPath: scratch.markerPath))
     }
+
+    @Test func aCopyThatWouldntFitIsRefusedBeforeItStarts() throws {
+        let scratch = try Scratch()
+        defer { scratch.remove() }
+        // Each file once, the hard link within Claude counted once.
+        let needed = try ConversionCopy.bytesNeeded(at: scratch.source, inspector: FoundationFileInspector())
+        let texts: [String] = ["hello\n", "{\"a\": 1}\n", "top\n", "a nested system-named folder is copied\n", "two lines\n"]
+        let sizes: [Int] = texts.map { $0.utf8.count }
+        #expect(needed == Int64(sizes.reduce(0, +)))
+        let error = #expect(throws: DiskVolumesError.self) { try scratch.copyAndVerify(free: 1_000_000) }
+        #expect(error?.description.contains("The copy needs about 100 MB") == true)
+        #expect(try ConversionCopy.entries(at: scratch.copy).isEmpty, "nothing copied")
+        try scratch.copyAndVerify(free: 10_000_000_000)
+    }
+
+    @Test func whatsLeftOutAndLinksThatNeedCaseInsensitivityAreSaid() throws {
+        let scratch = try Scratch()
+        defer { scratch.remove() }
+        try FileManager.default.createDirectory(atPath: scratch.source + "/.Trashes/501", withIntermediateDirectories: true)
+        let said = Said()
+        try scratch.copyAndVerify(said: said)
+        #expect(said.lines.contains { $0.hasPrefix("left out of the copy, as the system's own: .Spotlight-V100 (1 entries), .Trashes (1 entries), "
+            + ".fseventsd (1 entries).") && $0.contains("The volume's Trash (.Trashes)") })
+        // A link whose target differs in case: found on a case-insensitive
+        // volume, not on the copy (stood in for by a folder with the
+        // target's other case).
+        let root = scratch.root
+        for side in ["ci", "cs"] { try FileManager.default.createDirectory(atPath: "\(root)/\(side)", withIntermediateDirectories: true) }
+        try Data().write(to: URL(fileURLWithPath: "\(root)/ci/Notes.md"))
+        try Data().write(to: URL(fileURLWithPath: "\(root)/ci/notes.md"))
+        try Data().write(to: URL(fileURLWithPath: "\(root)/cs/Notes.md"))
+        for side in ["ci", "cs"] {
+            try FileManager.default.createSymbolicLink(atPath: "\(root)/\(side)/readme", withDestinationPath: "notes.md")
+            try FileManager.default.createSymbolicLink(atPath: "\(root)/\(side)/fine", withDestinationPath: "Notes.md")
+        }
+        #expect(try ConversionCopy.caseDependentLinks(source: "\(root)/ci", copy: "\(root)/cs", inspector: FoundationFileInspector()) == ["readme"])
+    }
+}
+
+/// What copy-staged said, a line each.
+final class Said {
+    var lines: [String] = []
 }
 
 /// Foundation's inspector, with one path hidden (UF_HIDDEN) and a flag

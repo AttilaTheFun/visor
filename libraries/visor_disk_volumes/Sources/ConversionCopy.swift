@@ -89,10 +89,61 @@ public enum ConversionCopy {
         return (lines, count)
     }
 
+    /// The bytes the copy writes: each regular file's size, a file shared
+    /// by hard links within one root entry once (ditto keeps those), a
+    /// clone in full (a copy doesn't share its blocks).
+    public static func bytesNeeded(at root: String, inspector: some FileInspecting) throws -> Int64 {
+        var total: Int64 = 0
+        var seen: Set<String> = []
+        try VolumeTree.walk(root, inspector: inspector) { path, file in
+            guard file.kind == .regular else { return true }
+            if file.linkCount > 1 {
+                let key = String(path.prefix { $0 != "/" }) + "\u{0}\(file.inode)"
+                guard seen.insert(key).inserted else { return true }
+            }
+            total += file.size
+            return true
+        }
+        return total
+    }
+
+    /// The folders of the system's at a volume's root, which aren't copied:
+    /// a line saying so, when there are any (how many entries each holds,
+    /// where the person may look).
+    public static func leftOut(at root: String) -> String? {
+        let files = FileManager.default
+        let present = VolumeManifest.systemFolders.sorted().filter { files.fileExists(atPath: (root as NSString).appendingPathComponent($0)) }
+        guard !present.isEmpty else { return nil }
+        let described = present.map { name -> String in
+            let count = (try? files.contentsOfDirectory(atPath: (root as NSString).appendingPathComponent(name)))?.count
+            return count.map { "\(name) (\($0) entries)" } ?? "\(name) (unreadable)"
+        }
+        return "left out of the copy, as the system's own: " + described.joined(separator: ", ")
+            + ". The volume's Trash (.Trashes) and temporary items (.TemporaryItems) aren't carried over: empty or move out anything you want first."
+    }
+
+    /// Links that resolve on the source but not on the copy: a relative
+    /// target that named a file in another case, which a case-insensitive
+    /// volume found and a case-sensitive one doesn't.
+    public static func caseDependentLinks(source: String, copy: String, inspector: some FileInspecting) throws -> [String] {
+        let files = FileManager.default
+        var found: [String] = []
+        try VolumeTree.walk(source, inspector: inspector) { path, file in
+            if file.kind == .link, let target = file.linkTarget, !target.hasPrefix("/"),
+               files.fileExists(atPath: (source as NSString).appendingPathComponent(path)),
+               !files.fileExists(atPath: (copy as NSString).appendingPathComponent(path)) {
+                found.append(path)
+            }
+            return true
+        }
+        return found
+    }
+
     /// Copies `source` (a role's volume, its mount point) onto
     /// `destination` (its staged copy), as `owner`, and checks it: first,
     /// that nothing on the source can't be copied as it is by the person
-    /// (`obstacles`: refused, with the list); then the copy; then both
+    /// (`obstacles`: refused, with the list) and that the copy fits
+    /// (`destinationFree`, its bytes free); then the copy; then both
     /// sides' manifests identical (data, mode, owner, group, flags,
     /// extended attributes, ACLs, hard links) and the source unchanged
     /// meanwhile (its listing, before and after). Only then the marker,
@@ -103,7 +154,7 @@ public enum ConversionCopy {
     @discardableResult
     public static func copyAndVerify(role: VolumeRole, from source: String, to destination: String, sourceUUID: String, newUUID: String,
                                      owner: FileOwner, inspector: some FileInspecting = FoundationFileInspector(),
-                                     replace: Bool = false, now: () -> Date = Date.init,
+                                     destinationFree: Int64? = nil, replace: Bool = false, now: () -> Date = Date.init,
                                      run: ([String]) throws -> Void, say: (String) -> Void = { _ in }) throws -> ConversionMarker {
         let files = FileManager.default
         let marker = ConversionMarker.path(atRoot: destination)
@@ -129,6 +180,16 @@ public enum ConversionCopy {
             for name in there { try files.removeItem(atPath: (destination as NSString).appendingPathComponent(name)) }
             say("emptied \(destination) (\(there.count) entries)")
         }
+        if let destinationFree {
+            let needed = try bytesNeeded(at: source, inspector: inspector)
+            // A little room for the folders' own blocks and the marker.
+            let margin = max(Int64(100_000_000), needed / 50)
+            guard needed + margin <= destinationFree else {
+                throw DiskVolumesError.blocked("The copy needs about \(ByteSize.describe(needed + margin)) (clones copied in full), "
+                    + "and \(destination) has \(ByteSize.describe(destinationFree)) free. Nothing was copied.")
+            }
+        }
+        if let line = leftOut(at: source) { say(line) }
         let before = try VolumeManifest.make(of: source, .listing, inspector: inspector)
         let commands = try commands(from: source, to: destination, entries: try entries(at: source), inspector: inspector)
         for command in commands {
@@ -156,10 +217,16 @@ public enum ConversionCopy {
         if !original.sockets.isEmpty {
             say("left out \(original.sockets.count) socket files (no data): \(original.sockets.prefix(5).joined(separator: ", "))")
         }
+        let caseLinks = try caseDependentLinks(source: source, copy: destination, inspector: inspector)
+        if !caseLinks.isEmpty {
+            say("warning: \(caseLinks.count) links resolve only on a case-insensitive volume (their targets differ in case), "
+                + "and won't on the copy: \(caseLinks.prefix(10).joined(separator: ", "))")
+        }
+        let copyListing = try VolumeManifest.make(of: destination, .listing, inspector: inspector)
         let verified = ConversionMarker(role: role, sourceUUID: sourceUUID, newUUID: newUUID, files: original.files, links: original.links,
                                         directories: original.directories, hardLinks: original.hardLinks.count,
                                         manifestSHA256: original.sha256, sourceListingSHA256: after.sha256,
-                                        verified: now())
+                                        copyListingSHA256: copyListing.sha256, verified: now())
         try verified.write(atRoot: destination)
         say("wrote \(marker): \(verified.summary)")
         return verified

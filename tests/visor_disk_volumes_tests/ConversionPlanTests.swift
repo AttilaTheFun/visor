@@ -22,8 +22,15 @@ import Testing
         var reserved = mini
         reserved.containers[0].volumes[2].reserve = 20 * ByteSize.gigabyte
         reserved.containers[0].volumes[2].quota = 0
+        // With no quota of its own, the copy's is the container's free
+        // space less a tenth (at least 20 GB), in whole 10 GB: 408 GB free, 360 GB.
         #expect(try ConversionPlanner.stageCommands(.sessions, in: reserved, user: "logan")[0].description
-                == "diskutil apfs addVolume disk3 Case-sensitive APFS Sessions-new -reserve 20000000000b")
+                == "diskutil apfs addVolume disk3 Case-sensitive APFS Sessions-new -reserve 20000000000b -quota 360000000000b")
+        let volume = APFSVolume(device: "disk3s7", name: "Sessions")
+        #expect(ConversionPlanner.stagedQuota(volume, container: APFSContainer(reference: "disk3", free: 100 * ByteSize.gigabyte))
+                == 80 * ByteSize.gigabyte)
+        #expect(ConversionPlanner.stagedQuota(volume, container: APFSContainer(reference: "disk3", free: 25 * ByteSize.gigabyte))
+                == 10 * ByteSize.gigabyte)
         #expect(ConversionPlanner.status(.sessions, in: mini, marker: nil, now: now).canStage)
     }
 
@@ -176,6 +183,32 @@ import Testing
         #expect(status.phase == .converted)
         #expect(status.kept.map(\.name) == ["Sessions-old-ci"])
         #expect(status.kept[0].summary == "Sessions-old-ci (disk3s7, not mounted): kept for rollback (Sessions as it was, case-insensitive)")
+    }
+
+    /// NCH's review of #506: a swap that stopped after its first rename,
+    /// the old volume renamed but still mounted where Visor looks.
+    @Test func unswapNamesBackAnOldVolumeStillAtTheMountPoint() throws {
+        var stopped = ConversionDisks.staged()
+        ConversionDisks.rename(&stopped, "disk3s7", to: "Sessions-old-ci", mountedAt: "/Volumes/Sessions")
+        #expect(try ConversionPlanner.unswapCommands(.sessions, in: stopped).map(\.description) == [
+            "diskutil rename disk3s7 Sessions", "diskutil unmount disk3s7", "diskutil mount disk3s7",
+        ])
+    }
+
+    /// NCH's review of #506: days on the converted volume, then unswap,
+    /// would bring back stale data; it wants --force when it's changed.
+    @Test func unswapWarnsWhenTheConvertedVolumeChangedSinceTheSwap() {
+        let note = ConversionNote(role: .sessions, swapped: now, newUUID: ConversionDisks.sessionsNewUUID, oldUUID: ConversionDisks.sessionsUUID,
+                                  listingSHA256: "same")
+        #expect(ConversionPlanner.unswapWarning(.sessions, note: note, uuid: ConversionDisks.sessionsNewUUID.lowercased(), listing: "same") == nil)
+        let changed = ConversionPlanner.unswapWarning(.sessions, note: note, uuid: ConversionDisks.sessionsNewUUID, listing: "other")
+        #expect(changed?.contains("Sessions has changed since it was swapped in") == true)
+        #expect(changed?.contains("stays on Sessions-cs-failed") == true)
+        #expect(changed?.contains("unswap sessions --force") == true)
+        for unknown in [nil, ConversionNote(role: .sessions, swapped: now, newUUID: ConversionDisks.sourcesNewUUID, oldUUID: "", listingSHA256: "same")] {
+            #expect(ConversionPlanner.unswapWarning(.sessions, note: unknown, uuid: ConversionDisks.sessionsNewUUID, listing: "same")?
+                .contains("there's no note of when Sessions") == true)
+        }
     }
 
     @Test func unswapIsRefusedWithoutTheOldVolumeOrWithNothingToUndo() throws {

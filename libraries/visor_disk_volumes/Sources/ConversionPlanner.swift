@@ -39,10 +39,21 @@ public enum ConversionPlanner {
         guard DiskCommand.isUserName(user) else { throw DiskVolumesError.blocked("\(user) isn't a user's name.") }
         var arguments = ["apfs", "addVolume", source.container.reference, role.personality, role.stagedName]
         if source.volume.reserve > 0 { arguments += ["-reserve", ByteSize.argument(source.volume.reserve)] }
-        if source.volume.quota > 0 { arguments += ["-quota", ByteSize.argument(source.volume.quota)] }
+        arguments += ["-quota", ByteSize.argument(stagedQuota(source.volume, container: source.container))]
         return [DiskCommand(arguments: arguments),
                 DiskCommand(program: DiskCommand.chown, arguments: [user + ":staff", role.stagedMountPoint]),
                 DiskCommand(program: DiskCommand.chmod, arguments: ["775", role.stagedMountPoint])]
+    }
+
+    /// The staged copy's quota: the role volume's own; with none, the
+    /// container's free space less a margin (a tenth of it, at least
+    /// 20 GB), in whole 10 GB, so a copy that runs over (clones copied in
+    /// full) stops before it fills the disk.
+    public static func stagedQuota(_ volume: APFSVolume, container: APFSContainer) -> Int64 {
+        if volume.quota > 0 { return volume.quota }
+        let step = 10 * ByteSize.gigabyte
+        let room = container.free - max(20 * ByteSize.gigabyte, container.free / 10)
+        return max(step, room / step * step)
     }
 
     /// Throws unless Stage may run for the role: its volume there,
@@ -68,7 +79,9 @@ public enum ConversionPlanner {
                 + "\(role.stagedName) would be mounted beside it. Move it away first.")
         }
         // What it holds, as APFS counts it (at least its reserve), and a
-        // gigabyte to spare.
+        // gigabyte to spare: a first estimate. Clones and hard links split
+        // between root entries take more; copy-staged counts them before it
+        // copies (ConversionCopy.bytesNeeded), and the quota bounds them.
         let needed = source.volume.used + ByteSize.gigabyte
         guard source.container.free >= needed else {
             throw DiskVolumesError.blocked("\(source.container.reference) has \(ByteSize.describe(source.container.free)) free; "
@@ -123,7 +136,7 @@ public enum ConversionPlanner {
     /// rollback), the copy renamed `<Name>`, unmounted and mounted again,
     /// at `/Volumes/<Name>`. Refused without a marker that names these two
     /// volumes and is at most two hours old (`now`).
-    public static func swapCommands(_ role: VolumeRole, in survey: DiskSurvey, marker: ConversionMarker?, now: Date) throws -> [DiskCommand] {
+    public static func swapCommands(_ role: VolumeRole, in survey: DiskSurvey, marker: ConversionMarker?, now: Date = Date()) throws -> [DiskCommand] {
         let pair = try copyPair(role, in: survey)
         let named = survey.containers.flatMap(\.volumes).filter { $0.name == role.volumeName }
         guard named.count == 1 else {
@@ -180,6 +193,17 @@ public enum ConversionPlanner {
             throw DiskVolumesError.blocked("\(failed.name) exists already (\(failed.volume.device)): delete it before unswapping again.")
         }
         let named = survey.containers.flatMap(\.volumes).filter { $0.name == role.volumeName }
+        let old = kept[0]
+        // A swap stopped after its first rename: the old volume, renamed,
+        // still mounted where Visor looks. Named back, and mounted afresh.
+        if survey.infos.first(where: { $0.mountPoint == role.mountPoint })?.device == old.volume.device {
+            guard named.isEmpty else {
+                throw DiskVolumesError.blocked("A volume named \(role.volumeName) exists beside \(old.name) at \(role.mountPoint): rename it first.")
+            }
+            return [try DiskCommand.rename(device: old.volume.device, to: role.volumeName),
+                    try DiskCommand.unmount(device: old.volume.device),
+                    try DiskCommand.mount(device: old.volume.device)]
+        }
         var commands: [DiskCommand] = []
         if let info = survey.infos.first(where: { $0.mountPoint == role.mountPoint }) {
             guard let current = survey.volume(device: info.device)?.volume, current.name == role.volumeName, named.count == 1,
@@ -196,7 +220,6 @@ public enum ConversionPlanner {
             throw DiskVolumesError.blocked("A volume named \(role.volumeName) (\(named.map(\.device).joined(separator: ", "))) isn't mounted at "
                 + "\(role.mountPoint): mount or rename it first.")
         }
-        let old = kept[0]
         if old.mountPoint == nil { commands.append(try DiskCommand.mount(device: old.volume.device)) }
         commands += [try DiskCommand.rename(device: old.volume.device, to: role.volumeName),
                      try DiskCommand.unmount(device: old.volume.device),
@@ -204,11 +227,29 @@ public enum ConversionPlanner {
         return commands
     }
 
+    /// Why unswap wants `--force`, or nil: the converted volume now at the
+    /// role's mount point (`uuid`, its `listing` now) changed since Swap In
+    /// left it (`note`), or there's no note of it. Unswap brings back the
+    /// old volume as it was at the swap; what was written on the converted
+    /// one since stays there, renamed `<Name>-cs-failed`.
+    public static func unswapWarning(_ role: VolumeRole, note: ConversionNote?, uuid: String, listing: String) -> String? {
+        let why: String
+        if let note, note.newUUID.caseInsensitiveCompare(uuid) == .orderedSame {
+            guard note.listingSHA256 != listing else { return nil }
+            why = "\(role.volumeName) has changed since it was swapped in (\(ConversionMarker.describe(note.swapped)))"
+        } else {
+            why = "there's no note of when \(role.volumeName) (\(uuid)) was swapped in, so whether it changed since can't be told"
+        }
+        return why + ": unswap brings back \(role.keptName) as it was at the swap, and whatever was written on \(role.volumeName) since "
+            + "stays on \(role.failedName) (unmounted), not on the volume Visor uses. Copy out what you need from it after, "
+            + "or run unswap \(role.rawValue) --force to do it anyway."
+    }
+
     /// Where the role's conversion stands, for the window and `status`.
     /// `marker`: the staged copy's marker as read (nil: none);
     /// `markerError`: why it couldn't be read, if it couldn't.
     public static func status(_ role: VolumeRole, in survey: DiskSurvey, marker: ConversionMarker?, markerError: String? = nil,
-                              now: Date) -> ConversionStatus {
+                              now: Date = Date()) -> ConversionStatus {
         let kept = KeptVolume.found(in: survey).filter { $0.role == role }
         let staged = stagedVolumes(role, in: survey).first
         func status(_ phase: ConversionStatus.Phase) -> ConversionStatus {

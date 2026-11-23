@@ -14,7 +14,7 @@ extension DiskUtilityCLI {
         case "stage": return try stage(roles(arguments), route: route)
         case "copy-staged": return try copyStaged(roles(arguments), replace: arguments.contains("--replace"))
         case "swap": return try swap(roles(arguments), route: route)
-        case "unswap": return try unswap(roles(arguments), route: route)
+        case "unswap": return try unswap(roles(arguments), force: arguments.contains("--force"), route: route)
         default: return try deleteKept(arguments, route: route)
         }
     }
@@ -49,20 +49,22 @@ extension DiskUtilityCLI {
         let disks = try DiskTool.survey()
         for role in roles {
             let marker = try DiskTool.marker(for: role)
-            try ConversionPlanner.swapCommands(role, in: disks, marker: marker, now: Date()).forEach { print("planned: \($0)") }
+            try ConversionPlanner.swapCommands(role, in: disks, marker: marker).forEach { print("planned: \($0)") }
         }
         let after = try DiskTool.swap(roles, route: route)
         DiskTool.swapResult(roles, in: after).forEach { print("swapped: \($0)") }
         return after
     }
 
-    private static func unswap(_ roles: [VolumeRole], route: PrivilegeRoute) throws -> DiskSurvey {
+    private static func unswap(_ roles: [VolumeRole], force: Bool, route: PrivilegeRoute) throws -> DiskSurvey {
         let disks = try DiskTool.survey()
         for role in roles { try ConversionPlanner.unswapCommands(role, in: disks).forEach { print("planned: \($0)") } }
-        let after = try DiskTool.unswap(roles, route: route)
+        let after = try DiskTool.unswap(roles, force: force, route: route) { print($0) }
         for role in roles {
             let state = after.state(for: role)
-            print("unswapped: \(role.volumeName) is \(state.format) at \(state.path) again; the converted copy is \(role.failedName), unmounted.")
+            let failed = KeptVolume.found(in: after).contains { $0.role == role && $0.kind == .failed }
+            print("unswapped: \(role.volumeName) is \(state.format) at \(state.path) again"
+                + (failed ? "; the converted copy is \(role.failedName), unmounted." : "."))
         }
         return after
     }

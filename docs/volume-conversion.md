@@ -43,49 +43,92 @@ three commands only exactly as planned, for a role the step names.
 unless Visor's server is stopped (no `Visor.app/Contents/MacOS/Visor` nor
 `visor-agent-host` process, nothing answering on 127.0.0.1:7433) and
 nothing but Spotlight (`mds*`, `mdworker*`) has a file open on either
-volume (`lsof /Volumes/<Name>`, `lsof /Volumes/<Name>-new`). Then:
+volume outside the system's own folders (`lsof -F pcn /Volumes/<Name>`,
+and `<Name>-new`). Run as the person, lsof sees only their processes: a
+write by any other process during the copy is caught by the source's
+listing (below), and Swap In checks again as root. Then:
 
+- **What the person can't copy as it is is refused, with a list, before
+  anything is copied:** a file or folder of another owner (ditto run as
+  the person would quietly make it theirs: a container's or another uid's
+  files), of a group the person isn't in, one they can't read, one with a
+  flag only root can set (`schg`, `sappnd`, restricted…) or whose data
+  isn't on the Mac (dataless), and a hard link shared between two entries
+  at the root (each root entry is copied on its own, which would split
+  it). The copy isn't done as root instead: copy-staged is NCH's, over
+  SSH, with no administrator. Put them right first, as Logan (`sudo chown
+  -R logan:staff <path>`, `chflags`), or move them off the volume. To see
+  them ahead of the window: `find /Volumes/Sessions ! -user $USER` and
+  `find /Volumes/Sessions ! -group staff`;
+- the copy must fit: the bytes it writes (clones in full, a file shared by
+  hard links within a root entry once) against `<Name>-new`'s free space;
 - any old marker on `<Name>-new` is removed; a `<Name>-new` that holds
   anything is refused unless `--replace`, which empties it first;
 - every entry at `/Volumes/<Name>`'s root is copied but the system's own
   folders (`.Spotlight-V100`, `.fseventsd`, `.Trashes`, `.TemporaryItems`,
-  `.DocumentRevisions-V100`): a symbolic link at the root with `cp -P -p`
-  (ditto follows a link it's given), everything else with `ditto` (modes,
-  ACLs, extended attributes; links inside folders stay links);
+  `.DocumentRevisions-V100`), which it says it left out: **the volume's
+  Trash and temporary items aren't carried over**, so empty or move out
+  anything wanted from them first. A symbolic link at the root goes with
+  `cp -P -p` (ditto follows a link it's given), everything else with
+  `ditto` (modes, ACLs, extended attributes, flags, hard links within the
+  entry; links inside folders stay links); a root folder's own flags
+  (hidden, say), which ditto leaves off, are set after with `chflags`;
 - both sides' manifests are made, the system's folders left out: every
-  regular file's sha256, every symbolic link's target and every folder,
-  sorted by path. They must be identical. Socket files are left out (no
-  data, and nothing copies one) and listed;
-- the source's listing (every path's size and modification time) is taken
-  before and after the copy, and must be the same: nothing wrote to it
-  meanwhile;
+  regular file's sha256, every symbolic link's target, every folder, and
+  of each its mode, owner, group, flags (the person's and root's; not the
+  system's own bookkeeping: compressed, tracked, dataless), the sha256 of
+  its extended attributes (names and values) and of its ACL's text; FIFOs
+  and devices by type, mode and device number; and each group of paths
+  that are one file (hard links). They must be identical. Socket files are
+  left out (no data, and nothing copies one) and listed;
+- the source's listing (every path's size, modification time and
+  status-change time) is taken before and after the copy, and must be the
+  same: nothing wrote to it meanwhile;
+- a symbolic link whose target differs from a file's name only in case
+  (`readme -> NOTES.md` beside `notes.md`) resolves on the case-insensitive
+  volume and not on the copy: it's copied as it is, and listed as a
+  warning. Fix such links (and any path written in a different case in a
+  script or a config) before or after the window;
 - only then is `.visor-conversion-verified` written at `<Name>-new`'s root
-  (JSON): the source's and the copy's APFS volume UUIDs, the file, link and
-  folder counts, the manifest's sha256, the listing's sha256, and the time.
+  (JSON): the source's and the copy's APFS volume UUIDs, the file, link,
+  folder and hard-link counts, the manifest's sha256, the source's and the
+  copy's listings' sha256, and the time.
 
 Anything that fails, a mismatch above all, leaves no marker and says what
-(`MISMATCH`, with the first paths that differ). Run it again with
+(`MISMATCH`, with the first lines that differ). Run it again with
 `--replace` once the cause is gone.
 
 **Swap In** (the box's **Swap In Sessions and Sources**, or `Visor Disk
 Utility swap sessions|sources|both`; one administrator prompt for both).
 Refused unless, for each role: the marker is on `<Name>-new`, names this
-`<Name>`'s UUID and this `<Name>-new`'s, and is at most two hours old; the
-source's listing is still the marker's (nothing changed since the copy);
-no `<Name>-old-ci` exists; and, as for the copy, Visor is stopped and
-nothing has either volume open. Then, by disk (`disk3s7`), so no path or
-name can stand for the other volume:
+`<Name>`'s UUID and this `<Name>-new`'s, and is at most two hours old by
+this Mac's clock; the source's and the copy's listings are still the
+marker's (nothing changed on either since the check: the marker is the
+person's to write, so the copy itself is checked too); no `<Name>-old-ci`
+exists; and, as for the copy, Visor is stopped and nothing has either
+volume open. Then, in the administrator prompt's one shell:
 
-1. `diskutil rename <old disk> <Name>-old-ci`, `diskutil unmount <old disk>`;
-2. `diskutil rename <new disk> <Name>`, `diskutil unmount <new disk>`,
-   `diskutil mount <new disk>`: mounted at `/Volumes/<Name>`;
-3. the marker removed (as the user).
+1. **as root, first:** `Visor Disk Utility conversion-check swap <role>
+   <the marker file's sha256>…` checks it all again: the marker is still
+   the file checked before the prompt, names the volumes there now and
+   isn't too old; both listings are unchanged; Visor's processes are gone;
+   and root's `lsof` (which sees every process, the container engine's and
+   root's among them) finds nothing open on either volume. If anything
+   differs it refuses, and nothing after it runs: **nothing is changed**;
+2. by disk (`disk3s7`), so no path or name can stand for the other volume:
+   `diskutil rename <old disk> <Name>-old-ci`, `diskutil unmount <old
+   disk>`, then `diskutil rename <new disk> <Name>`, `diskutil unmount <new
+   disk>`, `diskutil mount <new disk>`: mounted at `/Volumes/<Name>`;
+3. the marker removed (as the user), and a note left in Visor's data
+   folder (`volume-conversions.json`): the swap's time, both UUIDs and the
+   converted volume's listing, for unswap.
 
-VolumeGuard plans the same five commands again from the disks just before
-the prompt runs, with the marker checked again, and passes them only if
-they're identical. The box and the command line then say what's there:
-"Sessions: Case-sensitive APFS, mounted at /Volumes/Sessions, owned by
-logan", and the volume kept. `volumes.json` records the new volume as
+VolumeGuard plans the same commands again from the disks just before the
+prompt runs, with the marker checked again by this Mac's clock, and passes
+them only if they're identical and the check is first, by Visor Disk
+Utility's own executable. The box and the command line then say what's
+there: "Sessions: Case-sensitive APFS, mounted at /Volumes/Sessions, owned
+by logan", and the volume kept. `volumes.json` records the new volume as
 Visor's own.
 
 **The kept volumes.** `<Name>-old-ci` stays unmounted (after a restart
@@ -95,16 +138,31 @@ Sessions-old-ci`, then the administrator prompt: `diskutil apfs
 deleteVolume <its UUID>`), and `Visor Disk Utility delete-kept
 Sessions-old-ci --confirm "delete Sessions-old-ci"` does the same.
 Uninstall…'s dry run lists them as kept, and deletes them with the volumes
-when that's asked.
+when that's asked; its typed phrase then names them too ("delete Sessions,
+Sources, Visor and Sessions-old-ci"), since after a swap that stopped
+part-way a kept volume can be the only original.
 
-**unswap** (`Visor Disk Utility unswap sessions|sources|both`, one
-administrator prompt; command line only). The rollback, while
+**unswap** (`Visor Disk Utility unswap sessions|sources|both [--force]`,
+one administrator prompt; command line only). The rollback, while
 `<Name>-old-ci` is there, found by its name: the converted `<Name>` at
 `/Volumes/<Name>`, if there's one, renamed `<Name>-cs-failed` and
 unmounted; the old one mounted if it isn't, renamed `<Name>`, unmounted and
 mounted again at `/Volumes/<Name>`. A swap that stopped part-way is undone
-the same way. The `-cs-failed` copy is listed for Delete… like a kept one.
-To convert again after an unswap: delete both kept volumes, then Stage.
+the same way, and so is one that stopped just after its first rename, the
+old volume renamed but still mounted at `/Volumes/<Name>` (it's named
+back). The prompt starts with the root's check (`conversion-check unswap
+<role>…`: Visor stopped, nothing open). **Unswap brings back the old volume
+as it was at the swap:** if the converted one has changed since (its
+listing isn't the note's, or there's no note), it's refused unless
+`--force`, and says that what was written since stays on `<Name>-cs-failed`,
+unmounted, to be copied out by hand. The `-cs-failed` copy is listed for
+Delete… like a kept one, its sheet saying it may hold the newest data. To
+convert again after an unswap: delete both kept volumes, then Stage.
+
+**Stage's quota.** The copy gets the role volume's own quota; a volume with
+none gives it the container's free space less a tenth (at least 20 GB), in
+whole 10 GB, so a copy that runs over (clones are copied in full) stops
+before it fills the disk. copy-staged checks the copy fits before it starts.
 
 ## The window, step by step (the Mini)
 
@@ -114,8 +172,14 @@ see the session folder's one-time runbook for Time Machine).
 
 **0. Before (NCH, read-only):** nothing else holds Sessions or Sources (no
 Shireworks or Nimbus lease mounting them: `sw machine list`; no editor open
-in a checkout), and the container has room (`Visor Disk Utility status`:
-Sessions' and Sources' conversion lines say "Stage makes …").
+in a checkout), the container has room (`Visor Disk Utility status`:
+Sessions' and Sources' conversion lines say "Stage makes …"), and nothing
+on them belongs to another user or group (`find /Volumes/Sessions
+/Volumes/Sources \( ! -user logan -o ! -group staff \) -print | head`,
+`ls -lO` for flags): what it lists, Logan gives to himself before the
+window (`sudo chown -R logan:staff <path>`), or copy-staged will refuse
+with the same list. Look for links that only resolve case-insensitively
+too (copy-staged warns of them).
 
 **1. Stage (Logan).** Open Visor Disk Utility; in *Convert to
 Case-Sensitive*, click **Stage Sessions and Sources** and approve the
@@ -179,7 +243,10 @@ volumes are there):** stop Visor as in step 2, then
 "/Applications/Visor Disk Utility.app/Contents/MacOS/Visor Disk Utility" unswap both
 ```
 
-approve the prompt, and start Visor again (step 6).
+approve the prompt, and start Visor again (step 6). If the sessions have
+already written to the converted volumes, unswap refuses: `--force` brings
+the old ones back anyway, and what was written since stays on
+`<Name>-cs-failed`, to be copied out by hand.
 
 **Afterwards:** Time Machine backs the new volumes up afresh. After a week
 or so, with Logan happy, he deletes `Sessions-old-ci` and `Sources-old-ci`
@@ -187,7 +254,9 @@ with their Delete… buttons.
 
 ## Testing
 
-`//tests/visor_disk_volumes_tests` (in `//tests:linux`, and on a Mac):
+`//tests/visor_disk_volumes_tests` (in `//tests:linux`, and on a Mac;
+the Mac's own inspector, with flags, extended attributes and ACLs, in a
+leased macOS VM):
 ConversionPlanTests (Stage's, Swap In's and unswap's commands, and every
 refusal), ConversionGuardTests (each step passes only as planned, for the
 roles named; rename, unmount and mount for those names and disks alone; a

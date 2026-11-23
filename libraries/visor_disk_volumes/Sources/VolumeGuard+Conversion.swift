@@ -30,8 +30,8 @@ extension VolumeGuard {
         case .stage:
             guard let user else { throw DiskVolumesError.notAllowed("a stage with no user to give \(role.stagedName) to") }
             return try ConversionPlanner.stageCommands(role, in: survey, user: user)
-        case let .swap(marker, _, now):
-            return try ConversionPlanner.swapCommands(role, in: survey, marker: marker, now: now)
+        case let .swap(marker, _):
+            return try ConversionPlanner.swapCommands(role, in: survey, marker: marker)
         case .unswap:
             return try ConversionPlanner.unswapCommands(role, in: survey)
         }
@@ -72,7 +72,7 @@ extension VolumeGuard {
         var unswaps: [VolumeRole] = []
         for role in VolumeRole.convertible {
             switch converting[role] {
-            case let .swap(_, digest, _)?: swaps.append((role, digest))
+            case let .swap(_, digest)?: swaps.append((role, digest))
             case .unswap?: unswaps.append(role)
             case .stage?, nil: break
             }
