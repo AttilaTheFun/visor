@@ -88,7 +88,8 @@ public struct HandedOverBuild: Sendable {
         let verified = await run(Self.codesign, ["--verify", "--strict", "--deep", "--test-requirement", "=" + requirement, staged])
         guard verified.status == 0 else {
             try? files.removeItem(atPath: staged)
-            return .refused("The build Applications handed over failed its signature check (\(requirement)): " + Self.said(verified))
+            return .refused("The build Applications handed over failed its signature check (Apple's anchor, \(bundleID), this "
+                            + "build's team): " + Self.said(verified))
         }
         return .ready(staged)
     }
