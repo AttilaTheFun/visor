@@ -189,6 +189,10 @@ use_repo(
 signing = use_extension("//tools/signing:extension.bzl", "signing")
 use_repo(signing, "visor_signing")
 
+# Visor's one team id (tools/team_id): VISOR_TEAM_ID's real value, or "".
+team_id = use_extension("//tools/team_id:extension.bzl", "team_id")
+use_repo(team_id, "visor_team_id")
+
 # --- Isomer: SwiftUI for the web, Android, Linux and Windows, from the
 # --- project's registry. The client's libraries import SwiftUI and
 # --- Foundation through //:swift_ui and //:foundation, isomer's per-platform

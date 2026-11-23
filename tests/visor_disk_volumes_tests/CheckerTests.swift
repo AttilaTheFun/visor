@@ -75,4 +75,26 @@ import Testing
             #expect(throws: DiskVolumesError.self, "\(bundle) \(executable)") { try checker(bundle: bundle, executable: executable) }
         }
     }
+
+    /// NCH's review of #508: the team is Logan's, compiled in. An optimized
+    /// build without it refuses (a bundle replaced before launch would
+    /// bring its own); with it, a running team that differs refuses.
+    @Test func theTeamIsTheCompiledOneAndAnOptimizedBuildWithoutItRefuses() throws {
+        for compiled: String? in [nil, ""] {
+            let error = #expect(throws: DiskVolumesError.self) {
+                try ConversionChecker.team(compiled: compiled, running: Self.team, fallback: false)
+            }
+            #expect(error?.description.contains("built without Logan's team") == true)
+            // A dev or test build: the running process's own.
+            #expect(try ConversionChecker.team(compiled: compiled, running: Self.team, fallback: true) == Self.team)
+            #expect(try ConversionChecker.team(compiled: compiled, running: nil, fallback: true) == nil)
+        }
+        let differs = #expect(throws: DiskVolumesError.self) {
+            try ConversionChecker.team(compiled: Self.team, running: "OTHERTEAM1", fallback: true)
+        }
+        #expect(differs?.description.contains("runs signed by team OTHERTEAM1, not TEAMID0000") == true)
+        #expect(try ConversionChecker.team(compiled: Self.team, running: Self.team, fallback: false) == Self.team)
+        // Compiled in, and running ad hoc (no team): the requirement still names it, so an ad hoc copy fails codesign.
+        #expect(try ConversionChecker.team(compiled: Self.team, running: nil, fallback: false) == Self.team)
+    }
 }

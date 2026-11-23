@@ -10,6 +10,11 @@ import DiskVolumes
 import Foundation
 import Security
 
+/// libsystem's `csops(2)` (sys/codesign.h, which the SDK doesn't give
+/// Swift): the kernel's record of a process's code signature.
+@_silgen_name("csops")
+private func csops(_ pid: pid_t, _ ops: UInt32, _ useraddr: UnsafeMutableRawPointer?, _ usersize: Int) -> Int32
+
 extension DiskTool {
     /// The staged copy's marker, at `/Volumes/<Name>-new`; nil when there's
     /// none. Throws when there's one that can't be read.
@@ -82,10 +87,10 @@ extension DiskTool {
     /// The root's check's checker: a copy of this app's bundle, made by
     /// root in a root-owned folder, verified against a requirement built
     /// from constants (ConversionChecker.requirement): the team this build
-    /// was made for, compiled in (SigningTeam) or, when the builder had
-    /// none (CI's builds, whose signer stamps it), the running process's
-    /// own (its entitlements, as the kernel holds them, never the bundle on
-    /// disk), and pinned to this running process's own cdhash. Never the
+    /// was made for, compiled in (SigningTeam: VISOR_TEAM_ID, CI's from its
+    /// VISOR_TEAM_ID variable), or, in a dev or test build alone, the running process's own
+    /// (its entitlements as the kernel holds them), and pinned to this
+    /// running process's own cdhash. Never the
     /// bundle as it is, which the person (or any process of theirs) can
     /// write, and never a requirement read from it.
     static func verifiedChecker() throws -> ConversionChecker {
@@ -93,18 +98,22 @@ extension DiskTool {
         guard let executable = Bundle.main.executableURL?.lastPathComponent else {
             throw DiskVolumesError.blocked("Visor Disk Utility can't find its own executable for the root's check.")
         }
-        let running = runningTeam()
-        if let compiled = SigningTeam.compiled, let running, compiled != running {
-            throw DiskVolumesError.blocked("Visor Disk Utility runs signed by team \(running), not \(compiled), the team it was built for: "
-                + "the root's check isn't run.")
-        }
         #if VISOR_TEST_SIGNING
         let adHocAllowed = true
         #else
         let adHocAllowed = false
         #endif
-        return try ConversionChecker(bundle: bundle, executable: executable, team: SigningTeam.compiled ?? running,
-                                     cdhash: try runningCdhash(), adHocAllowed: adHocAllowed)
+        // The running process's own team stands in for a compiled one only
+        // in a dev build (DEBUG: dbg, fastbuild) or a test build; an
+        // optimized one (CI's alpha-apple and release-apple) refuses.
+        #if DEBUG
+        let fallback = true
+        #else
+        let fallback = adHocAllowed
+        #endif
+        let team = try ConversionChecker.team(compiled: SigningTeam.compiled, running: runningTeam(), fallback: fallback)
+        return try ConversionChecker(bundle: bundle, executable: executable, team: team, cdhash: try runningCdhash(),
+                                     adHocAllowed: adHocAllowed)
     }
 
     /// The running process's own cdhash, as the kernel holds it for the
@@ -115,12 +124,7 @@ extension DiskTool {
     /// it). The disk's own is read too, and must be the same, or the
     /// bundle has changed since launch and nothing runs.
     static func runningCdhash() throws -> String {
-        typealias Csops = @convention(c) (pid_t, UInt32, UnsafeMutableRawPointer?, Int) -> Int32
         let csOpsCdhash: UInt32 = 5
-        guard let system = dlopen(nil, RTLD_NOW), let symbol = dlsym(system, "csops") else {
-            throw DiskVolumesError.blocked("The kernel's record of Visor Disk Utility's code couldn't be read: the root's check isn't run.")
-        }
-        let csops = unsafeBitCast(symbol, to: Csops.self)
         var hash = [UInt8](repeating: 0, count: 20)
         guard csops(getpid(), csOpsCdhash, &hash, hash.count) == 0 else {
             throw DiskVolumesError.blocked("The kernel's record of Visor Disk Utility's cdhash couldn't be read: the root's check isn't run.")

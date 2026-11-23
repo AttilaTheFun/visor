@@ -715,8 +715,11 @@ removed (still only when `agentProxy` is set).
   exact) copies it as root into a root-owned `mktemp -d` folder under
   /private/var/tmp, verifies the copy with `codesign --verify --strict -R`
   against a requirement built from constants (ConversionChecker:
-  Developer ID anchor and leaf, the identifier, the team compiled in from
-  VISOR_TEAM_ID or, for CI's builds, the running process's entitlements,
+  Developer ID anchor and leaf, the identifier, the team compiled in
+  (SigningTeam, from tools/signing's TEAM_ID: VISOR_TEAM_ID, which CI's
+  alpha-apple and release-apple pass as a repo_env from the repository's
+  VISOR_TEAM_ID variable; an optimized build without it refuses, a dev or
+  test build falls back to the running process's entitlements),
   and the running process's own cdhash, as the kernel holds it
   (`csops(CS_OPS_CDHASH)`: SecCodeCopySelf's signing information is read
   from the disk, and a bundle replaced after launch passed by it in a
