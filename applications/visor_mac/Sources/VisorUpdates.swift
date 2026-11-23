@@ -1,5 +1,5 @@
-// Visor.app's updates from Applications (UpdateKit 0.18, docs/Updates.md
-// there): it installs them itself. Applications quitting it would end every
+// Visor.app's updates from Shireworks (UpdateKit 0.18, docs/Updates.md
+// there): it installs them itself. Shireworks quitting it would end every
 // session's agent with it, so it answers each offer "install myself"; once
 // the verified build is ready, it waits until no session is mid-turn, then
 // installs it through the server's own relaunch (`/api/restart {path}`,
@@ -9,11 +9,11 @@
 // (AppRelauncher); the server agent restarts into the build (watched and
 // rolled back the same way: ServerAgentRestart), and the app reopens once
 // the new build has stayed up. A rollback the server says is reported to
-// Applications. The build handed over lies in the app group's container,
+// Shireworks. The build handed over lies in the app group's container,
 // which every member of the group may write: it's installed only as a
 // real folder, copied out into Visor's own and that copy checked against
 // Visor's identifier and team (HandedOverBuild), or not at all, the app
-// staying as it is and Applications told why. Applications offers nothing
+// staying as it is and Shireworks told why. Shireworks offers nothing
 // until the app's "Update automatically" is on; a build without the app
 // group (one from the public source) does nothing at all.
 
@@ -27,7 +27,7 @@ enum VisorUpdates {
     static let quietCheck: Duration = .seconds(30)
 
     /// At launch, after the server has started: the handler and the install
-    /// hook, the build this is written for Applications, and, when the
+    /// hook, the build this is written for Shireworks, and, when the
     /// server says an update didn't stay up and was rolled back (its
     /// relauncher's word, or the server agent's watch's), that, once.
     static func start() {
@@ -40,7 +40,7 @@ enum VisorUpdates {
         Task { await reportRollback() }
     }
 
-    /// The last rollback the server said, reported to Applications: kept, so
+    /// The last rollback the server said, reported to Shireworks: kept, so
     /// the server agent, which outlives the app, isn't reported at each of
     /// its launches.
     private static let reportedKey = "visor.rollbackReported"
@@ -69,7 +69,7 @@ enum VisorUpdates {
     /// copy in `staging`, once that has passed its checks (HandedOverBuild).
     static func install(_ offer: UpdateOffer) async {
         guard let bundle = offer.bundle else {
-            await AppUpdates.installFailed("Applications handed over no build")
+            await AppUpdates.installFailed("Shireworks handed over no build")
             return
         }
         // Until it's known which process serves.

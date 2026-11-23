@@ -1,6 +1,6 @@
 import Foundation
 
-/// A build Applications handed over for Visor.app to install itself
+/// A build Shireworks handed over for Visor.app to install itself
 /// (UpdateKit's `UpdateOffer.bundle`), made safe to install. It lies in the
 /// app group's container, which every member of the group may write, so it
 /// is taken only when it is a real folder, not a symbolic link (lstat);
@@ -60,9 +60,9 @@ public struct HandedOverBuild: Sendable {
         let source = Self.trimmed(handedOver)
         switch kind(source) {
         case .folder: break
-        case .link: return .refused("The build Applications handed over (\(source)) is a symbolic link, not a folder: it isn't installed")
-        case .missing: return .refused("The build Applications handed over isn't at \(source)")
-        case .other: return .refused("The build Applications handed over (\(source)) isn't a folder: it isn't installed")
+        case .link: return .refused("The build Shireworks handed over (\(source)) is a symbolic link, not a folder: it isn't installed")
+        case .missing: return .refused("The build Shireworks handed over isn't at \(source)")
+        case .other: return .refused("The build Shireworks handed over (\(source)) isn't a folder: it isn't installed")
         }
         guard Self.isIdentifier(bundleID) else { return .refused("This app's bundle id (\(bundleID)) can't be checked against") }
         let own = await run(Self.codesign, ["-d", "-r-", ownBundle])
@@ -81,14 +81,14 @@ public struct HandedOverBuild: Sendable {
         let copied = await run(Self.copy, ["-R", source, staged])
         guard copied.status == 0, kind(staged) == .folder else {
             try? files.removeItem(atPath: staged)
-            return .refused("The build Applications handed over couldn't be copied out of the app group's container: "
+            return .refused("The build Shireworks handed over couldn't be copied out of the app group's container: "
                             + Self.said(copied))
         }
         let requirement = Self.requirement(bundleID: bundleID, team: team)
         let verified = await run(Self.codesign, ["--verify", "--strict", "--deep", "--test-requirement", "=" + requirement, staged])
         guard verified.status == 0 else {
             try? files.removeItem(atPath: staged)
-            return .refused("The build Applications handed over failed its signature check (Apple's anchor, \(bundleID), this "
+            return .refused("The build Shireworks handed over failed its signature check (Apple's anchor, \(bundleID), this "
                             + "build's team): " + Self.said(verified))
         }
         return .ready(staged)

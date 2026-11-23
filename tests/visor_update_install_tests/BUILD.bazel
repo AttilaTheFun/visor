@@ -1,7 +1,7 @@
 load("@rules_swift//swift:swift.bzl", "swift_test")
 load("//tools/swift:defs.bzl", "STRICT_SWIFT")
 
-# Visor.app's check of a build Applications hands over
+# Visor.app's check of a build Shireworks hands over
 # (libraries/visor_update_install): a link, or anything not a folder,
 # refused before anything runs; the copy out of the group's container, and
 # codesign's check of it against the running app's identifier and team,

@@ -1,4 +1,4 @@
-// A build Applications hands over is installed only from a checked copy:
+// A build Shireworks hands over is installed only from a checked copy:
 // a real folder (a link is refused before anything runs), copied out of the
 // app group's container into Visor's own, and that copy verified against
 // the running app's identifier and team. Anything refused leaves the
