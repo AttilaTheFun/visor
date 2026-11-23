@@ -9,9 +9,10 @@ public enum ConversionStep: Equatable, Sendable {
     /// `<Name>-new` made, case-sensitive, with the role's quota and
     /// reserve, and given to the person.
     case stage
-    /// The verified copy swapped in: its marker, checked again, and the
-    /// time it's checked at.
-    case swap(ConversionMarker, now: Date)
+    /// The verified copy swapped in: its marker, checked again, the sha256
+    /// of its file (which the root's check before the first rename reads
+    /// again), and the time it's checked at.
+    case swap(ConversionMarker, markerDigest: String, now: Date)
     /// The old volume put back.
     case unswap
 }

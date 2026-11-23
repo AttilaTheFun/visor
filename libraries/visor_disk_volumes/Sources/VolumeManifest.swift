@@ -1,9 +1,13 @@
 // What's on a volume, path by path, so a copy can be checked against its
-// source: every regular file's sha256, every symbolic link's target and
-// every folder (`.content`), or every path's size and modification time
-// (`.listing`, cheap: Swap In takes it again to see nothing changed since
-// the copy). The system's own folders at the root are left out, as they're
-// never copied, and so is the conversion's marker.
+// source (`.content`): every regular file's sha256, every symbolic link's
+// target, every folder, and of each its mode, owner, group, flags,
+// extended attributes and ACL; the hard links that share a file, by path;
+// FIFOs and devices by type, mode and device number. Or, cheap
+// (`.listing`), every path's size and modification and status-change
+// times: copy-staged takes it before and after the copy, and Swap In takes
+// it again, as root, just before the first rename. The system's own folders
+// at the root are left out, as they're never copied, and so is the
+// conversion's marker.
 
 import Crypto
 import Foundation
@@ -11,10 +15,9 @@ import Foundation
 public struct VolumeManifest: Equatable, Sendable {
     /// What each line says of a path.
     public enum Kind: Sendable {
-        /// Files by their sha256, links by their targets, folders by name.
+        /// Content and what a copy must keep besides it.
         case content
-        /// Files by size and modification time, links by target and time,
-        /// folders by time.
+        /// Size and times.
         case listing
     }
 
@@ -27,13 +30,17 @@ public struct VolumeManifest: Equatable, Sendable {
     /// What's left out at the root: the system's folders and the marker.
     public static let leftOutAtRoot: Set<String> = systemFolders.union([ConversionMarker.fileName])
 
-    /// One line a path, sorted by path: `F <sha256> <path>`, `L <target>
-    /// <path>`, `D <path>`, `O <type> <path>` (anything else but a socket);
-    /// a path's `\` and newline escaped.
+    /// One line a path, sorted by path, then one a hard-link group:
+    /// `D <meta> <path>`, `F <sha256> <meta> <path>`, `L <target> u=<uid>
+    /// g=<gid> <path>`, `O <type> <meta> r=<rdev> <path>`, `H <paths, by
+    /// tab>`; or, as a listing, `<kind> <size> <mtime> <ctime> <path>`. A
+    /// path's `\`, tab and newline escaped.
     public var lines: [String]
     public var files: Int
     public var links: Int
     public var directories: Int
+    /// The groups of paths that are one file (hard links), each sorted.
+    public var hardLinks: [[String]]
     /// Sockets, left out (a socket file is no data: nothing copies one, and
     /// it means nothing once its server has gone), by path.
     public var sockets: [String]
@@ -46,11 +53,42 @@ public struct VolumeManifest: Equatable, Sendable {
 
     /// The manifest of everything under `root` (a volume's mount point, or
     /// any folder), symbolic links never followed.
-    public static func make(of root: String, _ kind: Kind) throws -> VolumeManifest {
+    public static func make(of root: String, _ kind: Kind, inspector: some FileInspecting = FoundationFileInspector()) throws -> VolumeManifest {
         var entries: [(path: String, line: String)] = []
-        var manifest = VolumeManifest(lines: [], files: 0, links: 0, directories: 0, sockets: [])
-        try walk(root: root, relative: "", kind: kind, into: &entries, manifest: &manifest)
+        var manifest = VolumeManifest(lines: [], files: 0, links: 0, directories: 0, hardLinks: [], sockets: [])
+        var shared: [UInt64: [String]] = [:]
+        try VolumeTree.walk(root, inspector: inspector) { path, file in
+            let escaped = escape(path)
+            if kind == .listing {
+                if file.kind != .socket {
+                    entries.append((path, "\(file.kind.rawValue) \(file.size) \(file.modified) \(file.changed ?? "?") \(escaped)"))
+                }
+                return true
+            }
+            switch file.kind {
+            case .directory:
+                manifest.directories += 1
+                entries.append((path, "D \(file.metadata) \(escaped)"))
+            case .regular:
+                manifest.files += 1
+                let full = (root as NSString).appendingPathComponent(path)
+                entries.append((path, "F \(try hash(file: full)) \(file.metadata) \(escaped)"))
+                if file.linkCount > 1 { shared[file.inode, default: []].append(path) }
+            case .link:
+                manifest.links += 1
+                entries.append((path, "L \(escape(file.linkTarget ?? "?")) u=\(file.uid) g=\(file.gid) \(escaped)"))
+            case .socket:
+                manifest.sockets.append(path)
+            case .other:
+                entries.append((path, "O \(file.typeName) \(file.metadata) r=\(file.rdev) \(escaped)"))
+            }
+            return true
+        }
         manifest.lines = entries.sorted { $0.path.utf8.lexicographicallyPrecedes($1.path.utf8) }.map(\.line)
+        manifest.hardLinks = shared.values.filter { $0.count > 1 }
+            .map { $0.sorted { $0.utf8.lexicographicallyPrecedes($1.utf8) } }
+            .sorted { $0[0].utf8.lexicographicallyPrecedes($1[0].utf8) }
+        manifest.lines += manifest.hardLinks.map { "H " + $0.map(escape).joined(separator: "\t") }
         return manifest
     }
 
@@ -62,56 +100,6 @@ public struct VolumeManifest: Equatable, Sendable {
         let missing = lines.filter { !theirs.contains($0) }.map { "- " + $0 }
         let extra = other.lines.filter { !mine.contains($0) }.map { "+ " + $0 }
         return Array((missing + extra).prefix(limit))
-    }
-
-    private static func walk(root: String, relative: String, kind: Kind, into entries: inout [(path: String, line: String)],
-                             manifest: inout VolumeManifest) throws {
-        let files = FileManager.default
-        let folder = relative.isEmpty ? root : (root as NSString).appendingPathComponent(relative)
-        let names: [String]
-        do {
-            names = try files.contentsOfDirectory(atPath: folder)
-        } catch {
-            throw DiskVolumesError.failed("\(folder) couldn't be read: \(error.localizedDescription)")
-        }
-        for name in names {
-            if relative.isEmpty, leftOutAtRoot.contains(name) { continue }
-            let path = relative.isEmpty ? name : relative + "/" + name
-            let full = (root as NSString).appendingPathComponent(path)
-            let attributes: [FileAttributeKey: Any]
-            do {
-                // Of the path itself: a link is never followed (lstat).
-                attributes = try files.attributesOfItem(atPath: full)
-            } catch {
-                throw DiskVolumesError.failed("\(full) couldn't be read: \(error.localizedDescription)")
-            }
-            let type = attributes[.type] as? FileAttributeType
-            let escaped = escape(path)
-            let time = (attributes[.modificationDate] as? Date).map { String($0.timeIntervalSince1970) } ?? "?"
-            switch type {
-            case FileAttributeType.typeDirectory?:
-                manifest.directories += 1
-                entries.append((path, kind == .content ? "D \(escaped)" : "D \(time) \(escaped)"))
-                try walk(root: root, relative: path, kind: kind, into: &entries, manifest: &manifest)
-            case FileAttributeType.typeRegular?:
-                manifest.files += 1
-                let size = (attributes[.size] as? NSNumber)?.int64Value ?? -1
-                entries.append((path, kind == .content ? "F \(try hash(file: full)) \(escaped)" : "F \(size) \(time) \(escaped)"))
-            case FileAttributeType.typeSymbolicLink?:
-                manifest.links += 1
-                let target: String
-                do {
-                    target = try files.destinationOfSymbolicLink(atPath: full)
-                } catch {
-                    throw DiskVolumesError.failed("\(full)'s link couldn't be read: \(error.localizedDescription)")
-                }
-                entries.append((path, kind == .content ? "L \(escape(target)) \(escaped)" : "L \(escape(target)) \(time) \(escaped)"))
-            case FileAttributeType.typeSocket?:
-                manifest.sockets.append(path)
-            default:
-                entries.append((path, "O \(type?.rawValue ?? "unknown") \(escaped)"))
-            }
-        }
     }
 
     /// A file's sha256, read a megabyte at a time.
@@ -131,9 +119,12 @@ public struct VolumeManifest: Equatable, Sendable {
         return hex(hasher.finalize())
     }
 
-    /// A path as a line holds it: `\` as `\\`, a newline as `\n`.
+    /// The sha256 of some bytes, as hex.
+    public static func digest(_ data: Data) -> String { hex(SHA256.hash(data: data)) }
+
+    /// A path as a line holds it: `\` as `\\`, a tab as `\t`, a newline as `\n`.
     static func escape(_ path: String) -> String {
-        path.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\n", with: "\\n")
+        path.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\t", with: "\\t").replacingOccurrences(of: "\n", with: "\\n")
     }
 
     static func hex(_ digest: some Sequence<UInt8>) -> String {

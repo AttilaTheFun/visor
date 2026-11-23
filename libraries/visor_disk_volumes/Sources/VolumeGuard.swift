@@ -42,10 +42,12 @@ public enum VolumeGuard {
     /// owner and mode may be put right (Fix, on the card).
     /// `converting`: the roles whose conversion step this run is (Stage,
     /// Swap In, unswap). `deletingKept`: the kept volumes' names whose
-    /// deletion was asked for, each typed.
+    /// deletion was asked for, each typed. `checker`: Visor Disk Utility's
+    /// own executable, whose root check a swap or unswap must start with.
     public static func check(_ commands: [DiskCommand], against survey: DiskSurvey, recorded: VolumesStatus? = nil,
                              deleting: Set<VolumeRole> = [], user: String? = nil, fixing: Set<VolumeRole> = [],
-                             converting: [VolumeRole: ConversionStep] = [:], deletingKept: Set<String> = []) throws {
+                             converting: [VolumeRole: ConversionStep] = [:], deletingKept: Set<String> = [],
+                             checker: String? = nil) throws {
         let sessions = survey.state(for: .sessions)
         var deleted: Set<String> = []
         // The roles an addVolume before it in this run makes.
@@ -56,7 +58,7 @@ public enum VolumeGuard {
             throw DiskVolumesError.notAllowed("\(joined.description) (an argument is exactly \(commandJoiner), "
                 + "which would start another command in the administrator prompt's shell)")
         }
-        var index = 0
+        var index = try checkFirst(commands, converting: converting, checker: checker)
         while index < commands.count {
             let command = commands[index]
             let arguments = command.arguments

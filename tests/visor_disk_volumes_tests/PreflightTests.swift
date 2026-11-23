@@ -25,23 +25,48 @@ import Testing
         #expect(ConversionPreflight.visorProcesses(ps: "  1 /sbin/launchd\n 2 /usr/libexec/logd\n").isEmpty)
     }
 
-    @Test func openFilesAreFoundSpotlightAside() {
+    @Test func openFilesAreFoundSpotlightAndTheSystemsFoldersAside() {
+        // `lsof -F pcn /Volumes/Sessions`, as root sees it.
         let lsof = """
-            COMMAND     PID  USER   FD   TYPE DEVICE SIZE/OFF     NODE NAME
-            mds         312  root   12r   DIR   1,18      192        2 /Volumes/Sessions
-            mds_store   330  root    4u   REG   1,18    32768       91 /Volumes/Sessions/.Spotlight-V100/Store-V2/x
-            mdworker_   880 logan    3r   REG   1,18     2048     1201 /Volumes/Sessions/Claude/a/notes.md
-            zsh        4100 logan  cwd    DIR   1,18      320     1500 /Volumes/Sessions/Claude/abc
-            claude     4200 logan  cwd    DIR   1,18      320     1500 /Volumes/Sessions/Claude/abc
-            claude     4200 logan   21w   REG   1,18     8192     1600 /Volumes/Sessions/Claude/abc/log.jsonl
+            p97
+            cfseventsd
+            f12
+            n/Volumes/Sessions/.fseventsd/0000000001a2b3c4
+            p312
+            cmds
+            fcwd
+            n/Volumes/Sessions
+            p330
+            cmds_stores
+            f4
+            n/Volumes/Sessions/.Spotlight-V100/Store-V2/x
+            p880
+            cmdworker_shared
+            f3
+            n/Volumes/Sessions/Claude/a/notes.md
+            p4100
+            czsh
+            fcwd
+            n/Volumes/Sessions/Claude/abc
+            p4200
+            cclaude
+            fcwd
+            n/Volumes/Sessions/Claude/abc
+            f21
+            n/Volumes/Sessions/Claude/abc/log.jsonl
+            p501
+            ccom.apple.Virtualization.VirtualMachine
+            f9
+            n/Volumes/Sessions/.fseventsdx/not-the-systems
             """
-        let holders = ConversionPreflight.holders(lsof: lsof)
-        #expect(holders == ["zsh (4100)", "claude (4200)"])
-        #expect(ConversionPreflight.openFilesRefusal(mountPoint: "/Volumes/Sessions", holders: holders)
-                == "/Volumes/Sessions has files open by zsh (4100), claude (4200) (lsof /Volumes/Sessions): quit or stop them, "
-                + "and try again once lsof lists nothing but Spotlight's.")
-        #expect(ConversionPreflight.holders(lsof: "").isEmpty)
-        #expect(ConversionPreflight.openFilesRefusal(mountPoint: "/Volumes/Sessions",
-                                                     holders: ConversionPreflight.holders(lsof: lsof.split(separator: "\n").prefix(3).joined(separator: "\n"))) == nil)
+        let holders = ConversionPreflight.holders(lsof: lsof, mountPoint: "/Volumes/Sessions")
+        #expect(holders == ["zsh (4100)", "claude (4200)", "com.apple.Virtualization.VirtualMachine (501)"])
+        #expect(ConversionPreflight.openFilesRefusal(mountPoint: "/Volumes/Sessions", holders: Array(holders.prefix(2)))
+                == "/Volumes/Sessions has files open by zsh (4100), claude (4200) (sudo lsof /Volumes/Sessions): quit or stop them, "
+                + "and try again once lsof lists nothing but Spotlight's and the system's own folders'.")
+        #expect(ConversionPreflight.holders(lsof: "", mountPoint: "/Volumes/Sessions").isEmpty)
+        let systemOnly = lsof.split(separator: "\n").prefix(12).joined(separator: "\n")
+        #expect(ConversionPreflight.holders(lsof: systemOnly, mountPoint: "/Volumes/Sessions").isEmpty)
+        #expect(ConversionPreflight.openFilesRefusal(mountPoint: "/Volumes/Sessions", holders: []) == nil)
     }
 }

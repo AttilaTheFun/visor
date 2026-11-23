@@ -30,7 +30,7 @@ extension VolumeGuard {
         case .stage:
             guard let user else { throw DiskVolumesError.notAllowed("a stage with no user to give \(role.stagedName) to") }
             return try ConversionPlanner.stageCommands(role, in: survey, user: user)
-        case let .swap(marker, now):
+        case let .swap(marker, _, now):
             return try ConversionPlanner.swapCommands(role, in: survey, marker: marker, now: now)
         case .unswap:
             return try ConversionPlanner.unswapCommands(role, in: survey)
@@ -59,6 +59,36 @@ extension VolumeGuard {
         }
         throw DiskVolumesError.wrongTarget("\(commands[index].description) isn't a conversion step planned for the volumes as they are now. "
             + reasons.joined(separator: " ") + " Nothing was run.")
+    }
+
+    /// How many of the commands, from the first, are the root's check a
+    /// swap or unswap starts with (0 or 1): with a role swapping or
+    /// unswapping, the run must start with exactly the check planned for
+    /// those roles, by Visor Disk Utility's own executable (`checker`), so
+    /// that nothing is renamed unless it passes. Swap and unswap aren't
+    /// mixed in one run.
+    static func checkFirst(_ commands: [DiskCommand], converting: [VolumeRole: ConversionStep], checker: String?) throws -> Int {
+        var swaps: [(role: VolumeRole, digest: String)] = []
+        var unswaps: [VolumeRole] = []
+        for role in VolumeRole.convertible {
+            switch converting[role] {
+            case let .swap(_, digest, _)?: swaps.append((role, digest))
+            case .unswap?: unswaps.append(role)
+            case .stage?, nil: break
+            }
+        }
+        guard !swaps.isEmpty || !unswaps.isEmpty else { return 0 }
+        guard swaps.isEmpty || unswaps.isEmpty else { throw DiskVolumesError.notAllowed("a swap and an unswap in one run") }
+        guard let checker, checker.hasPrefix("/") else {
+            throw DiskVolumesError.notAllowed("a swap or unswap without the root's check before it")
+        }
+        let planned = swaps.isEmpty ? ConversionPlanner.unswapCheck(checker: checker, roles: unswaps)
+            : ConversionPlanner.swapCheck(checker: checker, markers: swaps)
+        guard commands.first == planned else {
+            throw DiskVolumesError.wrongTarget("A swap or unswap starts with its check (\(planned.description)), "
+                + "so that nothing is renamed unless it passes. Nothing was run.")
+        }
+        return 1
     }
 
     /// Throws unless the kept volume's deletion was asked for, by its name,

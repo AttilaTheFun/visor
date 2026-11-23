@@ -47,6 +47,8 @@ enum DiskUtilityCLI {
     private static func run(_ arguments: [String]) throws {
         let route: PrivilegeRoute = arguments.contains("--sudo") ? .sudo : .administratorPrompt
         if arguments[0] == "uninstall" { return try uninstall(arguments, route: route) }
+        // The root's check in a swap's prompt: nothing written, nothing reported.
+        if arguments[0] == ConversionPlanner.checkVerb { return try DiskTool.conversionCheck(arguments) }
         if conversionVerbs.contains(arguments[0]) { return try report(convert(arguments, route: route)) }
         var survey = try DiskTool.survey()
         switch arguments[0] {

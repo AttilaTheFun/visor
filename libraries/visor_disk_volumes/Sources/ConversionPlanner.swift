@@ -144,6 +144,25 @@ public enum ConversionPlanner {
                 try DiskCommand.mount(device: pair.staged.device)]
     }
 
+    /// The verb of Visor Disk Utility's own command that checks, as root,
+    /// in the administrator prompt's shell just before the first rename,
+    /// that nothing has changed since the person's checks and nothing is
+    /// open (DiskTool.conversionCheck).
+    public static let checkVerb = "conversion-check"
+
+    /// The check that comes first in Swap In's prompt: for each role, the
+    /// sha256 of its marker's file, which the check reads again, with its
+    /// UUIDs, age and the source's listing.
+    public static func swapCheck(checker: String, markers: [(role: VolumeRole, digest: String)]) -> DiskCommand {
+        DiskCommand(program: checker, arguments: [checkVerb, "swap"] + markers.flatMap { [$0.role.rawValue, $0.digest] })
+    }
+
+    /// The check that comes first in unswap's prompt: nothing open on the
+    /// volumes, and Visor stopped.
+    public static func unswapCheck(checker: String, roles: [VolumeRole]) -> DiskCommand {
+        DiskCommand(program: checker, arguments: [checkVerb, "unswap"] + roles.map(\.rawValue))
+    }
+
     /// The commands that undo a swap, if the old volume is still there
     /// (`<Name>-old-ci`, found by its name): the converted `<Name>` at the
     /// mount point, if there's one, renamed `<Name>-cs-failed` and

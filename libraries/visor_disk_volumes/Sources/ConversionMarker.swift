@@ -19,22 +19,26 @@ public struct ConversionMarker: Codable, Equatable, Sendable {
     /// The APFS volume UUIDs of the volume copied from and the one copied to.
     public var sourceUUID: String
     public var newUUID: String
-    /// What the manifest holds: regular files, symbolic links, folders.
+    /// What the manifest holds: regular files, symbolic links, folders,
+    /// and groups of hard links.
     public var files: Int
     public var links: Int
     public var directories: Int
-    /// The sha256 of the manifest (VolumeManifest, `.content`), the same
-    /// on both sides.
+    public var hardLinks: Int
+    /// The sha256 of the manifest (VolumeManifest, `.content`: data, mode,
+    /// owner, group, flags, extended attributes, ACLs, hard links), the
+    /// same on both sides.
     public var manifestSHA256: String
     /// The sha256 of the source's listing (VolumeManifest, `.listing`:
-    /// every path's size and modification time): Swap In takes it again,
-    /// and refuses if anything changed since the copy.
+    /// every path's size and modification and status-change times): Swap
+    /// In takes it again, as root just before the first rename, and refuses
+    /// if anything changed since the copy.
     public var sourceListingSHA256: String
     /// When the check passed.
     public var verified: Date
 
     public init(version: Int = Self.currentVersion, role: VolumeRole, sourceUUID: String, newUUID: String, files: Int, links: Int,
-                directories: Int, manifestSHA256: String, sourceListingSHA256: String, verified: Date) {
+                directories: Int, hardLinks: Int = 0, manifestSHA256: String, sourceListingSHA256: String, verified: Date) {
         self.version = version
         self.role = role
         self.sourceUUID = sourceUUID
@@ -42,6 +46,7 @@ public struct ConversionMarker: Codable, Equatable, Sendable {
         self.files = files
         self.links = links
         self.directories = directories
+        self.hardLinks = hardLinks
         self.manifestSHA256 = manifestSHA256
         self.sourceListingSHA256 = sourceListingSHA256
         self.verified = verified
@@ -79,6 +84,16 @@ public struct ConversionMarker: Codable, Equatable, Sendable {
     /// The marker's path at a volume's root.
     public static func path(atRoot root: String) -> String { (root as NSString).appendingPathComponent(fileName) }
 
+    /// The sha256 of the marker's file at a volume's root, as it is now:
+    /// what the root's check is told to find there.
+    public static func fileDigest(atRoot root: String) throws -> String {
+        do {
+            return VolumeManifest.digest(try Data(contentsOf: URL(fileURLWithPath: path(atRoot: root))))
+        } catch {
+            throw DiskVolumesError.unreadable(path(atRoot: root), "\(error)")
+        }
+    }
+
     /// The marker at a volume's root; nil when there's none. Throws when
     /// there's one that can't be read.
     public static func read(atRoot root: String) throws -> ConversionMarker? {
@@ -114,6 +129,6 @@ public struct ConversionMarker: Codable, Equatable, Sendable {
 
     /// What it says, in a line: "verified 2026-11-23T03:10:00Z: 1204 files, 31 links".
     public var summary: String {
-        "verified \(Self.describe(verified)): \(files) files, \(links) links, \(directories) folders, manifest \(manifestSHA256.prefix(12))…"
+        "verified \(Self.describe(verified)): \(files) files, \(links) links, \(directories) folders, \(hardLinks) hard-link groups, manifest \(manifestSHA256.prefix(12))…"
     }
 }

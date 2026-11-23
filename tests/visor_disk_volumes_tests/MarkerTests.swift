@@ -22,7 +22,7 @@ import Testing
         // What it says, by name, for a person reading it.
         let json = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: ConversionMarker.path(atRoot: root))))
             as? [String: Any])
-        #expect(Set(json.keys) == ["version", "role", "sourceUUID", "newUUID", "files", "links", "directories", "manifestSHA256",
+        #expect(Set(json.keys) == ["version", "role", "sourceUUID", "newUUID", "files", "links", "directories", "hardLinks", "manifestSHA256",
                                    "sourceListingSHA256", "verified"])
         #expect(json["role"] as? String == "sources")
         #expect(json["verified"] as? String == "2026-11-18T10:56:40Z")

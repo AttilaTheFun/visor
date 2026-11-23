@@ -6,7 +6,7 @@ import DiskVolumes
 import Foundation
 
 extension DiskUtilityCLI {
-    static let conversionVerbs: Set<String> = ["stage", "copy-staged", "swap", "unswap", "delete-kept"]
+    static let conversionVerbs: Set<String> = ["stage", "copy-staged", "swap", "unswap", "delete-kept", ConversionPlanner.checkVerb]
 
     /// Runs a conversion verb; the disks after.
     static func convert(_ arguments: [String], route: PrivilegeRoute) throws -> DiskSurvey {

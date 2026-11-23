@@ -49,12 +49,28 @@ extension DiskTool {
                 + "it's given to the person who staged it.")
         }
         try refuseWhileVisorRuns()
+        // As the person, lsof sees the person's processes alone: the
+        // source's listing, before and after the copy, catches a write by
+        // any other, and Swap In checks again as root.
         try refuseOpenFiles(on: [role.mountPoint, role.stagedMountPoint])
         say("copying \(role.mountPoint) (\(pair.source.device), \(pair.source.uuid)) onto \(role.stagedMountPoint) "
             + "(\(pair.staged.device), \(pair.staged.uuid))")
         return try ConversionCopy.copyAndVerify(role: role, from: role.mountPoint, to: role.stagedMountPoint, sourceUUID: pair.source.uuid,
-                                                newUUID: pair.staged.uuid, replace: replace, run: { _ = try run($0) }, say: say)
+                                                newUUID: pair.staged.uuid, owner: currentOwner(), inspector: DarwinFileInspector(),
+                                                replace: replace, run: { _ = try run($0) }, say: say)
     }
+
+    /// The person running it: their user id and groups.
+    static func currentOwner() -> FileOwner {
+        let count = getgroups(0, nil)
+        var groups = [gid_t](repeating: 0, count: Int(max(0, count)))
+        let read = count > 0 ? getgroups(count, &groups) : 0
+        return FileOwner(uid: getuid(), groups: Set(groups.prefix(Int(max(0, read)))).union([getgid()]))
+    }
+
+    /// Visor Disk Utility's own executable: the root's check before a swap
+    /// or unswap is it, run in the administrator prompt.
+    static var checker: String? { Bundle.main.executablePath }
 
     /// Swap In: for each role, its marker checked (these two volumes, at
     /// most two hours old) and its volume unchanged since the copy, then
@@ -63,26 +79,34 @@ extension DiskTool {
     /// disk, in one administrator prompt; then the marker removed.
     static func swap(_ roles: [VolumeRole], route: PrivilegeRoute, now: Date = Date()) throws -> DiskSurvey {
         let disks = try survey()
+        guard let checker else { throw DiskVolumesError.blocked("Visor Disk Utility can't find its own executable for the root's check.") }
         var steps: [VolumeRole: ConversionStep] = [:]
+        var digests: [(role: VolumeRole, digest: String)] = []
         var commands: [DiskCommand] = []
         for role in roles {
             let marker = try self.marker(for: role)
             commands += try ConversionPlanner.swapCommands(role, in: disks, marker: marker, now: now)
-            if let marker { steps[role] = .swap(marker, now: now) }
+            if let marker {
+                let digest = try ConversionMarker.fileDigest(atRoot: role.stagedMountPoint)
+                steps[role] = .swap(marker, markerDigest: digest, now: now)
+                digests.append((role, digest))
+            }
         }
+        // The person's checks first, for a refusal that says why before
+        // the prompt; the root's again in the prompt, before the first rename.
         try refuseWhileVisorRuns()
         try refuseOpenFiles(on: roles.flatMap { [$0.mountPoint, $0.stagedMountPoint] })
         for role in roles {
-            guard case let .swap(marker, _)? = steps[role] else { continue }
-            let listing = try VolumeManifest.make(of: role.mountPoint, .listing)
-            guard listing.sha256 == marker.sourceListingSHA256 else {
-                throw DiskVolumesError.blocked("\(role.mountPoint) has changed since it was copied (a file added, removed or written): "
-                    + "run copy-staged \(role.rawValue) --replace again, then Swap In. Nothing was swapped.")
-            }
+            guard case let .swap(marker, _, _)? = steps[role] else { continue }
+            try checkListings(role, marker: marker)
         }
+        testPause()
         let after: DiskSurvey
         do {
-            after = try change(commands, route: route, converting: steps)
+            after = try change([ConversionPlanner.swapCheck(checker: checker, markers: digests)] + commands, route: route,
+                               converting: steps, checker: checker)
+        } catch let DiskVolumesError.failed(why) where why.contains(checkRefused) {
+            throw DiskVolumesError.blocked(checkRefusal(why))
         } catch let DiskVolumesError.failed(why) {
             throw DiskVolumesError.failed("Swap In failed: \(why). It may have stopped part-way: `status` shows the volumes, and "
                 + "`unswap \(roles.count == 1 ? roles[0].rawValue : "both")` puts the old one back.")
@@ -113,11 +137,94 @@ extension DiskTool {
     /// one renamed `<Name>-cs-failed` and unmounted; one administrator
     /// prompt.
     static func unswap(_ roles: [VolumeRole], route: PrivilegeRoute) throws -> DiskSurvey {
+        guard let checker else { throw DiskVolumesError.blocked("Visor Disk Utility can't find its own executable for the root's check.") }
         let disks = try survey()
         let commands = try roles.flatMap { try ConversionPlanner.unswapCommands($0, in: disks) }
         try refuseWhileVisorRuns()
         try refuseOpenFiles(on: roles.flatMap { [$0.mountPoint, "/Volumes/" + $0.keptName] })
-        return try change(commands, route: route, converting: Dictionary(uniqueKeysWithValues: roles.map { ($0, .unswap) }))
+        do {
+            return try change([ConversionPlanner.unswapCheck(checker: checker, roles: roles)] + commands, route: route,
+                              converting: Dictionary(uniqueKeysWithValues: roles.map { ($0, .unswap) }), checker: checker)
+        } catch let DiskVolumesError.failed(why) where why.contains(checkRefused) {
+            throw DiskVolumesError.blocked(checkRefusal(why))
+        }
+    }
+
+    /// The source's listing (sizes, times) as the marker recorded it: else
+    /// it changed since the copy, and isn't swapped.
+    static func checkListings(_ role: VolumeRole, marker: ConversionMarker) throws {
+        let listing = try VolumeManifest.make(of: role.mountPoint, .listing, inspector: DarwinFileInspector())
+        guard listing.sha256 == marker.sourceListingSHA256 else {
+            throw DiskVolumesError.blocked("\(role.mountPoint) has changed since it was copied (a file added, removed, written or changed): "
+                + "run copy-staged \(role.rawValue) --replace again, then Swap In. Nothing was swapped.")
+        }
+    }
+
+    /// What the root's check says when it refuses.
+    static let checkRefused = "conversion-check refused"
+
+    /// The root's check's refusal, from what the prompt's shell said (its
+    /// error output, after the tool's own prefix).
+    static func checkRefusal(_ said: String) -> String {
+        said.range(of: checkRefused).map { String(said[$0.lowerBound...]) } ?? said
+    }
+
+    /// `conversion-check swap <role> <marker sha256>…` or `conversion-check
+    /// unswap <role>…`: run as root in the administrator prompt's shell,
+    /// first, so the renames after it run only if it passes. A swap's
+    /// marker must still be the file the person's checks read (its
+    /// sha256), name the volumes there now and be at most two hours old by
+    /// this Mac's clock, and the source's listing must still be the
+    /// marker's; for both, Visor stopped and nothing open on the volumes,
+    /// as root's lsof sees every process. Throws, saying nothing was
+    /// changed, otherwise.
+    static func conversionCheck(_ arguments: [String]) throws {
+        do {
+            guard arguments.count >= 3, ["swap", "unswap"].contains(arguments[1]) else {
+                throw DiskVolumesError.blocked("conversion-check swap <role> <marker sha256>… | unswap <role>…")
+            }
+            let disks = try survey()
+            var mounts: [String] = []
+            if arguments[1] == "swap" {
+                let pairs = Array(arguments.dropFirst(2))
+                guard pairs.count % 2 == 0 else { throw DiskVolumesError.blocked("conversion-check swap <role> <marker sha256>…") }
+                for index in stride(from: 0, to: pairs.count, by: 2) {
+                    guard let role = VolumeRole.conversionRoles(pairs[index]), role.count == 1 else {
+                        throw DiskVolumesError.blocked("\(pairs[index]) isn't sessions or sources")
+                    }
+                    let pair = try ConversionPlanner.copyPair(role[0], in: disks)
+                    guard try ConversionMarker.fileDigest(atRoot: role[0].stagedMountPoint) == pairs[index + 1],
+                          let marker = try marker(for: role[0]) else {
+                        throw DiskVolumesError.blocked("\(role[0].stagedName)'s marker isn't the one checked before the prompt")
+                    }
+                    try marker.check(role: role[0], sourceUUID: pair.source.uuid, newUUID: pair.staged.uuid, now: Date())
+                    try checkListings(role[0], marker: marker)
+                    mounts += [role[0].mountPoint, role[0].stagedMountPoint]
+                }
+            } else {
+                for name in arguments.dropFirst(2) {
+                    guard let role = VolumeRole.conversionRoles(name), role.count == 1 else { throw DiskVolumesError.blocked("\(name) isn't sessions or sources") }
+                    mounts += [role[0].mountPoint, "/Volumes/" + role[0].keptName]
+                }
+            }
+            try refuseWhileVisorRuns()
+            try refuseOpenFiles(on: mounts)
+            print("conversion-check: as it was checked, and nothing open")
+        } catch {
+            let said = "\(error)"
+            throw DiskVolumesError.failed("\(checkRefused) (as root, just before the first rename): \(said)"
+                + (said.contains("Nothing was") ? "" : " Nothing was changed."))
+        }
+    }
+
+    /// For a test machine: a pause, in seconds, between the person's checks
+    /// and the prompt (`VISOR_CONVERSION_TEST_PAUSE`), so a write in it can
+    /// be shown to be caught by the root's check.
+    private static func testPause() {
+        guard let text = ProcessInfo.processInfo.environment["VISOR_CONVERSION_TEST_PAUSE"], let seconds = Double(text), seconds > 0 else { return }
+        print("pausing \(seconds) s before the prompt (VISOR_CONVERSION_TEST_PAUSE)")
+        fflush(stdout)
+        Thread.sleep(forTimeInterval: min(seconds, 600))
     }
 
     /// A kept volume deleted, by its UUID, its confirmation typed ("delete
@@ -142,11 +249,13 @@ extension DiskTool {
     }
 
     /// Throws while anything but Spotlight has a file open on one of the
-    /// volumes mounted at these paths (`lsof <mount point>`, as the person).
+    /// volumes mounted at these paths (`lsof -F pcn <mount point>`), the
+    /// system's own folders aside. As the person, lsof sees their
+    /// processes alone; as root (the check in the prompt), every process.
     static func refuseOpenFiles(on mountPoints: [String]) throws {
         for mountPoint in mountPoints where DiskVolumes.isMountPoint(mountPoint) {
-            let (_, output, _) = try outcome(["/usr/sbin/lsof", mountPoint])
-            let holders = ConversionPreflight.holders(lsof: String(decoding: output, as: UTF8.self))
+            let (_, output, _) = try outcome(["/usr/sbin/lsof", "-F", "pcn", mountPoint])
+            let holders = ConversionPreflight.holders(lsof: String(decoding: output, as: UTF8.self), mountPoint: mountPoint)
             if let why = ConversionPreflight.openFilesRefusal(mountPoint: mountPoint, holders: holders) {
                 throw DiskVolumesError.blocked(why)
             }

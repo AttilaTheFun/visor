@@ -32,17 +32,43 @@ public enum ConversionPreflight {
         command.hasPrefix("mds") || command.hasPrefix("mdworker")
     }
 
-    /// The processes with a file open in `lsof <mount point>`'s output,
-    /// Spotlight's aside: "<command> (<pid>)", each once, in order.
-    public static func holders(lsof output: String) -> [String] {
+    /// The processes with a file open on the volume at `mountPoint` in
+    /// `lsof -F pcn <mount point>`'s output (`p<pid>`, `c<command>`,
+    /// `n<name>` lines): "<command> (<pid>)", each once, in order. Spotlight's
+    /// are left aside, and so is a file in the system's own folders at the
+    /// root (fseventsd's log, Spotlight's store, revisiond's versions),
+    /// which the system holds while the volume is mounted and lets go when
+    /// it's unmounted.
+    public static func holders(lsof output: String, mountPoint: String) -> [String] {
         var seen: [String] = []
+        var pid = "", command = ""
         for line in output.split(separator: "\n") {
-            let columns = line.split(separator: " ", omittingEmptySubsequences: true)
-            guard columns.count >= 2, columns[0] != "COMMAND", !isSpotlight(String(columns[0])) else { continue }
-            let holder = "\(columns[0]) (\(columns[1]))"
-            if !seen.contains(holder) { seen.append(holder) }
+            guard let field = line.first else { continue }
+            let value = String(line.dropFirst())
+            switch field {
+            case "p":
+                pid = value
+                command = ""
+            case "c":
+                command = value
+            case "n":
+                guard !isSpotlight(command), !isSystemsOwn(value, mountPoint: mountPoint) else { continue }
+                let holder = "\(command) (\(pid))"
+                if !seen.contains(holder) { seen.append(holder) }
+            default:
+                continue
+            }
         }
         return seen
+    }
+
+    /// Whether a path is in one of the system's own folders at the root of
+    /// the volume mounted at `mountPoint`.
+    static func isSystemsOwn(_ path: String, mountPoint: String) -> Bool {
+        VolumeManifest.systemFolders.contains { folder in
+            let root = mountPoint + "/" + folder
+            return path == root || path.hasPrefix(root + "/")
+        }
     }
 
     /// The refusal for what's running, or nil when nothing is.
@@ -58,7 +84,7 @@ public enum ConversionPreflight {
     /// The refusal for files open on a volume, or nil when none is.
     public static func openFilesRefusal(mountPoint: String, holders: [String]) -> String? {
         guard !holders.isEmpty else { return nil }
-        return "\(mountPoint) has files open by \(holders.joined(separator: ", ")) (lsof \(mountPoint)): quit or stop them, "
-            + "and try again once lsof lists nothing but Spotlight's."
+        return "\(mountPoint) has files open by \(holders.joined(separator: ", ")) (sudo lsof \(mountPoint)): quit or stop them, "
+            + "and try again once lsof lists nothing but Spotlight's and the system's own folders'."
     }
 }
