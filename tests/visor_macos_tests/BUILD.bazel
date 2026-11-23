@@ -22,7 +22,6 @@ swift_test(
         "//applications/visor_mac:Info.plist",
         "//applications/visor_mac:shared_sign_in_plist",
         "//applications/visor_macos:Info.plist",
-        "//applications/visor_macos:shared_sign_in_plist",
     ],
     module_name = "VisorMacOSTests",
     deps = ["//:foundation"],

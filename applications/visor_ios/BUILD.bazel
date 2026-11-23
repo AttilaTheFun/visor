@@ -49,7 +49,7 @@ update_entitlements(
 # CI's device build's (ci_device, below): the same, and, where the builder
 # has it (tools/shared_sign_in: CI's builds to publish), the keychain group
 # of the sign-in Logan's apps share (`<team>.com.LoganShire.github`,
-# ShakeKit's), its lock in Applications' group above. The App ID's profile
+# ShakeKit's), its lock in UPDATE_APP_GROUP's container above. The App ID's profile
 # must grant both groups.
 shared_sign_in_entitlements(
     name = "app_ci_entitlements",

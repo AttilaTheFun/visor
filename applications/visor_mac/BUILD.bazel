@@ -47,7 +47,7 @@ update_infoplist(name = "update_plist")
 # And, where the builder has it (tools/shared_sign_in: CI's builds to
 # publish), the keychain group of the sign-in Logan's apps share
 # (`<team>.com.LoganShire.github`, ShakeKit's), which the profile's
-# `<team>.*` grants; its lock is in Applications' group, above.
+# `<team>.*` grants; its lock is in UPDATE_APP_GROUP's container, above.
 app_group_entitlements(
     name = "app_ci_entitlements",
     template = "app.ci.entitlements",
