@@ -781,7 +781,8 @@ removed (still only when `agentProxy` is set).
   the design Logan agreed (22 Nov 2026): Visor.app sandboxed, with the
   server and container sessions in it; Visor Agent Utility, unsandboxed,
   for native sessions' agent hosts; the app groups `group.com.LoganShire.Visor`
-  and `group.com.LoganShire.Applications`, the keychain group still
+  and `group.com.LoganShire.Shireworks` (Logan, 23 Nov 2026, in place of
+  `group.com.LoganShire.Applications`), the keychain group still
   `<team>.com.LoganShire.Visor`. 0.66, still unsandboxed, prepares:
   - **Sockets in the app group's container**, behind a setting until
     every profile grants the group (`defaults write com.LoganShire.Visor
