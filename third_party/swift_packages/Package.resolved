@@ -73,6 +73,15 @@
       }
     },
     {
+      "identity" : "shake_kit",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/AttilaTheFun/shake_kit.git",
+      "state" : {
+        "revision" : "7748f2748767a12f1d561534b922157c7eb6a6cb",
+        "version" : "0.2.1"
+      }
+    },
+    {
       "identity" : "swift-algorithms",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-algorithms.git",
@@ -311,8 +320,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/AttilaTheFun/update_kit.git",
       "state" : {
-        "revision" : "de42740f0a564ec54c866fcae3413aae0eb316df",
-        "version" : "0.17.0"
+        "revision" : "2acaad86637246bc7297a3a999ea153a52dd9d40",
+        "version" : "0.18.0"
       }
     },
     {

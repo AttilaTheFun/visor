@@ -1,7 +1,8 @@
 load("//tools/swift:defs.bzl", "ISOMER_APPLE_DRIVER", "STRICT_SWIFT")
 load("@rules_apple//apple:macos.bzl", "macos_application")
 load("@rules_swift//swift:swift.bzl", "swift_library")
-load("//tools/signing:defs.bzl", "update_entitlements")
+load("//tools/app_groups:defs.bzl", "app_group_entitlements")
+load("//tools/shared_sign_in:defs.bzl", "shared_sign_in_infoplist")
 load("//tools/variant:defs.bzl", "variant_infoplist")
 
 package(default_visibility = ["//visibility:public"])
@@ -10,8 +11,9 @@ package(default_visibility = ["//visibility:public"])
 BUNDLE_ID = "com.LoganShire.VisorClient.macOS"
 
 # The entitlements, for the test that holds them to the sandboxed client's
-# list (tests/visor_macos_tests).
+# list, and the Info.plist, which turns ShakeKit on (tests/visor_macos_tests).
 exports_files([
+    "Info.plist",
     "app.ci.entitlements",
     "app.entitlements",
 ])
@@ -30,12 +32,21 @@ variant_infoplist(
 # Developer ID profile grants (its `<team>.*`). Its prefix is the builder's
 # team here (a placeholder in CI: the ad hoc build has no profile to take it
 # from), which CI's signing makes the profile's, with the application
-# identifier beside it; as Visor.app's (applications/visor_mac).
-update_entitlements(
+# identifier beside it; as Visor.app's (applications/visor_mac). And
+# Applications' app group (UPDATE_APP_GROUP, which CI's builds to publish
+# set; tools/app_groups with none of the Visor family's), whose container
+# holds the lock of the sign-in Logan's apps share (ShakeKit's), and, where
+# the builder has that sign-in (tools/shared_sign_in), its keychain group,
+# `<team>.com.LoganShire.github`: the Developer ID profile grants both.
+app_group_entitlements(
     name = "app_ci_entitlements",
-    team_prefix = True,
+    groups = [],
     template = "app.ci.entitlements",
 )
+
+# ShakeKit's shared sign-in (GitHubShared…): in CI's builds alone, where the
+# builder has it; every other build signs in with ShakeKit's own OAuth App.
+shared_sign_in_infoplist(name = "shared_sign_in_plist")
 
 # The client on the Mac: the same compiled Swift + real SwiftUI the iOS app
 # builds, on the shared host sources (the iOS @main is guarded by os(); the
@@ -51,6 +62,7 @@ swift_library(
     module_name = "VisorMacOSHost",
     deps = [
         "//:foundation",
+        "@swiftpkg_shake_kit//:ShakeKit",
         "//libraries/visor_client",
         "//libraries/visor_protocol",
         "//libraries/visor_services",
@@ -72,12 +84,13 @@ macos_application(
     bundle_name = "Visor Client",
     # The App Sandbox, the network as a client, the microphone (dictation)
     # and the files the person picks, read only (attachments, an archive to
-    # import), in every build; and push and the app's keychain access group
-    # in a build CI publishes, which Shireworks' signing signs again with
-    # the Developer ID profile, taking push's value from it. A build to run
-    # here asks for neither: a restricted entitlement with no profile to
-    # allow it stops the app at launch (its secrets then stay in the login
-    # keychain). Nothing else (tests/visor_macos_tests).
+    # import), in every build; and push, the app's keychain access group
+    # and Applications' app group (with the shared sign-in's keychain group
+    # where CI has it) in a build CI publishes, which Shireworks' signing
+    # signs again with the Developer ID profile, taking push's value from
+    # it. A build to run here asks for none: a restricted entitlement with
+    # no profile to allow it stops the app at launch (its secrets then stay
+    # in the login keychain). Nothing else (tests/visor_macos_tests).
     entitlements = select({
         ":ci_signed": ":app_ci_entitlements",
         "//conditions:default": "app.entitlements",
@@ -85,7 +98,10 @@ macos_application(
     infoplists = [
         "Info.plist",
         ":variant_plist",
-    ],
+    ] + select({
+        ":ci_signed": [":shared_sign_in_plist"],
+        "//conditions:default": [],
+    }),
     minimum_os_version = "15.0",
     # Isomer's driver with --config=drive alone (tools/swift/defs.bzl).
     deps = [":macos_lib"] + ISOMER_APPLE_DRIVER,

@@ -1,0 +1,20 @@
+load("@rules_swift//swift:swift.bzl", "swift_library")
+load("//tools/swift:defs.bzl", "STRICT_SWIFT")
+
+package(default_visibility = ["//visibility:public"])
+
+# A build Applications handed Visor.app to install (UpdateKit's offer), made
+# safe to: a real folder, not a link, copied out of the app group's
+# container (which every member of the group may write) into Visor's own,
+# and that copy checked with codesign against the requirement of Visor's
+# own identifier and team before anything installs it
+# (applications/visor_mac's VisorUpdates). Foundation alone, its commands
+# given (codesign, cp), so it builds and is tested on Linux with a fake
+# runner (//tests/visor_update_install_tests).
+swift_library(
+    name = "visor_update_install",
+    copts = STRICT_SWIFT,
+    srcs = glob(["Sources/*.swift"]),
+    module_name = "VisorUpdateInstall",
+    deps = ["//:foundation"],
+)

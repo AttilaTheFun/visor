@@ -5,7 +5,9 @@ load("//tools/swift:defs.bzl", "STRICT_SWIFT")
 # one to run here and CI's, whose team prefix is the builder's, a
 # placeholder in CI): sandboxed, with nothing beyond its list. And the app
 # groups CI's builds of Visor.app and Visor Disk Utility ask for
-# (tools/app_groups). Plists read as data, so on Linux too (//tests:linux).
+# (tools/app_groups). And the shared sign-in's Info.plist fragments
+# (tools/shared_sign_in: all of it or none) and ShakeKit's opt-in in every
+# app's Info.plist. Plists read as data, so on Linux too (//tests:linux).
 swift_test(
     name = "visor_macos_tests",
     copts = STRICT_SWIFT,
@@ -15,6 +17,12 @@ swift_test(
         "//applications/visor_macos:app_ci_entitlements",
         "//applications/visor_mac:app_ci_entitlements",
         "//applications/visor_disk_utility:app_ci_entitlements",
+        "//applications/visor_ios:Info.plist",
+        "//applications/visor_ios:shared_sign_in_plist",
+        "//applications/visor_mac:Info.plist",
+        "//applications/visor_mac:shared_sign_in_plist",
+        "//applications/visor_macos:Info.plist",
+        "//applications/visor_macos:shared_sign_in_plist",
     ],
     module_name = "VisorMacOSTests",
     deps = ["//:foundation"],

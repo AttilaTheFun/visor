@@ -3,7 +3,9 @@
 // first, then Applications' where the builder has it (UPDATE_APP_GROUP,
 // which CI's distribution builds set; none here), in one
 // `com.apple.security.application-groups`, beside each app's identifier
-// and Visor's keychain access group, the team the builder's.
+// and Visor's keychain access group, the team the builder's (and, in
+// Visor.app's, the shared sign-in's where the builder has it:
+// tools/shared_sign_in).
 
 import Foundation
 import Testing
@@ -29,6 +31,8 @@ import Testing
         let identifier = try #require(entitlements["com.apple.application-identifier"] as? String)
         #expect(identifier.hasSuffix("." + bundleID) && !identifier.hasPrefix("$("))
         let keychain = try #require(entitlements["keychain-access-groups"] as? [String])
-        #expect(keychain.count == 1 && keychain[0].hasSuffix(".com.LoganShire.Visor") && !keychain[0].hasPrefix("$("))
+        #expect(keychain[0].hasSuffix(".com.LoganShire.Visor") && !keychain[0].hasPrefix("$("))
+        let team = String(identifier.dropLast(bundleID.count + 1))
+        #expect(keychain.dropFirst().allSatisfy { $0 == team + ".com.LoganShire.github" } && keychain.count <= 2)
     }
 }

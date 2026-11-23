@@ -2,6 +2,7 @@ load("//tools/swift:defs.bzl", "ISOMER_APPLE_DRIVER", "STRICT_SWIFT")
 load("@rules_apple//apple:macos.bzl", "macos_application")
 load("@rules_swift//swift:swift.bzl", "swift_library")
 load("//tools/app_groups:defs.bzl", "app_group_entitlements")
+load("//tools/shared_sign_in:defs.bzl", "shared_sign_in_infoplist")
 load("//tools/signing:defs.bzl", "update_infoplist")
 load("//tools/variant:defs.bzl", "variant_infoplist")
 
@@ -10,6 +11,10 @@ package(default_visibility = ["//visibility:public"])
 # The server agent's plist, for the bundle and for its test
 # (//tests/visor_launch_agent_tests, which checks it is ServerAgentJob's).
 exports_files(["LaunchAgents/com.LoganShire.Visor.server.plist"])
+
+# The Info.plist, for the test that holds ShakeKit on in every build
+# (tests/visor_macos_tests).
+exports_files(["Info.plist"])
 
 BUNDLE_ID = "com.LoganShire.Visor"
 
@@ -39,10 +44,18 @@ update_infoplist(name = "update_plist")
 # Its prefix is the builder's team here (a placeholder in CI: the ad hoc
 # build has no profile to take it from), which CI's signing makes the
 # profile's, with the application identifier beside it.
+# And, where the builder has it (tools/shared_sign_in: CI's builds to
+# publish), the keychain group of the sign-in Logan's apps share
+# (`<team>.com.LoganShire.github`, ShakeKit's), which the profile's
+# `<team>.*` grants; its lock is in Applications' group, above.
 app_group_entitlements(
     name = "app_ci_entitlements",
     template = "app.ci.entitlements",
 )
+
+# ShakeKit's shared sign-in (GitHubShared…): in CI's builds alone, where the
+# builder has it; every other build signs in with ShakeKit's own OAuth App.
+shared_sign_in_infoplist(name = "shared_sign_in_plist")
 
 # Visor on the Mac: a menu bar app whose
 # window is Visor's macOS client, with the Mac's Visor server under it. It
@@ -65,6 +78,7 @@ swift_library(
     module_name = "VisorMac",
     deps = [
         "//:foundation",
+        "@swiftpkg_shake_kit//:ShakeKit",
         "@swiftpkg_update_kit//:UpdateKit",
         "//libraries/message_cache",
         "//libraries/visor_agent_proxy:visor_agent_proxy_host",
@@ -87,6 +101,7 @@ swift_library(
         "//libraries/visor_socket_file",
         "//libraries/visor_system",
         "//libraries/visor_ui",
+        "//libraries/visor_update_install",
     ],
 )
 
@@ -132,7 +147,10 @@ macos_application(
         "Info.plist",
         ":update_plist",
         ":variant_plist",
-    ],
+    ] + select({
+        ":ci_signed": [":shared_sign_in_plist"],
+        "//conditions:default": [],
+    }),
     minimum_os_version = "15.0",
     # Isomer's driver with --config=drive alone (tools/swift/defs.bzl).
     deps = [":mac_lib"] + ISOMER_APPLE_DRIVER,

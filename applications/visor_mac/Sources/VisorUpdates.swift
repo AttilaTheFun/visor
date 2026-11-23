@@ -1,4 +1,4 @@
-// Visor.app's updates from Applications (UpdateKit 0.17, docs/Updates.md
+// Visor.app's updates from Applications (UpdateKit 0.18, docs/Updates.md
 // there): it installs them itself. Applications quitting it would end every
 // session's agent with it, so it answers each offer "install myself"; once
 // the verified build is ready, it waits until no session is mid-turn, then
@@ -9,12 +9,17 @@
 // (AppRelauncher); the server agent restarts into the build (watched and
 // rolled back the same way: ServerAgentRestart), and the app reopens once
 // the new build has stayed up. A rollback the server says is reported to
-// Applications. Applications offers nothing until the app's
-// "Update automatically" is on; a build without the app group (one from the
-// public source) does nothing at all.
+// Applications. The build handed over lies in the app group's container,
+// which every member of the group may write: it's installed only as a
+// real folder, copied out into Visor's own and that copy checked against
+// Visor's identifier and team (HandedOverBuild), or not at all, the app
+// staying as it is and Applications told why. Applications offers nothing
+// until the app's "Update automatically" is on; a build without the app
+// group (one from the public source) does nothing at all.
 
 import Foundation
 import UpdateKit
+import VisorUpdateInstall
 
 @MainActor
 enum VisorUpdates {
@@ -26,6 +31,9 @@ enum VisorUpdates {
     /// server says an update didn't stay up and was rolled back (its
     /// relauncher's word, or the server agent's watch's), that, once.
     static func start() {
+        // A copy staged for an install before is done with: the install
+        // relaunched into it, or failed.
+        try? FileManager.default.removeItem(at: staging)
         AppUpdates.register(autoUpdate: { _ in .installMyself })
         AppUpdates.register(install: { offer in await install(offer) })
         AppUpdates.start()
@@ -50,7 +58,15 @@ enum VisorUpdates {
         await AppUpdates.installFailed(note)
     }
 
-    /// The verified build, installed once no session is mid-turn.
+    /// Where a handed-over build is copied to be checked and installed:
+    /// Visor's own temporary folder (on the Visor volume, emptied at each
+    /// start), else this user's.
+    static var staging: URL {
+        (MacPlaces.folders.temporary ?? FileManager.default.temporaryDirectory).appendingPathComponent("update", isDirectory: true)
+    }
+
+    /// The verified build, installed once no session is mid-turn: from its
+    /// copy in `staging`, once that has passed its checks (HandedOverBuild).
     static func install(_ offer: UpdateOffer) async {
         guard let bundle = offer.bundle else {
             await AppUpdates.installFailed("Applications handed over no build")
@@ -63,9 +79,21 @@ enum VisorUpdates {
         while await LocalServer.shared.busy() {
             try? await Task.sleep(for: quietCheck)
         }
+        // Just before it's installed: copied out of the group's container
+        // and checked, or refused, this build staying.
+        let checked = HandedOverBuild(run: HandedOverBuild.processes)
+        let path: String
+        switch await checked.stage(bundle.path, in: staging.path, bundleID: Bundle.main.bundleIdentifier ?? "",
+                                   ownBundle: Bundle.main.bundlePath) {
+        case .ready(let staged):
+            path = staged
+        case .refused(let why):
+            await AppUpdates.installFailed(why)
+            return
+        }
         await AppUpdates.installing()
         // Every session that was running is carried on (none is mid-turn).
-        if let problem = await LocalServer.shared.install(bundle.path) {
+        if let problem = await LocalServer.shared.install(path) {
             await AppUpdates.installFailed(problem)
         }
     }
