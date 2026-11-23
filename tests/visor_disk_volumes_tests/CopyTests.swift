@@ -305,11 +305,14 @@ import Testing
     @Test func aCopyThatWouldntFitIsRefusedBeforeItStarts() throws {
         let scratch = try Scratch()
         defer { scratch.remove() }
-        // Each file once, the hard link within Claude counted once.
+        // Each file once by the blocks it takes (a few bytes are a whole
+        // 4 KiB block), the hard link within Claude counted once.
         let needed = try ConversionCopy.bytesNeeded(at: scratch.source, inspector: FoundationFileInspector())
-        let texts: [String] = ["hello\n", "{\"a\": 1}\n", "top\n", "a nested system-named folder is copied\n", "two lines\n"]
-        let sizes: [Int] = texts.map { $0.utf8.count }
-        #expect(needed == Int64(sizes.reduce(0, +)))
+        #expect(needed == 5 * 4096)
+        #expect(FileInspection.blocks(0) == 0 && FileInspection.blocks(1) == 4096 && FileInspection.blocks(4097) == 8192)
+        // What the Mac's inspector reads (st_blocks × 512) is used as it is.
+        let small = FileInspection(kind: .regular, size: 3, allocated: 8192)
+        #expect(small.allocated == 8192)
         let error = #expect(throws: DiskVolumesError.self) { try scratch.copyAndVerify(free: 1_000_000) }
         #expect(error?.description.contains("The copy needs about 100 MB") == true)
         #expect(try ConversionCopy.entries(at: scratch.copy).isEmpty, "nothing copied")

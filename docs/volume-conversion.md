@@ -115,10 +115,23 @@ volume open. Then, in the administrator prompt's one shell:
    change it between Visor Disk Utility's look and the prompt. So the
    prompt's script copies the bundle, as root, into a fresh root-owned
    folder (`mktemp -d /private/var/tmp/visor-check.XXXXXXXX`, 0700),
-   verifies the copy against the running app's own designated requirement
-   (`codesign --verify --strict -R=<requirement>`: for a Developer ID build,
-   Apple's anchor, its identifier and its team; an ad hoc build, its cdhash,
-   which only a debug build accepts), runs the copy's `conversion-check swap
+   verifies the copy (`codesign --verify --strict -R=<requirement>`)
+   against a requirement built from constants, never read from the bundle:
+   `anchor apple generic and identifier "com.LoganShire.Visor.DiskUtility"
+   and certificate leaf[field.1.2.840.113635.100.6.1.13] exists and
+   certificate leaf[subject.OU] = "<team>" and cdhash H"<cdhash>"`. The team
+   is the one the build was made for, compiled in (VISOR_TEAM_ID), or, for
+   CI's builds, whose signer stamps it later, the running process's own
+   entitlements' as the kernel holds them; the cdhash is the running
+   process's own as the kernel holds it, so the copy must be exactly the
+   binary that ran Visor Disk Utility's checks: a bundle replaced after
+   launch, by a build signed by any other identity, fails (and Swap In
+   refuses up front when the bundle on disk isn't the code that's
+   running). Only a test build
+   (`--config=visor_test_signing`, which defines VISOR_TEST_SIGNING) may be
+   ad hoc, pinned by its cdhash alone; it alone has the test hooks
+   (`VISOR_CONVERSION_TEST_PAUSE`, `VISOR_CONVERSION_TEST_TAMPER`). The
+   prompt then runs the copy's `conversion-check swap
    <role> <the marker file's sha256>…`, and removes the folder whatever
    happens. A copy that fails its verification is refused ("conversion-check
    refused: the copy of Visor Disk Utility failed its signature check …
@@ -182,7 +195,9 @@ the copy would stay on the live Sessions or Sources and fill it early. A
 copy with no quota shares the container's free space with the rest of the
 Mac instead, so copy-staged refuses one that would leave less than a tenth
 of it free (at least 20 GB); with a quota, the copy must fit in it. Either
-way it counts the bytes it writes first (clones in full).
+way it counts the bytes it writes first: each file's and folder's
+allocated blocks (`st_blocks` × 512, so a tree of small files, node_modules
+or .git's objects, counts as it takes the disk), clones in full.
 
 ## The window, step by step (the Mini)
 

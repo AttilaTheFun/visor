@@ -17,6 +17,9 @@ public struct FileInspection: Equatable, Sendable {
     /// What an `.other` is (`fifo`, `characterSpecial`…).
     public var typeName: String
     public var size: Int64
+    /// The bytes it takes on disk (`st_blocks` × 512): what a copy of it
+    /// writes, a small file's block among them.
+    public var allocated: Int64
     /// The modification and status-change times as text (exactly as read);
     /// nil when unknown (Foundation has no status-change time).
     public var modified: String
@@ -48,12 +51,13 @@ public struct FileInspection: Equatable, Sendable {
     /// Whether the person can read it (a folder: read and search).
     public var readable: Bool
 
-    public init(kind: Kind, typeName: String = "", size: Int64 = 0, modified: String = "", changed: String? = nil, mode: UInt32 = 0,
+    public init(kind: Kind, typeName: String = "", size: Int64 = 0, allocated: Int64? = nil, modified: String = "", changed: String? = nil, mode: UInt32 = 0,
                 uid: UInt32 = 0, gid: UInt32 = 0, flags: UInt32 = 0, inode: UInt64 = 0, linkCount: UInt64 = 1, rdev: UInt64 = 0,
                 xattrs: String? = nil, acl: String? = nil, linkTarget: String? = nil, readable: Bool = true) {
         self.kind = kind
         self.typeName = typeName
         self.size = size
+        self.allocated = allocated ?? Self.blocks(size)
         self.modified = modified
         self.changed = changed
         self.mode = mode
@@ -67,6 +71,13 @@ public struct FileInspection: Equatable, Sendable {
         self.acl = acl
         self.linkTarget = linkTarget
         self.readable = readable
+    }
+
+    /// A size rounded up to whole 4 KiB blocks (APFS's), where the blocks
+    /// themselves can't be read (Foundation).
+    public static func blocks(_ size: Int64) -> Int64 {
+        let block: Int64 = 4096
+        return (max(0, size) + block - 1) / block * block
     }
 
     // The BSD file flags (sys/stat.h) a copy is held to. Those the system

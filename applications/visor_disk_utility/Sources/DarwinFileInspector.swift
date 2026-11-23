@@ -28,7 +28,7 @@ struct DarwinFileInspector: FileInspecting {
         default: "\(format)"
         }
         var inspection = FileInspection(
-            kind: kind, typeName: typeName, size: Int64(info.st_size),
+            kind: kind, typeName: typeName, size: Int64(info.st_size), allocated: Int64(info.st_blocks) * 512,
             modified: "\(info.st_mtimespec.tv_sec).\(info.st_mtimespec.tv_nsec)",
             changed: "\(info.st_ctimespec.tv_sec).\(info.st_ctimespec.tv_nsec)",
             mode: UInt32(info.st_mode & 0o7777), uid: info.st_uid, gid: info.st_gid, flags: info.st_flags,

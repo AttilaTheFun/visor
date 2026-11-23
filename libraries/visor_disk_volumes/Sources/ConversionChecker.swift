@@ -2,12 +2,15 @@
 // the administrator prompt without running anything the person (or any
 // process of theirs, an agent's) could have changed: Visor Disk Utility's
 // bundle is copied, as root, into a fresh root-owned folder (mktemp under
-// /private/var/tmp, 0700); that copy's signature is verified against the
-// running app's own designated requirement (codesign --verify --strict
-// -R); only then is the copy's executable run, and the folder is removed
-// as the script ends, whatever happens. Each step stops the rest if it
-// fails, so a bundle swapped between the guard's look and the prompt is
-// refused before it runs as root.
+// /private/var/tmp, 0700); that copy's signature is verified against a
+// requirement built here from constants (Apple's Developer ID anchor, the
+// app's identifier, the team the build was made for) and pinned to the
+// cdhash of the very process that ran the guard (so the copy must be that
+// binary: a bundle replaced after launch, by a build signed by any other
+// identity or none, fails); only then is the copy's executable run, and the
+// folder is removed as the script ends, whatever happens. Each step stops
+// the rest if it fails. Nothing of the requirement is read from the bundle
+// on disk.
 
 import Foundation
 
@@ -16,14 +19,39 @@ public struct ConversionChecker: Equatable, Sendable {
     public var bundle: String
     /// Its executable's name in `Contents/MacOS` (`Visor Disk Utility`).
     public var executable: String
-    /// The code requirement its copy must satisfy: the running app's own
-    /// designated requirement (`anchor apple generic and identifier
-    /// "com.LoganShire.Visor.DiskUtility" and certificate leaf[subject.OU]
-    /// = <team>` for a Developer ID build; `cdhash H"…"` for an ad hoc one).
-    public var requirement: String
+    /// The code requirement its copy must satisfy (`requirement(team:cdhash:)`).
+    public private(set) var requirement: String
 
     /// The bundle identifier a requirement must name.
     public static let identifier = "com.LoganShire.Visor.DiskUtility"
+
+    /// The certificate extension Apple puts on a Developer ID Application
+    /// leaf certificate.
+    public static let developerIDLeaf = "1.2.840.113635.100.6.1.13"
+
+    /// The requirement the root's copy must satisfy, built from constants:
+    /// with a team, `anchor apple generic and identifier "<id>" and
+    /// certificate leaf[field.<Developer ID>] exists and certificate
+    /// leaf[subject.OU] = "<team>" and cdhash H"<running cdhash>"`; with
+    /// none (a test build's ad hoc signature, allowed only there),
+    /// `identifier "<id>" and cdhash H"<running cdhash>"`. Only `and`.
+    public static func requirement(team: String?, cdhash: String) -> String {
+        let pinned = "identifier \"\(identifier)\" and cdhash H\"\(cdhash)\""
+        guard let team else { return pinned }
+        return "anchor apple generic and identifier \"\(identifier)\" and certificate leaf[field.\(developerIDLeaf)] exists "
+            + "and certificate leaf[subject.OU] = \"\(team)\" and cdhash H\"\(cdhash)\""
+    }
+
+    /// Whether `team` is a team identifier: ten letters and digits.
+    public static func isTeam(_ team: String) -> Bool {
+        team.count == 10 && team.allSatisfy { $0.isASCII && ($0.isUppercase || $0.isNumber) }
+    }
+
+    /// Whether `cdhash` is a code directory hash: 40 hex digits (SHA-1 or
+    /// a SHA-256's first 20 bytes, as codesign prints them).
+    public static func isCdhash(_ cdhash: String) -> Bool {
+        cdhash.count == 40 && cdhash.allSatisfy(\.isHexDigit)
+    }
 
     /// The script `/bin/sh -c` runs as root: `$1` the bundle, `$2` the
     /// requirement, `$3` the executable's name, then the check's own
@@ -44,34 +72,32 @@ public struct ConversionChecker: Equatable, Sendable {
     /// The script's `$0`.
     public static let scriptName = "visor-check"
 
-    /// A checker, refused unless its requirement may be relied on: a build
-    /// signed by a team (`teamSigned`) must have the Apple anchor, the
-    /// identifier and that team in its requirement; an ad hoc one (its
-    /// requirement pins its cdhash) is allowed only in a debug build.
-    public init(bundle: String, executable: String, requirement: String, team: String?, debugBuild: Bool) throws {
+    /// A checker for the app at `bundle`, its copy pinned to `cdhash`
+    /// (the running process's own) and signed by `team` (compiled in, or
+    /// the running process's own entitlement's), refused without a team
+    /// unless ad hoc signatures are allowed (`adHocAllowed`: a test build's
+    /// alone, by its own define).
+    public init(bundle: String, executable: String, team: String?, cdhash: String, adHocAllowed: Bool) throws {
         guard bundle.hasPrefix("/"), bundle.hasSuffix(".app"), !bundle.contains("\n") else {
             throw DiskVolumesError.blocked("\(bundle) isn't an app's bundle: the root's check can't be run from it.")
         }
         guard !executable.isEmpty, !executable.contains("/"), executable != "..", !executable.contains("\n") else {
             throw DiskVolumesError.blocked("\(executable) isn't an executable's name.")
         }
-        let text = requirement.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { throw DiskVolumesError.blocked("Visor Disk Utility isn't signed: the root's check can't be verified.") }
-        if let team, !team.isEmpty {
-            guard text.contains("anchor apple generic"), text.contains("identifier \"\(Self.identifier)\""),
-                  text.contains("certificate leaf[subject.OU] = \"\(team)\"") || text.contains("certificate leaf[subject.OU] = \(team)") else {
-                throw DiskVolumesError.blocked("Visor Disk Utility's designated requirement (\(text)) doesn't name Apple's anchor, its identifier "
-                    + "and its team: the root's check can't be verified by it.")
-            }
+        guard Self.isCdhash(cdhash) else {
+            throw DiskVolumesError.blocked("Visor Disk Utility's own cdhash couldn't be read (\(cdhash)): the root's check can't be pinned to it.")
+        }
+        if let team {
+            guard Self.isTeam(team) else { throw DiskVolumesError.blocked("\(team) isn't a team identifier.") }
         } else {
-            guard debugBuild, text.hasPrefix("cdhash H\"") || text.hasPrefix("cdhash H'") else {
-                throw DiskVolumesError.blocked("Visor Disk Utility isn't signed by a team (\(text)): a build of it that isn't a debug one "
+            guard adHocAllowed else {
+                throw DiskVolumesError.blocked("Visor Disk Utility isn't signed by a team: a build that isn't a test build "
                     + "won't run the root's check by an ad hoc signature.")
             }
         }
         self.bundle = bundle
         self.executable = executable
-        self.requirement = text
+        self.requirement = Self.requirement(team: team, cdhash: cdhash.lowercased())
     }
 
     /// The command that runs Visor Disk Utility's `arguments` as root, from

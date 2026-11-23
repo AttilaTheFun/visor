@@ -714,10 +714,18 @@ removed (still only when `agentProxy` is set).
   is, which the person can write: ConversionChecker's script (`/bin/sh -c`,
   exact) copies it as root into a root-owned `mktemp -d` folder under
   /private/var/tmp, verifies the copy with `codesign --verify --strict -R`
-  against the running app's designated requirement (Security's
-  SecCodeCopyDesignatedRequirement; a team-signed build's must name Apple's
-  anchor, its identifier and team, an ad hoc one's cdhash passes only in a
-  debug build), runs the copy, and removes it. No quota is set on a copy
+  against a requirement built from constants (ConversionChecker:
+  Developer ID anchor and leaf, the identifier, the team compiled in from
+  VISOR_TEAM_ID or, for CI's builds, the running process's entitlements,
+  and the running process's own cdhash, as the kernel holds it
+  (`csops(CS_OPS_CDHASH)`: SecCodeCopySelf's signing information is read
+  from the disk, and a bundle replaced after launch passed by it in a
+  leased VM; the disk's must match the kernel's, or nothing runs); never
+  read from the bundle), runs the copy, and removes it.
+  Ad hoc signatures, and the test hooks, are only in a build with
+  `--config=visor_test_signing` (VISOR_TEST_SIGNING); shipped builds are
+  `--compilation_mode=opt` (alpha-apple, release-apple), and DEBUG is no
+  gate (rules_swift defines it in fastbuild too). No quota is set on a copy
   whose source has none (no tool can remove a quota later, and the copy
   becomes the live volume); copy-staged keeps a tenth of the container's
   free space (20 GB at least) free instead. Extended attributes or an ACL

@@ -79,54 +79,101 @@ extension DiskTool {
         return FileOwner(uid: getuid(), groups: Set(groups.prefix(Int(max(0, read)))).union([getgid()]))
     }
 
-    /// Visor Disk Utility's own bundle and designated requirement: the
-    /// root's check before a swap or unswap is a copy of it, made by root
-    /// in a root-owned folder and verified against that requirement before
-    /// it runs (ConversionChecker), never the bundle as it is, which the
-    /// person (or any process of theirs) can write.
+    /// The root's check's checker: a copy of this app's bundle, made by
+    /// root in a root-owned folder, verified against a requirement built
+    /// from constants (ConversionChecker.requirement): the team this build
+    /// was made for, compiled in (SigningTeam) or, when the builder had
+    /// none (CI's builds, whose signer stamps it), the running process's
+    /// own (its entitlements, as the kernel holds them, never the bundle on
+    /// disk), and pinned to this running process's own cdhash. Never the
+    /// bundle as it is, which the person (or any process of theirs) can
+    /// write, and never a requirement read from it.
     static func verifiedChecker() throws -> ConversionChecker {
         let bundle = Bundle.main.bundleURL.path
         guard let executable = Bundle.main.executableURL?.lastPathComponent else {
             throw DiskVolumesError.blocked("Visor Disk Utility can't find its own executable for the root's check.")
         }
-        let signature = try ownSignature()
-        #if DEBUG
-        let debugBuild = true
-        #else
-        let debugBuild = false
-        #endif
-        return try ConversionChecker(bundle: bundle, executable: executable, requirement: signature.requirement, team: signature.team,
-                                     debugBuild: debugBuild)
-    }
-
-    /// The running app's designated requirement as text, and its team (nil
-    /// when it's signed ad hoc).
-    static func ownSignature() throws -> (requirement: String, team: String?) {
-        var code: SecCode?
-        var staticCode: SecStaticCode?
-        var requirement: SecRequirement?
-        var text: CFString?
-        guard SecCodeCopySelf([], &code) == errSecSuccess, let code,
-              SecCodeCopyStaticCode(code, [], &staticCode) == errSecSuccess, let staticCode,
-              SecCodeCopyDesignatedRequirement(staticCode, [], &requirement) == errSecSuccess, let requirement,
-              SecRequirementCopyString(requirement, [], &text) == errSecSuccess, let text else {
-            throw DiskVolumesError.blocked("Visor Disk Utility's own signature couldn't be read: the root's check can't be verified.")
+        let running = runningTeam()
+        if let compiled = SigningTeam.compiled, let running, compiled != running {
+            throw DiskVolumesError.blocked("Visor Disk Utility runs signed by team \(running), not \(compiled), the team it was built for: "
+                + "the root's check isn't run.")
         }
-        var information: CFDictionary?
-        _ = SecCodeCopySigningInformation(staticCode, SecCSFlags(rawValue: kSecCSSigningInformation), &information)
-        let team = (information as? [String: Any])?[kSecCodeInfoTeamIdentifier as String] as? String
-        return (text as String, team)
+        #if VISOR_TEST_SIGNING
+        let adHocAllowed = true
+        #else
+        let adHocAllowed = false
+        #endif
+        return try ConversionChecker(bundle: bundle, executable: executable, team: SigningTeam.compiled ?? running,
+                                     cdhash: try runningCdhash(), adHocAllowed: adHocAllowed)
     }
 
-    /// For a test machine: the app's own bundle changed between the guard's
-    /// look and the prompt (`VISOR_CONVERSION_TEST_TAMPER`: a file added to
-    /// its Resources), as a process of the person's could, so the root's
-    /// check can be shown to refuse a copy that fails its verification.
+    /// The running process's own cdhash, as the kernel holds it for the
+    /// code it's running (`csops(CS_OPS_CDHASH)`): never the bundle on disk,
+    /// which a process of the person's could have replaced since launch
+    /// (SecCodeCopySelf's signing information is read from the disk: a
+    /// leased VM's run showed a bundle replaced after launch passing by
+    /// it). The disk's own is read too, and must be the same, or the
+    /// bundle has changed since launch and nothing runs.
+    static func runningCdhash() throws -> String {
+        typealias Csops = @convention(c) (pid_t, UInt32, UnsafeMutableRawPointer?, Int) -> Int32
+        let csOpsCdhash: UInt32 = 5
+        guard let system = dlopen(nil, RTLD_NOW), let symbol = dlsym(system, "csops") else {
+            throw DiskVolumesError.blocked("The kernel's record of Visor Disk Utility's code couldn't be read: the root's check isn't run.")
+        }
+        let csops = unsafeBitCast(symbol, to: Csops.self)
+        var hash = [UInt8](repeating: 0, count: 20)
+        guard csops(getpid(), csOpsCdhash, &hash, hash.count) == 0 else {
+            throw DiskVolumesError.blocked("The kernel's record of Visor Disk Utility's cdhash couldn't be read: the root's check isn't run.")
+        }
+        let running = hash.map { String(format: "%02x", $0) }.joined()
+        var code: SecCode?
+        var information: CFDictionary?
+        if SecCodeCopySelf([], &code) == errSecSuccess, let code,
+           SecCodeCopySigningInformation(unsafeBitCast(code, to: SecStaticCode.self), SecCSFlags(rawValue: kSecCSSigningInformation),
+                                         &information) == errSecSuccess,
+           let unique = (information as? [String: Any])?[kSecCodeInfoUnique as String] as? Data,
+           unique.map({ String(format: "%02x", $0) }).joined() != running {
+            throw DiskVolumesError.blocked("Visor Disk Utility's bundle on disk isn't the code that's running (it changed since it was opened): "
+                + "quit it, check /Applications, and open it again. Nothing was changed.")
+        }
+        return running
+    }
+
+    /// The team the running process is signed for, from its own
+    /// entitlements as the kernel holds them (`com.apple.developer.
+    /// team-identifier`, or `com.apple.application-identifier`'s prefix);
+    /// nil when it has none (ad hoc).
+    static func runningTeam() -> String? {
+        guard let task = SecTaskCreateFromSelf(nil) else { return nil }
+        if let team = SecTaskCopyValueForEntitlement(task, "com.apple.developer.team-identifier" as CFString, nil) as? String,
+           ConversionChecker.isTeam(team) {
+            return team
+        }
+        guard let identifier = SecTaskCopyValueForEntitlement(task, "com.apple.application-identifier" as CFString, nil) as? String,
+              let prefix = identifier.split(separator: ".").first.map(String.init), ConversionChecker.isTeam(prefix) else { return nil }
+        return prefix
+    }
+
+    /// For a test build alone (VISOR_TEST_SIGNING): the app's bundle
+    /// changed between the guard's look and the prompt, as a process of
+    /// the person's could (`VISOR_CONVERSION_TEST_TAMPER`: `1`, a file added
+    /// to its Resources; or another app's path, the whole bundle replaced
+    /// by it), so the root's check can be shown to refuse it. Compiled out
+    /// of every other build.
     static func testTamper() {
-        guard ProcessInfo.processInfo.environment["VISOR_CONVERSION_TEST_TAMPER"] == "1",
-              let resources = Bundle.main.resourceURL else { return }
-        print("changing \(resources.path) before the prompt (VISOR_CONVERSION_TEST_TAMPER)")
-        try? Data("tampered\n".utf8).write(to: resources.appendingPathComponent("tampered"))
+        #if VISOR_TEST_SIGNING
+        guard let tamper = ProcessInfo.processInfo.environment["VISOR_CONVERSION_TEST_TAMPER"], !tamper.isEmpty else { return }
+        let bundle = Bundle.main.bundleURL
+        if tamper == "1" {
+            print("changing \(bundle.path)/Contents/Resources before the prompt (VISOR_CONVERSION_TEST_TAMPER)")
+            try? Data("tampered\n".utf8).write(to: bundle.appendingPathComponent("Contents/Resources/tampered"))
+        } else {
+            print("replacing \(bundle.path) with \(tamper) before the prompt (VISOR_CONVERSION_TEST_TAMPER)")
+            try? FileManager.default.removeItem(at: bundle)
+            _ = try? run(["/usr/bin/ditto", tamper, bundle.path])
+        }
+        fflush(stdout)
+        #endif
     }
 
     /// Swap In: for each role, its marker checked (these two volumes, at
@@ -135,6 +182,7 @@ extension DiskTool {
     /// renamed `<Name>` and mounted again at `/Volumes/<Name>`, each by its
     /// disk, in one administrator prompt; then the marker removed.
     static func swap(_ roles: [VolumeRole], route: PrivilegeRoute) throws -> DiskSurvey {
+        testPause(first: true)
         let disks = try survey()
         let checker = try verifiedChecker()
         var steps: [VolumeRole: ConversionStep] = [:]
@@ -157,7 +205,7 @@ extension DiskTool {
             guard case let .swap(marker, _)? = steps[role] else { continue }
             try checkListings(role, marker: marker)
         }
-        testPause()
+        testPause(first: false)
         let after: DiskSurvey
         do {
             after = try change([ConversionPlanner.swapCheck(checker: checker, markers: digests)] + commands, route: route,
@@ -300,14 +348,20 @@ extension DiskTool {
         }
     }
 
-    /// For a test machine: a pause, in seconds, between the person's checks
-    /// and the prompt (`VISOR_CONVERSION_TEST_PAUSE`), so a write in it can
-    /// be shown to be caught by the root's check.
-    private static func testPause() {
-        guard let text = ProcessInfo.processInfo.environment["VISOR_CONVERSION_TEST_PAUSE"], let seconds = Double(text), seconds > 0 else { return }
-        print("pausing \(seconds) s before the prompt (VISOR_CONVERSION_TEST_PAUSE)")
+    /// For a test build alone (VISOR_TEST_SIGNING): a pause, in seconds,
+    /// between the person's checks and the prompt
+    /// (`VISOR_CONVERSION_TEST_PAUSE`), so a write in it can be shown to be
+    /// caught by the root's check; or before Swap In reads anything
+    /// (`VISOR_CONVERSION_TEST_PAUSE_FIRST`), so the bundle can be replaced
+    /// after launch. Compiled out of every other build.
+    private static func testPause(first: Bool) {
+        #if VISOR_TEST_SIGNING
+        let variable = first ? "VISOR_CONVERSION_TEST_PAUSE_FIRST" : "VISOR_CONVERSION_TEST_PAUSE"
+        guard let text = ProcessInfo.processInfo.environment[variable], let seconds = Double(text), seconds > 0 else { return }
+        print("pausing \(seconds) s (\(variable))")
         fflush(stdout)
         Thread.sleep(forTimeInterval: min(seconds, 600))
+        #endif
     }
 
     /// A kept volume deleted, by its UUID, its confirmation typed ("delete

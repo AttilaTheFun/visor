@@ -92,19 +92,22 @@ public enum ConversionCopy {
         return (lines, count)
     }
 
-    /// The bytes the copy writes: each regular file's size, a file shared
-    /// by hard links within one root entry once (ditto keeps those), a
-    /// clone in full (a copy doesn't share its blocks).
+    /// The bytes the copy writes: each regular file's and folder's
+    /// allocated size (its blocks, so a tree of small files, node_modules
+    /// or .git's objects, is counted as it takes the disk, not by its
+    /// bytes), a file shared by hard links within one root entry once
+    /// (ditto keeps those), a clone in full (a copy doesn't share its
+    /// blocks).
     public static func bytesNeeded(at root: String, inspector: some FileInspecting) throws -> Int64 {
         var total: Int64 = 0
         var seen: Set<String> = []
         try VolumeTree.walk(root, inspector: inspector) { path, file in
-            guard file.kind == .regular else { return true }
-            if file.linkCount > 1 {
+            guard file.kind == .regular || file.kind == .directory else { return true }
+            if file.kind == .regular, file.linkCount > 1 {
                 let key = String(path.prefix { $0 != "/" }) + "\u{0}\(file.inode)"
                 guard seen.insert(key).inserted else { return true }
             }
-            total += file.size
+            total += file.allocated
             return true
         }
         return total

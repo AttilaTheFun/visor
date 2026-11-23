@@ -66,13 +66,16 @@ import Testing
 
     init() throws {
         checker = try ConversionChecker(bundle: "/Applications/Visor Disk Utility.app", executable: "Visor Disk Utility",
-                                        requirement: Self.requirement, team: "TEAMID0000", debugBuild: false)
+                                        team: "TEAMID0000", cdhash: Self.cdhash, adHocAllowed: false)
     }
 
-    /// A Developer ID build's designated requirement, as codesign says it
-    /// (a placeholder team).
-    static let requirement = "identifier \"com.LoganShire.Visor.DiskUtility\" and anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] "
-        + "/* exists */ and certificate leaf[field.1.2.840.113635.100.6.1.13] /* exists */ and certificate leaf[subject.OU] = TEAMID0000"
+    static let cdhash = "3bc302846ae6cd4e9b5d1c76f7829052ec6ae1d5"
+
+    /// The requirement the copy must satisfy, built from constants (a
+    /// placeholder team).
+    static let requirement = "anchor apple generic and identifier \"com.LoganShire.Visor.DiskUtility\" and certificate "
+        + "leaf[field.1.2.840.113635.100.6.1.13] exists and certificate leaf[subject.OU] = \"TEAMID0000\" "
+        + "and cdhash H\"3bc302846ae6cd4e9b5d1c76f7829052ec6ae1d5\""
 
     private func swapping(_ roles: [VolumeRole], minutesOld: Double = 10) -> [VolumeRole: ConversionStep] {
         Dictionary(uniqueKeysWithValues: roles.map {
@@ -105,7 +108,9 @@ import Testing
         let planned = check([.sessions])
         var shapes = [DiskCommand(program: "/Applications/Visor Disk Utility.app/Contents/MacOS/Visor Disk Utility",
                                   arguments: ["conversion-check", "swap", "sessions", digest])]
-        for (index, replacement) in [(1, "set -e; \"$1/Contents/MacOS/$3\" \"$@\""), (3, "/tmp/Other.app"), (4, "anchor apple"),
+        for (index, replacement) in [(1, "set -e; \"$1/Contents/MacOS/$3\" \"$@\""), (3, "/tmp/Other.app"),
+                                     (4, Self.requirement + " or anchor apple generic"),
+                                     (4, Self.requirement.replacingOccurrences(of: Self.cdhash, with: String(repeating: "0", count: 40))),
                                      (5, "../../bin/sh")] {
             var shape = planned
             shape.arguments[index] = replacement
