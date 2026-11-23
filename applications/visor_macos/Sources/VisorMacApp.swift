@@ -1,6 +1,5 @@
 // Visor Client's @main, the Mac client's, on the shared host sources.
 
-import ShakeKit
 import SwiftUI
 import VisorClient
 import VisorProtocol
@@ -65,10 +64,6 @@ struct VisorMacApp: App {
                 // Every link to the window that is open, brought forward,
                 // rather than a new window for each.
                 .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
-                // Help › Report a Bug… (below) files one in this
-                // repository, as an issue (ShakeKit: on in every build, by
-                // its Info.plist).
-                .shakeToReport(repository: "AttilaTheFun/visor")
         }
         .handlesExternalEvents(matching: ["*"])
         // The sidebar, and a thread about as wide as the transcript grows.
@@ -87,8 +82,6 @@ struct VisorMacApp: App {
                 Button(AgentServerProviderUIs.addTitle + "…") { store.addingServer = true }
                     .keyboardShortcut(",", modifiers: [.command, .shift])
             }
-            // Help › Report a Bug… (⌥⌘B).
-            ShakeKitCommands()
         }
     }
 }

@@ -2,8 +2,8 @@
 // into CI's builds to publish alone (tools/shared_sign_in): with all of
 // it, or none. A builder without it (this test's, anyone's but CI's) gets
 // an empty fragment and no shared keychain group: ShakeKit, whose only
-// sign-in that is (shake_kit 0.3), then reports nothing. Visor Client
-// takes none of it in any build: it has no app group for the lock
+// sign-in that is (shake_kit 0.3), then reports nothing. Visor.app and
+// Visor for iOS alone: Visor Client, which retires, has no ShakeKit
 // (EntitlementsTests holds its entitlements to its list).
 
 import Foundation
@@ -32,8 +32,8 @@ import Testing
         #expect((fragment["GitHubSharedClientID"] as? String)?.isEmpty == false)
     }
 
-    /// A build's own Info.plist turns ShakeKit on in every build.
-    @Test(arguments: ["visor_mac", "visor_ios", "visor_macos"])
+    /// An app's own Info.plist turns ShakeKit on in every build.
+    @Test(arguments: ["visor_mac", "visor_ios"])
     func everyBuildOptsIn(folder: String) throws {
         let info = try Self.plist("applications/\(folder)/Info.plist")
         #expect(info["ShakeKitScope"] as? String == "public_repo")

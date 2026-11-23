@@ -10,9 +10,8 @@ package(default_visibility = ["//visibility:public"])
 BUNDLE_ID = "com.LoganShire.VisorClient.macOS"
 
 # The entitlements, for the test that holds them to the sandboxed client's
-# list, and the Info.plist, which turns ShakeKit on (tests/visor_macos_tests).
+# list (tests/visor_macos_tests).
 exports_files([
-    "Info.plist",
     "app.ci.entitlements",
     "app.entitlements",
 ])
@@ -52,10 +51,6 @@ swift_library(
     module_name = "VisorMacOSHost",
     deps = [
         "//:foundation",
-        # ShakeKit (its root view and scene), inert here: Visor Client has
-        # no app group, so no lock for the sign-in Logan's apps share, and
-        # takes none of it (tools/shared_sign_in), ShakeKit's only sign-in.
-        "@swiftpkg_shake_kit//:ShakeKit",
         "//libraries/visor_client",
         "//libraries/visor_protocol",
         "//libraries/visor_services",

@@ -62,10 +62,10 @@ let package = Package(
         ),
         // ShakeKit: a shake (Help › Report a Bug… on a Mac) files a GitHub
         // issue in this repository, with a screenshot and the app's logs.
-        // The Apple apps alone (applications/visor_mac, visor_ios,
-        // visor_macos), at their root view and scene: nothing portable
+        // Visor.app and Visor for iOS alone (applications/visor_mac,
+        // visor_ios), at their root view and scene: nothing portable
         // (visor_ui, visor_client) depends on it. Every build opts in
-        // (`ShakeKitScope` in each Info.plist); its only sign-in, the one
+        // (`ShakeKitScope` in their Info.plists); its only sign-in, the one
         // Logan's apps share (Shireworks signed in on the same device), is
         // stamped into his CI builds alone (tools/shared_sign_in), so
         // anyone else's build reports nothing.

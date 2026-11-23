@@ -15,9 +15,7 @@ Developer ID profile's), but the template's `<!-- UPDATE_APP_GROUP -->` line
 becomes `com.apple.security.application-groups` with every group: the
 Visor family's first, then UPDATE_APP_GROUP when the builder has one. The
 Developer ID profile must grant each (an entitlement the profile doesn't
-grant fails signing, as Visor Disk Utility's did in 0.65.1). With no group
-at all (`groups = []` and no UPDATE_APP_GROUP) the line goes, as
-tools/signing's does.
+grant fails signing, as Visor Disk Utility's did in 0.65.1).
 
 A template's `<!-- SHARED_SIGN_IN_KEYCHAIN_GROUP -->` line, in its
 `keychain-access-groups`, becomes the keychain group of the sign-in Logan's
@@ -42,13 +40,10 @@ def app_groups(groups = [VISOR_APP_GROUP]):
 
 def app_group_entitlement(groups = [VISOR_APP_GROUP]):
     """The application-groups entitlement as plist lines; its first line
-    takes the placeholder's place, and its indent (a tab). "" with none."""
-    every = app_groups(groups)
-    if not every:
-        return ""
+    takes the placeholder's place, and its indent (a tab)."""
     return "\n".join(
         ["<key>com.apple.security.application-groups</key>", "\t<array>"] +
-        ["\t\t<string>%s</string>" % _xml(group) for group in every] +
+        ["\t\t<string>%s</string>" % _xml(group) for group in app_groups(groups)] +
         ["\t</array>"],
     )
 
