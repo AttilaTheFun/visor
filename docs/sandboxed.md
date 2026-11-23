@@ -18,7 +18,7 @@
   - device.audio-input;
   - files.user-selected.read-write and **files.bookmarks.app-scope** (the volumes);
   - keychain-access-groups `<team>.com.LoganShire.Visor` (team-prefixed: the keychain group is separate from app groups);
-  - **application-groups** `group.com.LoganShire.Visor` (the Visor family: presence, messaging, sockets) and `group.com.LoganShire.Applications` (the installed-version advert, UpdateKit);
+  - **application-groups** `group.com.LoganShire.Visor` (the Visor family: presence, messaging, sockets) and `group.com.LoganShire.Shireworks` (shared with Shireworks: UpdateKit's installed-version advert and the shared sign-in's lock; Logan, 23 Nov 2026, in place of `group.com.LoganShire.Applications`);
   - aps-environment.
 - **Agent Utility:** not sandboxed, with the same keychain group and both app groups.
 - **Disk Utility:** as 0.65, plus both app groups, so Uninstall can find the group container.
@@ -111,5 +111,5 @@
 
 ## Logan's decisions (22 Nov, 21:1xZ)
 - **The design is OK'd:** "Sounds good".
-- **App groups:** `group.com.LoganShire.Visor` for the Visor family, `group.com.LoganShire.Nimbus` for the Nimbus family, and `group.com.LoganShire.Applications` for advertising installed versions. All three Visor apps get Visor and Applications. Keychain access stays team-prefixed.
+- **App groups:** `group.com.LoganShire.Visor` for the Visor family, `group.com.LoganShire.Nimbus` for the Nimbus family, and `group.com.LoganShire.Applications` for advertising installed versions. All three Visor apps get Visor and Applications. **Changed 23 Nov:** Logan replaced Applications with `group.com.LoganShire.Shireworks` on the Visor family's App IDs; Visor's builds name Visor and Shireworks. Keychain access stays team-prefixed.
 - Go ahead with the PRs, in parallel with the current queue.
