@@ -27,8 +27,7 @@ import VisorUninstall
 /// root), `… swap sessions|sources|both`, `… unswap sessions|sources|both`
 /// and `… delete-kept <name> --confirm "delete <name>"`.
 enum DiskUtilityCLI {
-    static let verbs: Set<String> = ["status", "create", "erase-containers", "fix-owner", "exclude-visor", "uninstall"]
-        .union(conversionVerbs)
+    static let verbs = Set(["status", "create", "erase-containers", "fix-owner", "exclude-visor", "uninstall"]).union(conversionVerbs)
 
     /// Runs and exits when the arguments are a command; else returns, for
     /// the app.
