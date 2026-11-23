@@ -701,7 +701,7 @@
   "moduleExtensions": {
     "//tools/shared_sign_in:extension.bzl%shared_sign_in": {
       "general": {
-        "bzlTransitiveDigest": "XNOpeG8vRPiYay7arJFrVp5TQGn8mlWr1YWZnRZc0F4=",
+        "bzlTransitiveDigest": "wpQyZRIJCYvaeNcFA2ORfpFxf8TOz5TgfXf0Y+WoWfU=",
         "usagesDigest": "XpM62E73OCWIe7KEaJhXLOiaaGrA+hra49yHcYg7owk=",
         "recordedInputs": [],
         "generatedRepoSpecs": {
