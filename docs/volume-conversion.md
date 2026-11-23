@@ -120,9 +120,14 @@ volume open. Then, in the administrator prompt's one shell:
    `anchor apple generic and identifier "com.LoganShire.Visor.DiskUtility"
    and certificate leaf[field.1.2.840.113635.100.6.1.13] exists and
    certificate leaf[subject.OU] = "<team>" and cdhash H"<cdhash>"`. The team
-   is the one the build was made for, compiled in (VISOR_TEAM_ID), or, for
-   CI's builds, whose signer stamps it later, the running process's own
-   entitlements' as the kernel holds them; the cdhash is the running
+   is Logan's, compiled in from VISOR_TEAM_ID (`--repo_env`, which CI's
+   alpha-apple and release-apple set from the repository's VISOR_TEAM_ID
+   variable, or the builder's own .bazelrc.user): an optimized
+   build without it refuses Swap In and unswap ("built without Logan's
+   team"), since a bundle replaced before launch would bring its own, and
+   one that runs signed by another team refuses too. Only a dev or test
+   build falls back to the running process's own team (its entitlements as
+   the kernel holds them). The cdhash is the running
    process's own as the kernel holds it, so the copy must be exactly the
    binary that ran Visor Disk Utility's checks: a bundle replaced after
    launch, by a build signed by any other identity, fails (and Swap In

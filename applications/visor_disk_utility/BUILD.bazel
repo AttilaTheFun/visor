@@ -4,7 +4,7 @@ load("@rules_swift//swift:swift.bzl", "swift_library")
 load("//tools/app_groups:defs.bzl", "app_group_entitlements")
 load("//tools/variant:defs.bzl", "variant_infoplist")
 load("@bazel_skylib//rules:write_file.bzl", "write_file")
-load("@visor_signing//:signing.bzl", "TEAM_ID")
+load("//tools/team_id:defs.bzl", "TEAM_ID_REAL")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -28,18 +28,20 @@ variant_infoplist(
 # (`status`, `create`, `erase-containers`, `uninstall`, `stage`,
 # `copy-staged`, `swap`, `unswap`, `delete-kept`) runs the same code, for
 # scripts, NCH over SSH and test machines.
-# The team this build is made for (tools/signing: VISOR_TEAM_ID, never in
-# the repository), compiled in: the root's check's copy must be signed by it
-# (ConversionChecker). nil with the placeholder (CI's builds, whose signer
-# stamps the team later): then the running process's own entitlement says it.
+# The team this build is made for, compiled in from tools/team_id's
+# TEAM_ID_REAL (VISOR_TEAM_ID: a builder's own, or, in CI's alpha-apple and
+# release-apple, the repository's VISOR_TEAM_ID variable; never in the
+# repository): the root's check's copy must be signed by it
+# (ConversionChecker). nil without it: then an optimized build refuses Swap
+# In and unswap.
 write_file(
     name = "signing_team",
     out = "SigningTeam.swift",
     content = [
-        "// Made by applications/visor_disk_utility/BUILD.bazel from the builder's VISOR_TEAM_ID.",
+        "// Made by applications/visor_disk_utility/BUILD.bazel from tools/team_id's TEAM_ID_REAL.",
         "",
         "enum SigningTeam {",
-        "    static let compiled: String? = %s" % ("nil" if TEAM_ID == "YOUR_TEAM_ID" else repr(TEAM_ID).replace("'", "\"")),
+        "    static let compiled: String? = %s" % ('"%s"' % TEAM_ID_REAL if TEAM_ID_REAL else "nil"),
         "}",
         "",
     ],
