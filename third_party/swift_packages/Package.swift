@@ -65,11 +65,13 @@ let package = Package(
         // The Apple apps alone (applications/visor_mac, visor_ios,
         // visor_macos), at their root view and scene: nothing portable
         // (visor_ui, visor_client) depends on it. Every build opts in
-        // (`ShakeKitScope` in each Info.plist); the sign-in Logan's apps
-        // share is stamped into his CI builds alone (tools/shared_sign_in).
+        // (`ShakeKitScope` in each Info.plist); its only sign-in, the one
+        // Logan's apps share (Shireworks signed in on the same device), is
+        // stamped into his CI builds alone (tools/shared_sign_in), so
+        // anyone else's build reports nothing.
         .package(
             url: "https://github.com/AttilaTheFun/shake_kit.git",
-            exact: "0.2.1"
+            exact: "0.3.0"
         ),
         // Apple's Containerization (docs/containers.md): the Sessions
         // container's image store, ext4 unpacking and init filesystem, and,

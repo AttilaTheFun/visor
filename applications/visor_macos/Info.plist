@@ -23,8 +23,8 @@
 	<string>Turn what you say into the message.</string>
 	<!-- ShakeKit (shake_kit): a shake, or Help › Report a Bug… on a Mac,
 	     files an issue in this public repository. Every build opts in
-	     (Logan, 23 Nov 2026); the sign-in his apps share is stamped into
-	     his CI builds alone (tools/shared_sign_in). -->
+	     (Logan, 23 Nov 2026); its only sign-in, the one his apps share,
+	     is stamped into his CI builds alone (tools/shared_sign_in). -->
 	<key>ShakeKitScope</key>
 	<string>public_repo</string>
 </dict>

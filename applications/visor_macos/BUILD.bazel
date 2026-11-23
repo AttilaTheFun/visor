@@ -45,7 +45,8 @@ app_group_entitlements(
 )
 
 # ShakeKit's shared sign-in (GitHubShared…): in CI's builds alone, where the
-# builder has it; every other build signs in with ShakeKit's own OAuth App.
+# builder has it. It is ShakeKit's only sign-in (shake_kit 0.3): every other
+# build, or a Mac not signed in to Shireworks, reports nothing.
 shared_sign_in_infoplist(name = "shared_sign_in_plist")
 
 # The client on the Mac: the same compiled Swift + real SwiftUI the iOS app

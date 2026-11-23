@@ -1,8 +1,8 @@
 // The sign-in Logan's apps share (ShakeKit's GitHubShared… keys), stamped
 // into CI's builds to publish alone (tools/shared_sign_in): with all of
 // it, or none. A builder without it (this test's, anyone's but CI's) gets
-// an empty fragment and no shared keychain group, so the apps sign in with
-// ShakeKit's own OAuth App.
+// an empty fragment and no shared keychain group: ShakeKit, whose only
+// sign-in that is (shake_kit 0.3), then reports nothing.
 
 import Foundation
 import Testing

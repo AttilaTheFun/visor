@@ -12,8 +12,9 @@ A build says it only when the builder has all of it (extension.bzl's
 CLIENT_ID and TEAM_ID, and tools/signing's UPDATE_APP_GROUP, the lock's
 group), which CI's builds to publish alone have; and the apps take it in
 those builds alone (their `ci_signed`/`ci_device` selects), so a build to
-run here, and anyone else's, carries none of it and signs in with
-ShakeKit's own OAuth App.
+run here, and anyone else's, carries none of it. It is ShakeKit's only
+sign-in (shake_kit 0.3: signed in to Shireworks on the same phone or
+computer), so there ShakeKit, on by its Info.plist, reports nothing.
 
 An entitlements template takes the shared keychain group at the line
 `<!-- SHARED_SIGN_IN_KEYCHAIN_GROUP -->`, in its `keychain-access-groups`

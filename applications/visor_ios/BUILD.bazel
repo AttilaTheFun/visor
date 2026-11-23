@@ -58,8 +58,9 @@ shared_sign_in_entitlements(
 )
 
 # ShakeKit's shared sign-in (GitHubShared…): in CI's device build alone,
-# where the builder has it; every other build signs in with ShakeKit's own
-# OAuth App.
+# where the builder has it. It is ShakeKit's only sign-in (shake_kit 0.3):
+# every other build, or a device not signed in to Shireworks, reports
+# nothing.
 shared_sign_in_infoplist(name = "shared_sign_in_plist")
 
 # The client on a phone: compiled Swift, real SwiftUI, the shared VisorUI
