@@ -37,6 +37,8 @@ enum DiskUtilityCLI {
             try run(Array(arguments.dropFirst()))
             exit(0)
         } catch {
+            // What was printed first, then the error, in that order in a pipe.
+            fflush(stdout)
             FileHandle.standardError.write(Data("visor-disk-utility: \(error)\n".utf8))
             exit(1)
         }

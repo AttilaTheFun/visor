@@ -30,7 +30,7 @@ extension DiskUtilityCLI {
     private static func stage(_ roles: [VolumeRole], route: PrivilegeRoute) throws -> DiskSurvey {
         let disks = try DiskTool.survey()
         for role in roles {
-            try ConversionPlanner.stageCommands(role, in: disks, user: DiskTool.user).forEach { print("running: \($0)") }
+            try ConversionPlanner.stageCommands(role, in: disks, user: DiskTool.user).forEach { print("planned: \($0)") }
         }
         let after = try DiskTool.stage(roles, route: route)
         roles.forEach { print("staged \($0.stagedName) at \($0.stagedMountPoint): next, copy-staged \($0.rawValue) (as \(DiskTool.user), no sudo)") }
@@ -49,7 +49,7 @@ extension DiskUtilityCLI {
         let disks = try DiskTool.survey()
         for role in roles {
             let marker = try DiskTool.marker(for: role)
-            try ConversionPlanner.swapCommands(role, in: disks, marker: marker, now: Date()).forEach { print("running: \($0)") }
+            try ConversionPlanner.swapCommands(role, in: disks, marker: marker, now: Date()).forEach { print("planned: \($0)") }
         }
         let after = try DiskTool.swap(roles, route: route)
         DiskTool.swapResult(roles, in: after).forEach { print("swapped: \($0)") }
@@ -58,7 +58,7 @@ extension DiskUtilityCLI {
 
     private static func unswap(_ roles: [VolumeRole], route: PrivilegeRoute) throws -> DiskSurvey {
         let disks = try DiskTool.survey()
-        for role in roles { try ConversionPlanner.unswapCommands(role, in: disks).forEach { print("running: \($0)") } }
+        for role in roles { try ConversionPlanner.unswapCommands(role, in: disks).forEach { print("planned: \($0)") } }
         let after = try DiskTool.unswap(roles, route: route)
         for role in roles {
             let state = after.state(for: role)
