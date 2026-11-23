@@ -10,7 +10,7 @@
 # (visor_macos_tests: plists, read on Linux as anywhere), and Uninstall…'s
 # plan (visor_uninstall_tests, from a fake filesystem and keychain), and
 # Visor.app's check of a build Shireworks hands over
-# (visor_update_install_tests, with a fake codesign and cp).
+# (visor_update_install_tests, with a fake cp, codesign and spctl).
 test_suite(
     name = "linux",
     tests = [

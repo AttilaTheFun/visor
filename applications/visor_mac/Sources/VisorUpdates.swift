@@ -12,12 +12,15 @@
 // Shireworks. The build handed over lies in the app group's container,
 // which every member of the group may write: it's installed only as a
 // real folder, copied out into Visor's own and that copy checked against
-// Visor's identifier and team (HandedOverBuild), or not at all, the app
+// Visor's identifier, Developer ID and the team the kernel holds this
+// process signed for, and by the system's own assessment (HandedOverBuild),
+// or not at all, the app
 // staying as it is and Shireworks told why. Shireworks offers nothing
 // until the app's "Update automatically" is on; a build without the app
 // group (one from the public source) does nothing at all.
 
 import Foundation
+import Security
 import UpdateKit
 import VisorUpdateInstall
 
@@ -58,6 +61,21 @@ enum VisorUpdates {
         await AppUpdates.installFailed(note)
     }
 
+    /// The team this process is signed for, from its own entitlements as
+    /// the kernel holds them (`com.apple.developer.team-identifier`, or
+    /// `com.apple.application-identifier`'s prefix), never a bundle on
+    /// disk (as Visor Disk Utility's, #510); nil when it has none (ad hoc).
+    static func runningTeam() -> String? {
+        guard let task = SecTaskCreateFromSelf(nil) else { return nil }
+        if let team = SecTaskCopyValueForEntitlement(task, "com.apple.developer.team-identifier" as CFString, nil) as? String,
+           HandedOverBuild.isTeam(team) {
+            return team
+        }
+        guard let identifier = SecTaskCopyValueForEntitlement(task, "com.apple.application-identifier" as CFString, nil) as? String,
+              let prefix = identifier.split(separator: ".").first.map(String.init), HandedOverBuild.isTeam(prefix) else { return nil }
+        return prefix
+    }
+
     /// Where a handed-over build is copied to be checked and installed:
     /// Visor's own temporary folder (on the Visor volume, emptied at each
     /// start), else this user's.
@@ -83,8 +101,7 @@ enum VisorUpdates {
         // and checked, or refused, this build staying.
         let checked = HandedOverBuild(run: HandedOverBuild.processes)
         let path: String
-        switch await checked.stage(bundle.path, in: staging.path, bundleID: Bundle.main.bundleIdentifier ?? "",
-                                   ownBundle: Bundle.main.bundlePath) {
+        switch await checked.stage(bundle.path, in: staging.path, team: runningTeam()) {
         case .ready(let staged):
             path = staged
         case .refused(let why):

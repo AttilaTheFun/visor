@@ -6,11 +6,12 @@ package(default_visibility = ["//visibility:public"])
 # A build Shireworks handed Visor.app to install (UpdateKit's offer), made
 # safe to: a real folder, not a link, copied out of the app group's
 # container (which every member of the group may write) into Visor's own,
-# and that copy checked with codesign against the requirement of Visor's
-# own identifier and team before anything installs it
+# and that copy checked with codesign against a requirement of Apple's
+# Developer ID, Visor's identifier and the team the kernel holds the
+# running app signed for, and by spctl, before anything installs it
 # (applications/visor_mac's VisorUpdates). Foundation alone, its commands
-# given (codesign, cp), so it builds and is tested on Linux with a fake
-# runner (//tests/visor_update_install_tests).
+# given (cp, codesign, spctl), so it builds and is tested on Linux with a
+# fake runner (//tests/visor_update_install_tests).
 swift_library(
     name = "visor_update_install",
     copts = STRICT_SWIFT,

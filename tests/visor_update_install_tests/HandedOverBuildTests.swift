@@ -1,16 +1,20 @@
-// A build Shireworks hands over is installed only from a checked copy:
-// a real folder (a link is refused before anything runs), copied out of the
-// app group's container into Visor's own, and that copy verified against
-// the running app's identifier and team. Anything refused leaves the
-// running app as it is (VisorUpdates calls installFailed with why).
+// A build Shireworks hands over is installed only from a checked copy: a
+// real folder (a link is refused before anything runs), copied out of the
+// app group's container into Visor's own, that copy verified against a
+// requirement of Apple's Developer ID, Visor.app's identifier and the team
+// the running app is signed for, and assessed by the system (spctl).
+// Anything refused leaves the running app as it is (VisorUpdates calls
+// installFailed with why).
 
 import Foundation
 import Testing
 import VisorUpdateInstall
 
 @Suite struct HandedOverBuildTests {
-    static let bundleID = "com.LoganShire.Visor"
-    static let requirement = "anchor apple generic and identifier \"com.LoganShire.Visor\" and certificate leaf[subject.OU] = \"TEAM000001\""
+    static let team = "TEAM000001"
+    static let requirement = "anchor apple generic and identifier \"com.LoganShire.Visor\" and "
+        + "certificate 1[field.1.2.840.113635.100.6.2.6] exists and certificate leaf[field.1.2.840.113635.100.6.1.13] exists "
+        + "and certificate leaf[subject.OU] = \"TEAM000001\""
 
     /// A folder of the test's own: the group's container's stand-in, and
     /// Visor's staging folder in it.
@@ -32,9 +36,8 @@ import VisorUpdateInstall
         deinit { try? FileManager.default.removeItem(atPath: root) }
     }
 
-    func stage(_ runner: FakeRunner, _ place: Place, _ path: String? = nil) async -> HandedOverBuild.Staged {
-        await runner.build.stage(path ?? place.handedOver, in: place.staging, bundleID: Self.bundleID,
-                                 ownBundle: "/Applications/Visor.app")
+    func stage(_ runner: FakeRunner, _ place: Place, _ path: String? = nil, team: String? = Self.team) async -> HandedOverBuild.Staged {
+        await runner.build.stage(path ?? place.handedOver, in: place.staging, team: team)
     }
 
     @Test func aCheckedCopyIsReady() async throws {
@@ -47,9 +50,9 @@ import VisorUpdateInstall
         #expect(HandedOverBuild.kind(at: copy) == .folder)
         let calls = await runner.calls
         #expect(calls == [
-            [HandedOverBuild.codesign, "-d", "-r-", "/Applications/Visor.app"],
             [HandedOverBuild.copy, "-R", place.handedOver, copy],
             [HandedOverBuild.codesign, "--verify", "--strict", "--deep", "--test-requirement", "=" + Self.requirement, copy],
+            [HandedOverBuild.spctl, "--assess", "--type", "execute", copy],
         ])
     }
 
@@ -84,18 +87,16 @@ import VisorUpdateInstall
         #expect(await runner.calls.isEmpty)
     }
 
-    @Test func aRunningAppWithNoTeamChecksNothing() async throws {
+    @Test(arguments: [nil, "", "team000001", "TEAM00001", "TEAM0000011", "TEAM\"0001"])
+    func aRunningAppWithNoTeamChecksNothing(team: String?) async throws {
         let place = try Place()
         try place.handOverFolder()
         let runner = FakeRunner()
-        // An ad hoc build's requirement: its code hash alone.
-        await runner.set(ownRequirement: "designated => cdhash H\"0123456789abcdef0123456789abcdef01234567\"")
-        guard case .refused(let why) = await stage(runner, place) else {
+        guard case .refused = await stage(runner, place, team: team) else {
             Issue.record("a build was taken with no team to check it against")
             return
         }
-        #expect(why.contains("names no team"))
-        #expect(await runner.calls.count == 1)
+        #expect(await runner.calls.isEmpty)
     }
 
     @Test func aCopyThatFailsIsRefused() async throws {
@@ -108,7 +109,7 @@ import VisorUpdateInstall
             return
         }
         #expect(why.contains("Permission denied"))
-        #expect(await runner.calls.count == 2)
+        #expect(await runner.calls.count == 1)
     }
 
     @Test func aCopyThatFailsItsCheckIsRefusedAndRemoved() async throws {
@@ -122,6 +123,21 @@ import VisorUpdateInstall
         }
         #expect(why.contains("failed its signature check"))
         #expect(why.contains("failed to satisfy"))
+        #expect(!why.contains(Self.team))
+        #expect(HandedOverBuild.kind(at: place.staging + "/Visor.app") == .missing)
+        #expect(await runner.calls.count == 2)
+    }
+
+    @Test func aCopyTheSystemWontRunIsRefusedAndRemoved() async throws {
+        let place = try Place()
+        try place.handOverFolder()
+        let runner = FakeRunner()
+        await runner.set(assessOutcome: .init(status: 3, output: "rejected\nsource=Unnotarized Developer ID"))
+        guard case .refused(let why) = await stage(runner, place) else {
+            Issue.record("a build spctl rejects was taken")
+            return
+        }
+        #expect(why.contains("spctl") && why.contains("Unnotarized"))
         #expect(HandedOverBuild.kind(at: place.staging + "/Visor.app") == .missing)
     }
 
@@ -140,37 +156,27 @@ import VisorUpdateInstall
         try place.handOverFolder()
         let runner = FakeRunner()
         #expect(await stage(runner, place, place.handedOver + "/") == .ready(place.staging + "/Visor.app"))
-        #expect(await runner.calls[1] == [HandedOverBuild.copy, "-R", place.handedOver, place.staging + "/Visor.app"])
+        #expect(await runner.calls[0] == [HandedOverBuild.copy, "-R", place.handedOver, place.staging + "/Visor.app"])
     }
 
-    @Test(arguments: [
-        ("designated => anchor apple generic and certificate leaf[subject.OU] = TEAM000001)", "TEAM000001"),
-        ("designated => anchor apple generic and certificate leaf[subject.OU] = \"TEAM000001\"", "TEAM000001"),
-        ("certificate leaf[subject.OU]=TEAM000001", "TEAM000001"),
-    ])
-    func theTeamIsReadFromTheRequirement(text: String, team: String) {
-        #expect(HandedOverBuild.team(inRequirement: text) == team)
+    @Test func theRequirementNamesDeveloperIDIdentifierAndTeam() {
+        #expect(HandedOverBuild.requirement(team: Self.team) == Self.requirement)
     }
 
-    @Test(arguments: ["designated => cdhash H\"0123\"", "designated => identifier \"x\"", "leaf[subject.OU] = \"\""])
-    func noTeamIsNone(text: String) {
-        #expect(HandedOverBuild.team(inRequirement: text) == nil)
-    }
-
-    @Test func theRequirementNamesIdentifierAndTeam() {
-        #expect(HandedOverBuild.requirement(bundleID: Self.bundleID, team: "TEAM000001") == Self.requirement)
-    }
-
-    @Test func aBundleIDThatIsntOneChecksNothing() async throws {
-        let place = try Place()
-        try place.handOverFolder()
-        let runner = FakeRunner()
-        let staged = await runner.build.stage(place.handedOver, in: place.staging, bundleID: "com.x\" or true",
-                                              ownBundle: "/Applications/Visor.app")
-        guard case .refused = staged else {
-            Issue.record("a bundle id with a quote went into the requirement")
+    /// Every requirement made carries both Developer ID markers, Apple's
+    /// anchor and Visor's identifier, and is joined by `and` alone; one
+    /// for a team that isn't one is never made.
+    @Test(arguments: ["TEAM000001", "ABCDE12345", "0123456789", "team000001", "", "TEAM00001", "TEAM\" or 1", "TEAM0000011"])
+    func noRequirementWithoutItsMarkers(team: String) {
+        guard let requirement = HandedOverBuild.requirement(team: team) else {
+            #expect(!HandedOverBuild.isTeam(team))
             return
         }
-        #expect(await runner.calls.isEmpty)
+        #expect(HandedOverBuild.isTeam(team))
+        #expect(requirement.hasPrefix("anchor apple generic and identifier \"com.LoganShire.Visor\" and "))
+        #expect(requirement.contains("certificate 1[field.1.2.840.113635.100.6.2.6] exists"))
+        #expect(requirement.contains("certificate leaf[field.1.2.840.113635.100.6.1.13] exists"))
+        #expect(requirement.hasSuffix("certificate leaf[subject.OU] = \"\(team)\""))
+        #expect(!requirement.contains(" or ") && !requirement.contains("!"))
     }
 }

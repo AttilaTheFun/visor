@@ -1,6 +1,6 @@
 """The client id of the sign-in Logan's apps share (ShakeKit's
 `GitHubSharedClientID`), from the builder's environment, never the
-repository: it is public, and the OAuth App's client id is not.
+repository, which is public: the OAuth App's client id is kept private.
 
 `@visor_shared_sign_in//:values.bzl` defines CLIENT_ID: the shared OAuth
 App's client id, from VISOR_GITHUB_SHARED_CLIENT_ID, or "" for none.
