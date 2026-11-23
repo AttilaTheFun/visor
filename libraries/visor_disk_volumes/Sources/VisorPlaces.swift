@@ -27,9 +27,10 @@ public struct VisorPlaces: Equatable, Sendable {
     /// The Visor family's app group: Visor.app, Visor Agent Utility and
     /// Visor Disk Utility (presence, messaging, sockets).
     public static let appGroup = "group.com.LoganShire.Visor"
-    /// The group every app of Logan's advertises its installed version in
-    /// (UpdateKit's).
-    public static let applicationsGroup = "group.com.LoganShire.Applications"
+    /// The group Visor shares with Shireworks (Logan, 23 Nov 2026: in place
+    /// of `group.com.LoganShire.Applications`): UpdateKit's installed
+    /// versions and the shared GitHub sign-in's renewal lock.
+    public static let shireworksGroup = "group.com.LoganShire.Shireworks"
 
     /// The sockets' folder's name in the group's container: one letter.
     public static let socketFolderName = "r"
