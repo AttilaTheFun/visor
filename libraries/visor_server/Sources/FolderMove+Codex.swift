@@ -30,17 +30,20 @@ extension FolderMove {
     }
 
     func applyCodex(_ plan: Plan) throws -> [String] {
-        for path in plan.codexRollouts {
-            let file = URL(fileURLWithPath: path)
-            let text = try String(contentsOf: file, encoding: .utf8)
-            guard let end = text.firstIndex(of: "\n") ?? Optional(text.endIndex),
-                  var meta = Self.object(text[..<end]), var payload = meta["payload"] as? [String: Any] else { continue }
-            payload["cwd"] = target
-            meta["payload"] = payload
-            let line = String(decoding: try JSONSerialization.data(withJSONObject: meta, options: [.sortedKeys, .withoutEscapingSlashes]), as: UTF8.self)
-            try (line + text[end...]).write(to: file, atomically: true, encoding: .utf8)
-        }
+        for path in plan.codexRollouts { try rewriteRollout(URL(fileURLWithPath: path), folder: target) }
         return plan.codexRollouts.isEmpty ? [] : ["Codex: \(plan.codexRollouts.count) rollouts given \(target)"]
+    }
+
+    /// A rollout's session meta given `folder`; the lines after it as they
+    /// were.
+    func rewriteRollout(_ file: URL, folder: String) throws {
+        let text = try String(contentsOf: file, encoding: .utf8)
+        guard let end = text.firstIndex(of: "\n") ?? Optional(text.endIndex),
+              var meta = Self.object(text[..<end]), var payload = meta["payload"] as? [String: Any] else { return }
+        payload["cwd"] = folder
+        meta["payload"] = payload
+        let line = String(decoding: try JSONSerialization.data(withJSONObject: meta, options: [.sortedKeys, .withoutEscapingSlashes]), as: UTF8.self)
+        try (line + text[end...]).write(to: file, atomically: true, encoding: .utf8)
     }
 
     static func firstLine(_ file: URL) -> Substring {

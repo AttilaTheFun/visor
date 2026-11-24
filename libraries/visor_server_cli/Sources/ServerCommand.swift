@@ -96,14 +96,17 @@ public struct ServerCommand {
                    standard input (never a terminal): github-token,
                    mcp/token, or mcp/<upstream>/<header>;
                    `agent-proxy secret-remove <name>` removes it. Linux's.
-          move-folder --to <folder> [--from <folder>]… [--home <folder>] [--data <folder>] [--dry-run]
+          move-folder --to <folder> [--from <folder>…|--session <id>] [--home <folder>] [--data <folder>] [--dry-run]
                    Gives sessions another working directory, with the server
                    stopped: each session's (or those in each --from folder),
                    and its agent's conversation with it. Claude Code's
                    projects are merged into the new folder's (their memory
                    too, a clashing file renamed), its prompt history and
-                   ~/.claude.json follow, and Codex's rollouts are given the
-                   folder. --dry-run says what it would do.
+                   ~/.claude.json follow, and Codex's rollouts and the
+                   OpenRouter CLI's sessions are given the folder. With
+                   --session, that session alone: its conversation moves,
+                   and what it shares with sessions left in its folder is
+                   copied. --dry-run says what it would do.
 
         Options for run and start:
           --port <n>   The port, for the socket and the REST side alike (7433).

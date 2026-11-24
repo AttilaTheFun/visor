@@ -6,7 +6,9 @@
 // clashing name prefixed by the folder it came from, and the indexes are
 // combined under a heading for each.
 
+import ClaudeTranscript
 import Foundation
+import VisorSystem
 
 extension FolderMove {
     var claudeProjects: URL { home.appendingPathComponent(".claude/projects", isDirectory: true) }
@@ -20,6 +22,16 @@ extension FolderMove {
             return ascii ? Character(UnicodeScalar(UInt8(unit))) : "-"
         })
     }
+
+    /// The folder as Claude Code sees it, started there: "~" expanded and
+    /// every link followed, as realpath(3) gives it.
+    public static func claudeFolder(_ folder: String) -> String {
+        ClaudeSessionFiles.realPath(normalized(HostFolders.resolve(folder)))
+    }
+
+    /// The key of the project Claude Code keeps a session started in
+    /// `folder` under (`claudeKey` of `claudeFolder`).
+    public static func claudeProjectKey(_ folder: String) -> String { claudeKey(claudeFolder(folder)) }
 
     func planClaude(_ plan: inout Plan) {
         let manager = FileManager.default
@@ -73,10 +85,11 @@ extension FolderMove {
 
     /// For each project's memory, in order, its files whose names are taken
     /// by the target's or an earlier project's (with other contents): the
-    /// old path and the new name.
-    func memoryRenames(_ keys: [String], folders: [String]) -> [String: String] {
+    /// old path and the new name. `destination`: the memory folder they go
+    /// to, the target's project's unless said.
+    func memoryRenames(_ keys: [String], folders: [String], into destination: URL? = nil) -> [String: String] {
         let manager = FileManager.default
-        let target = claudeProjects.appendingPathComponent(Self.claudeKey(self.target), isDirectory: true).appendingPathComponent("memory")
+        let target = destination ?? claudeProjects.appendingPathComponent(Self.claudeKey(self.target), isDirectory: true).appendingPathComponent("memory")
         var taken: [String: Data] = [:]
         for name in (try? manager.contentsOfDirectory(atPath: target.path)) ?? [] where name != "MEMORY.md" {
             taken[name] = manager.contents(atPath: target.appendingPathComponent(name).path) ?? Data()
@@ -94,7 +107,10 @@ extension FolderMove {
                 let prefix = Self.origin(of: key, folders: folders)
                 var candidate = "\(prefix)-\(name)"
                 var number = 2
-                while taken[candidate] != nil {
+                // A name it was given by a move before, with the same file
+                // under it, is its own (a session's move copies memory, and
+                // the next one from that folder brings it again).
+                while let other = taken[candidate], other != contents {
                     candidate = "\(prefix)-\(number)-\(name)"
                     number += 1
                 }
@@ -108,14 +124,16 @@ extension FolderMove {
     /// The memories of `keys` in `target`: each file moved (renamed where
     /// its name is taken; dropped where the same file is there), and the
     /// indexes combined, each under the folder it came from, its links to
-    /// renamed files following them.
-    func mergeMemory(_ keys: [String], folders: [String], into target: URL) throws {
+    /// renamed files following them; an index the target has already isn't
+    /// added again. `copying`: each kept where it was too, for the sessions
+    /// still there (a session's move, FolderMove+Session).
+    func mergeMemory(_ keys: [String], folders: [String], into target: URL, copying: Bool = false) throws {
         let manager = FileManager.default
         let sources = keys.map { claudeProjects.appendingPathComponent($0, isDirectory: true).appendingPathComponent("memory") }
             .filter { manager.fileExists(atPath: $0.path) }
         guard !sources.isEmpty else { return }
         try manager.createDirectory(at: target, withIntermediateDirectories: true)
-        let renames = memoryRenames(keys, folders: folders)
+        let renames = memoryRenames(keys, folders: folders, into: target)
         let targetIndex = target.appendingPathComponent("MEMORY.md")
         let indexes = (manager.fileExists(atPath: targetIndex.path) ? 1 : 0)
             + sources.filter { manager.fileExists(atPath: $0.appendingPathComponent("MEMORY.md").path) }.count
@@ -129,7 +147,9 @@ extension FolderMove {
                 let destination = target.appendingPathComponent(newName)
                 if manager.fileExists(atPath: destination.path) {
                     // The same file already there.
-                    try manager.removeItem(at: file)
+                    if !copying { try manager.removeItem(at: file) }
+                } else if copying {
+                    try manager.copyItem(at: file, to: destination)
                 } else {
                     try manager.moveItem(at: file, to: destination)
                 }
@@ -140,21 +160,22 @@ extension FolderMove {
                 for (old, new) in renamed { text = text.replacingOccurrences(of: "(\(old))", with: "(\(new))") }
                 if indexes == 1 {
                     combined = text
-                } else {
+                } else if !combined.contains(text) {
                     let folder = Self.folder(of: key, folders: folders)
                     if !combined.isEmpty, !combined.hasSuffix("\n") { combined += "\n" }
                     combined += (combined.isEmpty ? "" : "\n") + "## From \(folder)\n\n" + text
                 }
-                try manager.removeItem(at: index)
+                if !copying { try manager.removeItem(at: index) }
             }
-            if (try? manager.contentsOfDirectory(atPath: source.path))?.isEmpty == true { try manager.removeItem(at: source) }
+            if !copying, (try? manager.contentsOfDirectory(atPath: source.path))?.isEmpty == true { try manager.removeItem(at: source) }
         }
         if !combined.isEmpty { try combined.write(to: targetIndex, atomically: true, encoding: .utf8) }
     }
 
-    /// The folder a project key was made from, among those moved.
+    /// The folder a project key was made from, among those moved: as it is
+    /// named, or as Claude Code sees it (its links followed).
     static func folder(of key: String, folders: [String]) -> String {
-        folders.first { claudeKey($0) == key } ?? key
+        folders.first { claudeKey($0) == key || claudeProjectKey($0) == key } ?? key
     }
 
     /// A short name for where a memory came from: its folder's last part,
@@ -210,6 +231,21 @@ extension FolderMove {
         }
         config["projects"] = projects
         try JSONSerialization.data(withJSONObject: config, options: [.prettyPrinted, .withoutEscapingSlashes]).write(to: claudeConfigURL, options: .atomic)
+    }
+
+    /// One folder's entry given to `destination` where it has none, and
+    /// kept where it was too when `copying` (a session's move from a folder
+    /// other sessions are still in); else taken from there. Whether there
+    /// was one.
+    func carryClaudeConfig(from folder: String, to destination: String, copying: Bool) throws -> Bool {
+        guard let data = FileManager.default.contents(atPath: claudeConfigURL.path),
+              var config = (try JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              var projects = config["projects"] as? [String: Any], let entry = projects[folder] else { return false }
+        if !copying { projects.removeValue(forKey: folder) }
+        if projects[destination] == nil { projects[destination] = entry }
+        config["projects"] = projects
+        try JSONSerialization.data(withJSONObject: config, options: [.prettyPrinted, .withoutEscapingSlashes]).write(to: claudeConfigURL, options: .atomic)
+        return true
     }
 
     static func object(_ line: Substring) -> [String: Any]? {

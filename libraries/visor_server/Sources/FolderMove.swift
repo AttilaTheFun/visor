@@ -11,6 +11,11 @@
 //   merged into the new folder's, the prompt history's projects, and
 //   ~/.claude.json's per-project entries.
 // - Codex's (FolderMove+Codex): each rollout's recorded folder.
+// - The OpenRouter CLI's (FolderMove+OpenRouter): each session file's
+//   folder.
+//
+// One session can be moved on its own too, with the server running and its
+// agent ended (FolderMove+Session): what a session's inspector changes.
 
 import Foundation
 
@@ -24,12 +29,16 @@ public struct FolderMove: Sendable {
     public var data: URL
     /// Only the sessions in these folders or under them; nil: every one.
     public var from: [String]?
+    /// The OpenRouter CLI's folder: ~/.openrouter under `home` unless said
+    /// (its $OPENROUTER_HOME).
+    public var openRouter: URL
 
-    public init(target: String, home: URL, data: URL, from: [String]? = nil) {
+    public init(target: String, home: URL, data: URL, from: [String]? = nil, openRouter: URL? = nil) {
         self.target = Self.normalized(target)
         self.home = home
         self.data = data
         self.from = from.map { $0.map(Self.normalized) }
+        self.openRouter = openRouter ?? home.appendingPathComponent(".openrouter", isDirectory: true)
     }
 
     /// A session to be moved.
@@ -56,6 +65,7 @@ public struct FolderMove: Sendable {
         public var historyLines = 0
         public var claudeConfigProjects: [String] = []
         public var codexRollouts: [String] = []
+        public var openRouterSessions: [String] = []
 
         /// The old folders, each once.
         public var folders: [String] { Array(Set(sessions.map(\.folder))).sorted() }
@@ -71,6 +81,7 @@ public struct FolderMove: Sendable {
         }
         planClaude(&plan)
         planCodex(&plan)
+        planOpenRouter(&plan, stored)
         return plan
     }
 
@@ -85,6 +96,7 @@ public struct FolderMove: Sendable {
         }
         done += try applyClaude(plan)
         done += try applyCodex(plan)
+        done += try applyOpenRouter(plan)
         return done
     }
 
@@ -98,7 +110,8 @@ public struct FolderMove: Sendable {
         lines.append("Claude projects merged into \(claudeKey(target)): " + (plan.claudeProjects.isEmpty ? "none" : plan.claudeProjects.joined(separator: ", ")))
         if !plan.claudeProjectsLeft.isEmpty { lines.append("Claude projects left (no session moved names them): " + plan.claudeProjectsLeft.joined(separator: ", ")) }
         for (old, new) in plan.memoryRenames.sorted(by: { $0.key < $1.key }) { lines.append("  memory \(old) → \(new) (its name is taken)") }
-        lines.append("Prompt history: \(plan.historyLines) lines; ~/.claude.json projects: \(plan.claudeConfigProjects.count); Codex rollouts: \(plan.codexRollouts.count)")
+        lines.append("Prompt history: \(plan.historyLines) lines; ~/.claude.json projects: \(plan.claudeConfigProjects.count); Codex rollouts: \(plan.codexRollouts.count); "
+                     + "OpenRouter sessions: \(plan.openRouterSessions.count)")
         return lines
     }
 
@@ -145,7 +158,7 @@ public struct FolderMove: Sendable {
             let project = claudeProjects.appendingPathComponent(Self.claudeKey(session.info.cwd), isDirectory: true)
             return FileManager.default.fileExists(atPath: project.appendingPathComponent(id + ".jsonl").path)
         // The OpenRouter CLI keeps its own, which no folder names.
-        case .openrouter: return nil
+        case .openrouter: return openRouterSession(for: id) != nil
         }
     }
 

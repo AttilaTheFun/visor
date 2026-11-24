@@ -2,26 +2,28 @@
 // move-folder`): Visor's records and resume commands, Claude Code's projects
 // merged with their memories (a clashing file renamed, the indexes combined
 // under the folder each came from), its prompt history and ~/.claude.json,
-// Codex's rollouts; only the folders asked for; nothing changed by a plan.
+// Codex's rollouts and the OpenRouter CLI's sessions; only the folders asked
+// for; nothing changed by a plan.
 
 import Foundation
 import VisorProtocol
 @testable import VisorServer
-import XCTest
+import Testing
 
-final class FolderMoveTests: XCTestCase {
-    private var root: URL!
+extension ServerTests {
+@Suite final class FolderMoveTests {
+    private let root: URL
     private var home: URL { root.appendingPathComponent("home", isDirectory: true) }
     private var data: URL { root.appendingPathComponent("data", isDirectory: true) }
     private var projects: URL { home.appendingPathComponent(".claude/projects", isDirectory: true) }
 
-    override func setUpWithError() throws {
+    init() throws {
         root = FileManager.default.temporaryDirectory.appendingPathComponent("folder-move-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: data, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: projects, withIntermediateDirectories: true)
     }
 
-    override func tearDownWithError() throws {
+    deinit {
         try? FileManager.default.removeItem(at: root)
     }
 
@@ -56,6 +58,7 @@ final class FolderMoveTests: XCTestCase {
             session("monitor", .claude, in: "/Users/logan/Developer/", resume: nil),
             session("codex", .codex, in: "/Users/logan/Developer/visor", resume: "cccc-3"),
             session("there", .claude, in: "/Volumes/Sessions", resume: "dddd-4"),
+            session("router", .openrouter, in: "/Users/logan/Developer/visor", resume: "ffff-6"),
         ]
         try JSONEncoder().encode(sessions).write(to: data.appendingPathComponent("sessions.json"))
         try JSONEncoder().encode(Array(sessions.prefix(2))).write(to: data.appendingPathComponent("sessions.previous.json"))
@@ -76,89 +79,96 @@ final class FolderMoveTests: XCTestCase {
         try write("{\"userID\":\"u\",\"projects\":{\"/Users/logan/Developer\":{\"allowedTools\":[]},\"/elsewhere\":{}}}", ".claude.json")
         try write("{\"type\":\"session_meta\",\"payload\":{\"id\":\"cccc-3\",\"cwd\":\"/Users/logan/Developer/visor\"}}\n{\"type\":\"turn\"}\n",
                   ".codex/sessions/2026/11/11/rollout-2026-11-11T10-00-00-cccc-3.jsonl")
+        try write("{\"created\":1,\"cwd\":\"/Users/logan/Developer/visor\",\"id\":\"ffff-6\",\"messages\":[],\"model\":\"m\",\"updated\":2}",
+                  ".openrouter/sessions/ffff-6.json")
     }
 
     // MARK: Tests
 
-    func testClaudesKeyIsTheFolderWithEveryOtherCharacterADash() {
-        XCTAssertEqual(FolderMove.claudeKey("/Users/logan/Developer/visor"), "-Users-logan-Developer-visor")
-        XCTAssertEqual(FolderMove.claudeKey("/Volumes/Sessions"), "-Volumes-Sessions")
-        XCTAssertEqual(FolderMove.claudeKey("/tmp/a_b.c"), "-tmp-a-b-c")
-        XCTAssertEqual(FolderMove.claudeKey("/é"), "--", "a non-ASCII character a dash per UTF-16 unit")
+    @Test func testClaudesKeyIsTheFolderWithEveryOtherCharacterADash() {
+        #expect(FolderMove.claudeKey("/Users/logan/Developer/visor") == "-Users-logan-Developer-visor")
+        #expect(FolderMove.claudeKey("/Volumes/Sessions") == "-Volumes-Sessions")
+        #expect(FolderMove.claudeKey("/tmp/a_b.c") == "-tmp-a-b-c")
+        #expect(FolderMove.claudeKey("/é") == "--", "a non-ASCII character a dash per UTF-16 unit")
     }
 
-    func testAPlanChangesNothingAndSaysWhatAMoveWould() throws {
+    @Test func testAPlanChangesNothingAndSaysWhatAMoveWould() throws {
         try fixture()
         let before = try Data(contentsOf: data.appendingPathComponent("sessions.json"))
         let plan = try FolderMove(target: "/Volumes/Sessions/", home: home, data: data).plan()
-        XCTAssertEqual(plan.sessions.map(\.id), ["visor", "manager", "monitor", "codex"], "not the one already there")
-        XCTAssertEqual(plan.sessions.map(\.conversationFound), [true, true, nil, true])
-        XCTAssertEqual(plan.claudeProjects, ["-Users-logan-Developer", "-Users-logan-Developer-visor"])
-        XCTAssertEqual(plan.claudeProjectsLeft, ["-Users-logan-Developer-rea"])
-        XCTAssertEqual(plan.memoryRenames, ["-Users-logan-Developer-visor/memory/merge-queue.md": "visor-merge-queue.md"])
-        XCTAssertEqual(plan.historyLines, 1)
-        XCTAssertEqual(plan.claudeConfigProjects, ["/Users/logan/Developer"])
-        XCTAssertEqual(plan.codexRollouts.count, 1)
-        XCTAssertEqual(try Data(contentsOf: data.appendingPathComponent("sessions.json")), before)
-        XCTAssertNotNil(read(".claude/projects/-Users-logan-Developer-visor/aaaa-1.jsonl"))
+        #expect(plan.sessions.map(\.id) == ["visor", "manager", "monitor", "codex", "router"], "not the one already there")
+        #expect(plan.sessions.map(\.conversationFound) == [true, true, nil, true, true])
+        #expect(plan.claudeProjects == ["-Users-logan-Developer", "-Users-logan-Developer-visor"])
+        #expect(plan.claudeProjectsLeft == ["-Users-logan-Developer-rea"])
+        #expect(plan.memoryRenames == ["-Users-logan-Developer-visor/memory/merge-queue.md": "visor-merge-queue.md"])
+        #expect(plan.historyLines == 1)
+        #expect(plan.claudeConfigProjects == ["/Users/logan/Developer"])
+        #expect(plan.codexRollouts.count == 1)
+        #expect(plan.openRouterSessions.count == 1)
+        #expect(try Data(contentsOf: data.appendingPathComponent("sessions.json")) == before)
+        #expect(read(".claude/projects/-Users-logan-Developer-visor/aaaa-1.jsonl") != nil)
     }
 
-    func testAMoveRewritesTheRecordsAndMergesClaudesProjectsKeepingEveryMemory() throws {
+    @Test func testAMoveRewritesTheRecordsAndMergesClaudesProjectsKeepingEveryMemory() throws {
         try fixture()
         let move = FolderMove(target: "/Volumes/Sessions", home: home, data: data)
         try move.apply(try move.plan())
 
         let sessions = try stored()
-        XCTAssertEqual(Set(sessions.map(\.info.cwd)), ["/Volumes/Sessions"])
-        XCTAssertEqual(sessions.first { $0.info.id == "visor" }?.info.resumeCommand, "cd /Volumes/Sessions && claude --resume aaaa-1")
+        #expect(Set(sessions.map(\.info.cwd)) == ["/Volumes/Sessions"])
+        #expect(sessions.first { $0.info.id == "visor" }?.info.resumeCommand == "cd /Volumes/Sessions && claude --resume aaaa-1")
         let previous = try JSONDecoder().decode([StoredSession].self, from: Data(contentsOf: data.appendingPathComponent("sessions.previous.json")))
-        XCTAssertEqual(Set(previous.map(\.info.cwd)), ["/Volumes/Sessions"])
+        #expect(Set(previous.map(\.info.cwd)) == ["/Volumes/Sessions"])
 
         let target = ".claude/projects/-Volumes-Sessions/"
-        XCTAssertNotNil(read(target + "aaaa-1.jsonl"))
-        XCTAssertNotNil(read(target + "aaaa-1/subagents/agent-1.jsonl"))
-        XCTAssertNotNil(read(target + "bbbb-2.jsonl"))
-        XCTAssertFalse(FileManager.default.fileExists(atPath: projects.appendingPathComponent("-Users-logan-Developer-visor").path))
-        XCTAssertNotNil(read(".claude/projects/-Users-logan-Developer-rea/eeee-5.jsonl"), "a project no session names stays")
+        #expect(read(target + "aaaa-1.jsonl") != nil)
+        #expect(read(target + "aaaa-1/subagents/agent-1.jsonl") != nil)
+        #expect(read(target + "bbbb-2.jsonl") != nil)
+        #expect(!FileManager.default.fileExists(atPath: projects.appendingPathComponent("-Users-logan-Developer-visor").path))
+        #expect(read(".claude/projects/-Users-logan-Developer-rea/eeee-5.jsonl") != nil, "a project no session names stays")
 
-        XCTAssertEqual(read(target + "memory/merge-queue.md"), "the manager's merge queue")
-        XCTAssertEqual(read(target + "memory/visor-merge-queue.md"), "visor's merge queue")
-        XCTAssertEqual(read(target + "memory/ports.md"), "same everywhere")
-        let index = try XCTUnwrap(read(target + "memory/MEMORY.md"))
-        XCTAssertTrue(index.contains("## From /Users/logan/Developer\n\n- [Merge queue](merge-queue.md) — the manager's"), index)
-        XCTAssertTrue(index.contains("## From /Users/logan/Developer/visor\n\n- [Merge queue](visor-merge-queue.md) — strict"), index)
+        #expect(read(target + "memory/merge-queue.md") == "the manager's merge queue")
+        #expect(read(target + "memory/visor-merge-queue.md") == "visor's merge queue")
+        #expect(read(target + "memory/ports.md") == "same everywhere")
+        let index = try #require(read(target + "memory/MEMORY.md"))
+        #expect(index.contains("## From /Users/logan/Developer\n\n- [Merge queue](merge-queue.md) — the manager's"), "\(index)")
+        #expect(index.contains("## From /Users/logan/Developer/visor\n\n- [Merge queue](visor-merge-queue.md) — strict"), "\(index)")
 
-        let history = try XCTUnwrap(read(".claude/history.jsonl"))
-        XCTAssertTrue(history.contains("\"project\":\"/Volumes/Sessions\""), history)
-        XCTAssertTrue(history.contains("/elsewhere"))
-        let config = try XCTUnwrap(read(".claude.json"))
-        XCTAssertTrue(config.contains("\"/Volumes/Sessions\""), config)
-        XCTAssertFalse(config.contains("\"/Users/logan/Developer\""), config)
-        XCTAssertTrue(config.contains("userID"), "the rest kept")
-        let rollout = try XCTUnwrap(read(".codex/sessions/2026/11/11/rollout-2026-11-11T10-00-00-cccc-3.jsonl"))
-        XCTAssertTrue(rollout.hasPrefix("{\"payload\":{\"cwd\":\"/Volumes/Sessions\",\"id\":\"cccc-3\"},\"type\":\"session_meta\"}\n{\"type\":\"turn\"}"), rollout)
+        let history = try #require(read(".claude/history.jsonl"))
+        #expect(history.contains("\"project\":\"/Volumes/Sessions\""), "\(history)")
+        #expect(history.contains("/elsewhere"))
+        let config = try #require(read(".claude.json"))
+        #expect(config.contains("\"/Volumes/Sessions\""), "\(config)")
+        #expect(!config.contains("\"/Users/logan/Developer\""), "\(config)")
+        #expect(config.contains("userID"), "the rest kept")
+        let rollout = try #require(read(".codex/sessions/2026/11/11/rollout-2026-11-11T10-00-00-cccc-3.jsonl"))
+        #expect(rollout.hasPrefix("{\"payload\":{\"cwd\":\"/Volumes/Sessions\",\"id\":\"cccc-3\"},\"type\":\"session_meta\"}\n{\"type\":\"turn\"}"), "\(rollout)")
+        let router = try #require(read(".openrouter/sessions/ffff-6.json"))
+        #expect(router.contains("\"cwd\":\"/Volumes/Sessions\""), "\(router)")
+        #expect(router.contains("\"model\":\"m\""), "the rest kept")
     }
 
-    func testOnlyTheFoldersAskedForMove() throws {
+    @Test func testOnlyTheFoldersAskedForMove() throws {
         try fixture()
         let move = FolderMove(target: "/Volumes/Sessions", home: home, data: data, from: ["/Users/logan/Developer/visor"])
         let plan = try move.plan()
-        XCTAssertEqual(plan.sessions.map(\.id), ["visor", "codex"])
-        XCTAssertEqual(plan.claudeProjects, ["-Users-logan-Developer-visor"])
+        #expect(plan.sessions.map(\.id) == ["visor", "codex", "router"])
+        #expect(plan.claudeProjects == ["-Users-logan-Developer-visor"])
         try move.apply(plan)
-        XCTAssertEqual(try stored().first { $0.info.id == "manager" }?.info.cwd, "/Users/logan/Developer")
-        XCTAssertNotNil(read(".claude/projects/-Users-logan-Developer/bbbb-2.jsonl"))
-        let index = try XCTUnwrap(read(".claude/projects/-Volumes-Sessions/memory/MEMORY.md"))
-        XCTAssertFalse(index.contains("## From"), "one index moves as it is")
+        #expect(try stored().first { $0.info.id == "manager" }?.info.cwd == "/Users/logan/Developer")
+        #expect(read(".claude/projects/-Users-logan-Developer/bbbb-2.jsonl") != nil)
+        let index = try #require(read(".claude/projects/-Volumes-Sessions/memory/MEMORY.md"))
+        #expect(!index.contains("## From"), "one index moves as it is")
     }
 
-    func testAFileAlreadyInTheTargetIsLeftWhereItWas() throws {
+    @Test func testAFileAlreadyInTheTargetIsLeftWhereItWas() throws {
         try fixture()
         try write("already", ".claude/projects/-Volumes-Sessions/bbbb-2.jsonl")
         let move = FolderMove(target: "/Volumes/Sessions", home: home, data: data)
         let done = try move.apply(try move.plan())
-        XCTAssertEqual(read(".claude/projects/-Volumes-Sessions/bbbb-2.jsonl"), "already")
-        XCTAssertNotNil(read(".claude/projects/-Users-logan-Developer/bbbb-2.jsonl"), "kept, and said")
-        XCTAssertTrue(done.contains { $0.contains("left (already there): bbbb-2.jsonl") }, "\(done)")
+        #expect(read(".claude/projects/-Volumes-Sessions/bbbb-2.jsonl") == "already")
+        #expect(read(".claude/projects/-Users-logan-Developer/bbbb-2.jsonl") != nil, "kept, and said")
+        #expect(done.contains { $0.contains("left (already there): bbbb-2.jsonl") }, "\(done)")
     }
+}
 }
