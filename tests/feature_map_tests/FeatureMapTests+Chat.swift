@@ -46,6 +46,52 @@ extension FeatureMapTests {
             #expect(on.element("details-notifications")?.value == "1", "on again: \(on.summary)")
         }
 
+        /// Session details' Working Directory…, opened on the session's
+        /// folder: a folder typed and moved to is the one the details show
+        /// once the sheet has gone (the fixture's computer takes it as a
+        /// server does).
+        @Test("Session details → Working Directory: tap details-folder; type folder-edit-path, tap folder-edit-move")
+        func workingDirectory() throws {
+            let app = try VisorLaunch.fixture("inspector")
+            defer { app.quit() }
+            try app.screen { FeatureMapNode.details.isShown(on: $0) }
+            try app.tap("details-folder")
+            let start = "/Users/visor/Developer/weather"
+            let editing = try app.screen { FeatureMapNode.workingDirectory.isShown(on: $0) && $0.element("folder-edit-path")?.value == start }
+            FeatureMapNode.workingDirectory.expectShown(on: editing)
+            #expect(editing.element("folder-edit-path")?.value == start, "opened on the folder it's in: \(editing.summary)")
+            let folder = "/Users/visor/Developer/weather-app"
+            try app.type("folder-edit-path", folder)
+            try app.tap("folder-edit-move")
+            let moved = try app.screen {
+                !FeatureMapNode.workingDirectory.isShown(on: $0) && FeatureMapNode.details.isShown(on: $0) && Archives.mentions($0, folder)
+            }
+            FeatureMapNode.details.expectShown(on: moved)
+            #expect(!FeatureMapNode.workingDirectory.isShown(on: moved), "the sheet gone: \(moved.summary)")
+            #expect(Archives.mentions(moved, folder), "the new folder shown: \(moved.summary)")
+        }
+
+        /// A folder the computer refuses (not a full path) is refused in its
+        /// words, and the sheet stays; Cancel then leaves the session's
+        /// folder as it was.
+        @Test("Working Directory: a refusal is shown in folder-edit-error; tap folder-edit-cancel")
+        func workingDirectoryRefused() throws {
+            let app = try VisorLaunch.fixture("inspector")
+            defer { app.quit() }
+            try app.screen { FeatureMapNode.details.isShown(on: $0) }
+            try app.tap("details-folder")
+            try app.screen { FeatureMapNode.workingDirectory.isShown(on: $0) }
+            try app.type("folder-edit-path", "weather-app")
+            try app.tap("folder-edit-move")
+            let refused = try app.screen { $0.has(id: "folder-edit-error") }
+            FeatureMapNode.workingDirectory.expectShown(on: refused)
+            #expect(Archives.mentions(refused, "weather-app is not a full path (one from /)."), "\(refused.summary)")
+            try app.tap("folder-edit-cancel")
+            let details = try app.screen { !FeatureMapNode.workingDirectory.isShown(on: $0) && FeatureMapNode.details.isShown(on: $0) }
+            FeatureMapNode.details.expectShown(on: details)
+            #expect(Archives.mentions(details, "/Users/visor/Developer/weather"), "its folder as it was: \(details.summary)")
+        }
+
         @Test("Session chat → Model sheet: tap model")
         func model() throws {
             // The goal's session: nothing waits for approval, so the

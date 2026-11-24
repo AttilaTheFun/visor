@@ -73,6 +73,9 @@ extension VisorAgentServer {
             reply = try await call("POST", base + "/moveToRunner", e)
         case .moveToContainer: reply = try await call("POST", base + "/moveToContainer")
         case .moveBack: reply = try await call("POST", base + "/moveBack")
+        case .moveFolder(let path):
+            var e = Envelope(type: "folder"); e.session = session; e.path = path
+            reply = try await call("POST", base + "/folder", e)
         }
         return reply.sessions ?? []
     }

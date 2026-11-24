@@ -6,7 +6,7 @@ import Testing
 
 enum FeatureMapNode: String, CaseIterable, CustomTestStringConvertible {
     case onboarding, signIn, sessions, search, archived, project, migrate, addComputer
-    case newSession, restore, folder, chat, approval, question, signInCode, model, allModels, details, toolCalls
+    case newSession, restore, folder, chat, approval, question, signInCode, model, allModels, details, workingDirectory, toolCalls
     case preview, subPage, settings, computer, export
     case superCompact, superCompactRunning, superCompactReview, superCompactEdit, superCompactDone
 
@@ -50,6 +50,8 @@ enum FeatureMapNode: String, CaseIterable, CustomTestStringConvertible {
         case .model: return sheet && (screen.has(id: "all-models") || screen.has(id: "approval-Auto Approve"))
         case .allModels: return screen.has(id: "model-search")
         case .details: return screen.texts.contains("About")
+        // Session details' Working Directory…: its path field and Move.
+        case .workingDirectory: return sheet && screen.has(id: "folder-edit-path") && screen.has(id: "folder-edit-move")
         case .toolCalls: return screen.texts.contains("Tool calls")
         // Not in the map's table: a sheet, its Done and the picture.
         // (On the iPhone, Quick Look's: its close.)

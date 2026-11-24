@@ -133,7 +133,7 @@ package enum SessionCatalog {
     }
 
     /// ~/.openrouter, or OPENROUTER_HOME — the CLI's own rule.
-    static var openrouterRoot: URL {
+    package static var openrouterRoot: URL {
         if let custom = ProcessInfo.processInfo.environment["OPENROUTER_HOME"], !custom.isEmpty {
             return URL(fileURLWithPath: (custom as NSString).expandingTildeInPath, isDirectory: true)
         }

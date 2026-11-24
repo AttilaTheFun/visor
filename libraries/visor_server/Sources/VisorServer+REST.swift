@@ -50,6 +50,13 @@ extension VisorServer {
             Task { respond(await restMoveBack(call)) }
             return
         }
+        // Another working directory for a session (VisorServer+SessionFolder):
+        // answered once its agent has started there, or again where it was.
+        if request.method == "POST", parts.count == 3, parts[0] == "sessions", parts[2] == "folder", authorized(request) {
+            let call = RESTCall(request: request, parts: parts, query: Self.query(request.path), body: Envelope.decodeBody(request.body))
+            Task { respond(await restMoveFolder(call)) }
+            return
+        }
         // A session as a session archive, and one imported into the
         // backups store (VisorServer+SessionArchive).
         if request.method == "POST", parts.count == 3, parts[0] == "sessions", parts[2] == "export", authorized(request) {

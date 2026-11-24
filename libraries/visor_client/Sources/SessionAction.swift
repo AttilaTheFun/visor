@@ -58,4 +58,9 @@ public enum SessionAction: Equatable, Sendable {
     /// Back on its computer from the container (or a runner), with its
     /// conversation handed back.
     case moveBack
+    /// Another working directory, `path` on its computer (one that
+    /// exists): its agent ended, its conversation moved with it, and its
+    /// agent resumed there. Refused mid-turn, for an archived session or
+    /// one that runs elsewhere, and for a path that isn't such a folder.
+    case moveFolder(path: String)
 }
