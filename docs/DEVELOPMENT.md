@@ -728,7 +728,7 @@ removed (still only when `agentProxy` is set).
   The link stays through 0.66, whose socket file may move again, to the
   app group's container (below). **Remove in 0.67:** the links
   (VisorServer.linkLegacySockets, `legacySocketLinks`, and the legacy
-  socket in MacServerAgent.otherServerGone).
+  socket in MacServerAgent.otherServerGone). Uninstall… removes `~/.visor`.
 - **Sandboxed Visor (0.66 prep; the switch in 0.67).** docs/sandboxed.md is
   the design Logan agreed (22 Nov 2026): Visor.app sandboxed, with the
   server and container sessions in it; Visor Agent Utility, unsandboxed,
