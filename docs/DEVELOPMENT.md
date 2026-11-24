@@ -785,13 +785,17 @@ removed (still only when `agentProxy` is set).
   app group's container (below). **Remove in 0.67:** the links
   (VisorServer.linkLegacySockets, `legacySocketLinks`, and the legacy
   socket in MacServerAgent.otherServerGone). Uninstall… removes `~/.visor`.
-- **Sandboxed Visor (0.66 prep; the switch in 0.67).** docs/sandboxed.md is
-  the design Logan agreed (22 Nov 2026): Visor.app sandboxed, with the
-  server and container sessions in it; Visor Agent Utility, unsandboxed,
-  for native sessions' agent hosts; the app groups `group.com.LoganShire.Visor`
-  and `group.com.LoganShire.Shireworks` (Logan, 23 Nov 2026, in place of
-  `group.com.LoganShire.Applications`), the keychain group still
-  `<team>.com.LoganShire.Visor`. 0.66, still unsandboxed, prepares:
+- **Visor on the Mac (0.66's groundwork; the design of 24 Nov 2026).**
+  docs/sandboxed.md is Logan's model: Visor.app bundles its notarized
+  server background process (the server agent), which runs native and
+  container sessions itself, container files only on the Visor, Sessions
+  and Sources volumes. It replaced the 22 Nov design (a sandboxed
+  Visor.app with its server in-process, and Visor Agent Utility for native
+  sessions), which is dropped. What 0.66 laid down for it still holds: the
+  app groups `group.com.LoganShire.Visor` and
+  `group.com.LoganShire.Shireworks` (Logan, 23 Nov 2026, in place of
+  `group.com.LoganShire.Applications`), the keychain group
+  `<team>.com.LoganShire.Visor`, and:
   - **Sockets in the app group's container**, behind a setting until
     every profile grants the group (`defaults write com.LoganShire.Visor
     VisorGroupSockets -bool true`, or VISOR_GROUP_SOCKETS=1; MacPlaces'
@@ -829,9 +833,8 @@ removed (still only when `agentProxy` is set).
     HostedChild start a host through one, given an AgentHostSpawnRequest
     (libraries/agent_host_wire: the session, folder, harness, command,
     environment, JWT or token file, socket; JSON, documented there).
-    Today's is the server's own (ProcessAgentHostSpawner, as before);
-    Agent Utility's, over a socket in the group's container, plugs in in
-    its place.
+    The one there is is the server's own (ProcessAgentHostSpawner, as
+    before): the server runs native sessions itself.
 - **Uninstall…** (0.65; Visor Disk Utility's toolbar, or `Visor Disk
   Utility uninstall`, a dry run unless `--yes`): libraries/visor_uninstall
   plans, from what's there, everything Visor left on the Mac outside its

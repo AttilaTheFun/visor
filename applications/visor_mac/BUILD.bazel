@@ -37,7 +37,7 @@ update_infoplist(name = "update_plist")
 
 # And the Visor family's app group, `group.com.LoganShire.Visor`, beside
 # Applications' (tools/app_groups: the sockets in its container, 0.66
-# behind a setting, and the sandboxed release's, docs/sandboxed.md), and the
+# behind a setting, docs/sandboxed.md), and the
 # app's own keychain access group (`<team>.com.LoganShire.Visor`, the
 # data-protection keychain's: Sources/MacSecrets.swift), which the Developer
 # ID profile grants too (its `<team>.*`, and both groups since 22 Nov 2026).

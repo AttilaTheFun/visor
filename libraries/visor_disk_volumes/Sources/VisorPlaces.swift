@@ -1,6 +1,5 @@
-// Where the Visor family's sockets go once Visor.app is sandboxed (0.67,
-// docs/DEVELOPMENT.md, "Sandboxed Visor"): in the app group's container,
-// which Visor.app, Visor Agent Utility and Visor Disk Utility all reach
+// Where the Visor family's sockets go (docs/sandboxed.md): in the app
+// group's container, which Visor.app and Visor Disk Utility both reach
 // (`group.com.LoganShire.Visor`), under a folder with a one-letter name,
 // `r/`, so every socket's path stays under the 104 bytes a Mac allows one:
 //
@@ -24,8 +23,8 @@
 import Foundation
 
 public struct VisorPlaces: Equatable, Sendable {
-    /// The Visor family's app group: Visor.app, Visor Agent Utility and
-    /// Visor Disk Utility (presence, messaging, sockets).
+    /// The Visor family's app group: Visor.app and Visor Disk Utility
+    /// (presence, messaging, sockets).
     public static let appGroup = "group.com.LoganShire.Visor"
     /// The group Visor shares with Shireworks (Logan, 23 Nov 2026: in place
     /// of `group.com.LoganShire.Applications`): UpdateKit's installed
