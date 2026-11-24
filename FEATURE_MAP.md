@@ -9,8 +9,9 @@ that takes it. The client is one SwiftUI tree, `VisorRootView`
 iPad and Mac, Isomer's on Android and the web.
 
 Visor Disk Utility (applications/visor_disk_utility), the Mac app that
-makes the Sessions, Sources and Visor volumes, is a separate app with a window
-of its own, outside that tree: it isn't mapped here.
+creates the Sessions, Sources and Visor volumes and checks them, is a
+separate app with a window of its own, outside that tree: it isn't mapped
+here.
 
 Visor Client (applications/visor_macos, docs/visor-client.md) is the same
 tree, sandboxed: its Settings end with `settings-forget-everything`

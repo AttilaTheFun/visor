@@ -6,17 +6,14 @@ package(default_visibility = ["//visibility:public"])
 # The three APFS volumes Visor keeps what is its own on, Sessions, Sources
 # and Visor: what `diskutil` says of them (parsed from its plists), whether
 # Visor Disk Utility (applications/visor_disk_utility) adopts one or creates
-# it, the commands it runs, the guard that never lets one be deleted unless
-# asked for (Sessions never erased), and the status file it leaves for
-# Visor (volumes.json). DiskVolumes, the read-only side, is what Visor's
-# server finds them with; VisorFolders is where Visor keeps its things, on
-# the Visor volume once it's there, and VisorFolderMove what moves them
-# there once. The conversion of a case-insensitive Sessions or Sources
-# (ConversionPlanner: Stage, copy-staged's copy and check with its marker,
-# Swap In, unswap; docs/volume-conversion.md) is planned and checked here
-# too, its copy run only through a caller's function. Foundation and
-# swift-crypto's SHA-256 (the copy's manifest), with nothing run here: the
-# same on Linux, where its tests run.
+# it, and whether one it adopts is as it should be (mounted where Visor
+# looks, case-sensitive, the person's), the commands it runs, the guard that
+# lets nothing but those run (Sessions never erased, no volume ever
+# deleted), and the status file it leaves for Visor (volumes.json).
+# DiskVolumes, the read-only side, is what Visor's server finds them with;
+# VisorFolders is where Visor keeps its things, on the Visor volume once
+# it's there, and VisorFolderMove what moves them there once. Foundation
+# alone, with nothing run here: the same on Linux, where its tests run.
 swift_library(
     name = "visor_disk_volumes",
     copts = STRICT_SWIFT,
@@ -24,6 +21,5 @@ swift_library(
     module_name = "DiskVolumes",
     deps = [
         "//:foundation",
-        "@swiftpkg_swift_crypto//:Crypto",
     ],
 )

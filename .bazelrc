@@ -138,12 +138,6 @@ build:buildbuddy --bes_backend=grpcs://remote.buildbuddy.io
 build:buildbuddy --remote_cache=grpcs://remote.buildbuddy.io
 build:buildbuddy --remote_timeout=10m
 
-# A test build of Visor Disk Utility (a leased macOS VM): its root's check
-# may be verified by its ad hoc signature (pinned to its cdhash), and its
-# test hooks (VISOR_CONVERSION_TEST_PAUSE, VISOR_CONVERSION_TEST_TAMPER)
-# are compiled in. Never for a build that's shipped (ConversionChecker).
-build:visor_test_signing --@rules_swift//swift:copt=-DVISOR_TEST_SIGNING
-
 # Your own settings, such as the signing team (tools/signing).
 try-import %workspace%/.bazelrc.user
 

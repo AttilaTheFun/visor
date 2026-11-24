@@ -28,10 +28,6 @@ enum DiskTool {
                 inTheWay.insert(role.mountPoint)
             }
         }
-        // A staged copy's mount point taken by something else stops Stage.
-        for role in VolumeRole.convertible where !infos.contains(where: { $0.mountPoint == role.stagedMountPoint }) {
-            if FileManager.default.fileExists(atPath: role.stagedMountPoint) { inTheWay.insert(role.stagedMountPoint) }
-        }
         var freeSpace: [String: Int64] = [:]
         for mountPoint in infos.compactMap(\.mountPoint) {
             let free = (try? FileManager.default.attributesOfFileSystem(forPath: mountPoint))?[.systemFreeSize] as? NSNumber
@@ -41,14 +37,9 @@ enum DiskTool {
     }
 
     /// Runs the commands as an administrator once VolumeGuard has passed
-    /// them against a fresh survey and volumes.json's record of Visor's own
-    /// volumes; then the disks as they are after.
-    static func change(_ commands: [DiskCommand], route: PrivilegeRoute, deleting: Set<VolumeRole> = [],
-                       fixing: Set<VolumeRole> = [], converting: [VolumeRole: ConversionStep] = [:],
-                       deletingKept: Set<String> = [], checker: ConversionChecker? = nil) throws -> DiskSurvey {
-        try VolumeGuard.check(commands, against: survey(), recorded: DiskVolumes.readStatus(at: statusURL), deleting: deleting,
-                              user: user, fixing: fixing, converting: converting, deletingKept: deletingKept, checker: checker)
-        if checker != nil { testTamper() }
+    /// them against a fresh survey; then the disks as they are after.
+    static func change(_ commands: [DiskCommand], route: PrivilegeRoute, fixing: Set<VolumeRole> = []) throws -> DiskSurvey {
+        try VolumeGuard.check(commands, against: survey(), user: user, fixing: fixing)
         for invocation in route.invocations(of: commands.map(\.argv)) {
             do {
                 _ = try run(invocation)
@@ -130,8 +121,8 @@ enum DiskTool {
         process.executableURL = URL(fileURLWithPath: argv[0])
         process.arguments = Array(argv.dropFirst())
         let output = Pipe()
-        // The error output to a file of its own, so a long one (ditto's,
-        // lsof's) never fills a pipe no one reads while the output is read.
+        // The error output to a file of its own, so a long one never fills
+        // a pipe no one reads while the output is read.
         let errorsURL = FileManager.default.temporaryDirectory.appendingPathComponent("visor-disk-utility-\(UUID().uuidString).err")
         guard FileManager.default.createFile(atPath: errorsURL.path, contents: nil),
               let errors = try? FileHandle(forWritingTo: errorsURL) else {

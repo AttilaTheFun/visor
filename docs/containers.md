@@ -77,18 +77,11 @@ the person's, in Time Machine's settings (Options… › + › Visor), which the
 button opens.
 
 A Sessions or Sources made by hand before Visor Disk Utility, as plain
-case-insensitive APFS, is adopted as it is and never reformatted: its card
-says so, and Visor Disk Utility converts it by a copy
-(docs/volume-conversion.md). **Stage** makes `<Name>-new`, case-sensitive,
-beside it, with its quota and reserve (one administrator prompt);
-**copy-staged**, run as the person over SSH with Visor stopped, copies
-everything onto it, checks every file's sha256 and every link's target on
-both sides, and leaves a marker (`.visor-conversion-verified`) naming both
-volumes' UUIDs; **Swap In** (one prompt), with that marker at most two
-hours old, renames the old volume `<Name>-old-ci` and unmounts it, and
-mounts the copy as `<Name>` at the same path, each by its disk. The old
-volume is kept for a rollback (`unswap`) until its Delete…, and Uninstall…
-lists it.
+case-insensitive APFS, is adopted as it is and never reformatted: Visor
+Disk Utility only creates the volumes and checks them (Logan, 24 Nov
+2026). Its card says it should be case-sensitive and how to remake it:
+move what's on it elsewhere, delete it in Apple's Disk Utility, Create it
+again, and move the contents back.
 
 The engine and the container runner take Sessions' and Sources' paths from
 `volumes.json` (DiskVolumes), never a path assumed. Once the Visor volume is
@@ -114,10 +107,11 @@ was. So, beside the volumes: the server agent's plist is the app bundle's
 Device, in a computer's settings over SSH, takes its own out), and, with the
 container on, the server's own `claude -p` runs in it (Containers only,
 below). `~/.visor/server.sock` is a link to the volume's socket file for
-0.65 alone, for SSH clients of 0.64, then goes. Visor Disk Utility's
-Uninstall… removes the rest, a dry run first, and deletes the three
-volumes only when asked, their names typed (docs/DEVELOPMENT.md,
-Uninstall…).
+0.65 alone, for SSH clients of 0.64, then goes. There's no Uninstall…
+(Logan, 24 Nov 2026: "as long as everything is self contained they can
+just delete the volumes in Disk Utility"): the apps go to the Trash, and
+the three volumes are deleted in Apple's Disk Utility (docs/DEVELOPMENT.md,
+No Uninstall…).
 
 ### Containers only
 
@@ -480,9 +474,8 @@ as a defence beside it. Visor adopts it once #17 lands in a release.
 - **Case sensitivity of the Mini's volumes today.** Its Sessions and
   Sources are case-insensitive, and virtiofs passes that to Linux, where
   `Foo.h` and `foo.h` are two files. Visor Disk Utility makes new ones
-  case-sensitive and adopts an existing one as it is, with a note; it
-  converts the Mini's in a window of their own (Stage, copy-staged, Swap
-  In: docs/volume-conversion.md).
+  case-sensitive and adopts an existing one as it is, with a note saying
+  how to remake it; the Mini's are remade by hand.
 
 ## What's next
 

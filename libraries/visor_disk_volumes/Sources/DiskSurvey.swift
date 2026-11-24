@@ -27,11 +27,9 @@ public struct DiskSurvey: Equatable, Sendable {
     }
 
     /// The volumes to ask `diskutil info -plist` about: those named for a
-    /// role, and a conversion's (`<Name>-new`, `<Name>-old-ci`,
-    /// `<Name>-cs-failed`), by disk.
+    /// role, by disk.
     public static func devicesToDescribe(in containers: [APFSContainer]) -> [String] {
         let names = Set(VolumeRole.allCases.map(\.volumeName))
-            .union(VolumeRole.convertible.flatMap { [$0.stagedName, $0.keptName, $0.failedName] })
         return containers.flatMap(\.volumes).filter { names.contains($0.name) }.map(\.device)
     }
 
