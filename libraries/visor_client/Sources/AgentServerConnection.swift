@@ -1504,6 +1504,15 @@ public final class AgentServerConnection: Identifiable {
         }
     }
 
+    /// The session given another working directory on its computer, `path`
+    /// (one that exists there): answered once its agent has started there.
+    /// What the server refused it for (mid-turn, archived, running
+    /// elsewhere, not such a folder) is thrown, for the sheet that asked.
+    public func moveFolder(_ sessionID: String, to path: String) async throws {
+        let list = try await server.act(.moveFolder(path: path), on: sessionID)
+        take(list, replacing: false)
+    }
+
     /// Whether Migrate… offers the computer's Sessions container: it has
     /// one, on, that takes sessions now.
     public var takesContainerSessions: Bool { container?.takesSessions == true }

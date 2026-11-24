@@ -137,6 +137,9 @@ final class FixtureAgentServer: AgentServer {
     /// Where the sessions moved here are placed (Migrate…'s container and
     /// back).
     private var placed: [String: SessionPlacement] = [:]
+    /// The working directories sessions were given here (the inspector's
+    /// Working Directory…).
+    private var folders: [String: String] = [:]
 
     /// The fixture's sessions, with what was switched and moved here.
     private func kept(_ sessions: [SessionInfo]) -> [SessionInfo] {
@@ -144,6 +147,7 @@ final class FixtureAgentServer: AgentServer {
             var info = info
             info.notifications = !muted.contains(info.id)
             if let place = placed[info.id] { info.placement = place }
+            if let folder = folders[info.id] { info.cwd = folder }
             return info
         }
     }
@@ -179,6 +183,18 @@ final class FixtureAgentServer: AgentServer {
         // session, placed there (kept, as the screens move on).
         if action == .moveToContainer || action == .moveBack {
             placed[session] = action == .moveToContainer ? .container : .host
+            return kept(listed).filter { $0.id == session }.map { Self.wire(.sessions([$0])).sessions?.first ?? $0 }
+        }
+        // Given another folder, as a server answers: refused mid-turn and
+        // for a path not from the root, in the server's words; else the
+        // session, there.
+        if case .moveFolder(let path) = action {
+            let folder = path.trimmingCharacters(in: .whitespaces)
+            guard let info = kept(listed).first(where: { $0.id == session }) else { throw AgentServerError.message("No such session.") }
+            if info.busy { throw AgentServerError.message("“\(info.title)” is working: wait for it to finish, then change its folder.") }
+            guard folder.hasPrefix("/") else { throw AgentServerError.message("\(folder) is not a full path (one from /).") }
+            guard folder != info.cwd else { throw AgentServerError.message("The session is in \(folder) already.") }
+            folders[session] = folder
             return kept(listed).filter { $0.id == session }.map { Self.wire(.sessions([$0])).sessions?.first ?? $0 }
         }
         guard case .notifications(let on) = action else { return [] }

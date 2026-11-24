@@ -1,6 +1,7 @@
-// The session's inspector, from the title: what it is, where, whether it
-// notifies, and the ways out: its agent and model, and what it has used of
-// its context and its account's limits.
+// The session's inspector, from the title: what it is, where (and another
+// folder for it: Working Directory…), whether it notifies, and the ways
+// out: its agent and model, and what it has used of its context and its
+// account's limits.
 
 import SwiftUI
 import VisorClient
@@ -30,6 +31,8 @@ struct SessionInspector: View {
     @State private var shown = ""
     /// The pause after typing before the title is saved.
     @State private var titleSave: Task<Void, Never>?
+    /// Working Directory… is open.
+    @State private var editingFolder = false
 
     var body: some View {
         NavigationStack {
@@ -54,6 +57,13 @@ struct SessionInspector: View {
                     LabeledContent("Agent", value: session.agent.title)
                     LabeledContent("Model", value: host.modelTitle(for: session) + (session.effort.map { " " + AgentCatalog.effortTitle($0) } ?? ""))
                     LabeledContent("Folder", value: session.cwd)
+                    // Another folder on its computer, its conversation
+                    // going with it: not for one archived, or whose agent
+                    // runs elsewhere (moved back first).
+                    if !session.archived, (session.placement ?? .host) == .host {
+                        Button { editingFolder = true } label: { Label("Working Directory…", systemImage: "folder") }
+                            .accessibilityIdentifier("details-folder")
+                    }
                     LabeledContent("Computer", value: host.record.name.isEmpty ? host.record.address : host.record.name)
                     LabeledContent("State", value: AgentStateButtons.stateTitle(session))
                     // The agent and what it runs, as its host says.
@@ -104,6 +114,7 @@ struct SessionInspector: View {
                 }
             }
         }
+        .sheet(isPresented: $editingFolder) { WorkingDirectorySheet(host: host, session: session) }
         .onAppear {
             title = session.title
             shown = session.title

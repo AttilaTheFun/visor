@@ -60,6 +60,7 @@ flowchart TD
     Model["Model sheet"]
     AllModels["All Models"]
     Details["Session details<br/>(inspector)"]
+    WorkingDir["Working Directory"]
     ToolCalls["Tool calls"]
     Preview["Attachment preview"]
     SubPage["Fork, Branch,<br/>Side Questions, Subagent"]
@@ -107,6 +108,8 @@ flowchart TD
     Restore -->|"tap restore-‹id›, tap start"| Chat
 
     Chat -->|"tap session-title"| Details
+    Details -->|"tap details-folder"| WorkingDir
+    WorkingDir -->|"type folder-edit-path ‹folder›, tap folder-edit-move (or tap folder-edit-cancel)"| Details
     Chat -->|"tap model (no approval waiting)"| Model
     Model -->|"tap all-models"| AllModels
     Chat -.->|"the agent asks for a tool"| Approval
@@ -158,7 +161,8 @@ that opens it directly (see "Driving it" below).
 | Sign-in code prompt | a sheet; text "Paste the code Claude showed after you signed in." or `sign-in-paste` listed | `sign-in-code` (the "Code from the sign-in page" field), `sign-in-paste` ("Paste"), `sign-in-send` ("Send", listed once a code is typed), `sign-in-cancel` ("Cancel") | `sign-in-code` opens the chat with its Claude Code waiting on a sign-in, under the "Sign In to Claude" alert: tap "Open Sign-In Page", and the prompt opens when Visor is back in front (where nothing says it left for the page, as headless, a second later). It opens again on each return while the code is awaited (`scene background`, then `scene active`), not once it's sent or the sign-in has ended. The code goes as the composer sends it, which still takes it ("Later", then type it there); the fixture's computer answers a code with the notice "Signed in to Claude again with the code ‹code›." |
 | Model sheet | a sheet; `all-models` or `approval-Auto Approve` listed | `approval-Auto Approve`, `approval-Manually Approve`, `all-models`, `compact` | `models` |
 | All Models | `model-search` listed | `model-search` | none (`all-models` appears only for a long catalog; the fixture's catalogs are short) |
-| Session details | text "About" | `details-title`, `details-notifications` (the session's notifications, a switch: `set details-notifications 0` mutes it on every device), `details-copy-resume`, `stop-agent`, `start-agent`, `restart-agent`, `details-archive`, `details-end`, `details-done` (a phone's sheet) | `inspector` |
+| Session details | text "About" | `details-title`, `details-notifications` (the session's notifications, a switch: `set details-notifications 0` mutes it on every device), `details-copy-resume`, `details-folder` ("Working Directory…": not for an archived session, or one whose agent runs in a container or on a runner), `stop-agent`, `start-agent`, `restart-agent`, `details-archive`, `details-end`, `details-done` (a phone's sheet) | `inspector` |
+| Working Directory | a sheet with `folder-edit-path` and `folder-edit-move` | `folder-edit-path` (the folder, on the session's computer: one that exists there), `folder-edit-move`, `folder-edit-cancel`, `folder-edit-error` (what the computer refused the move for, in its words: mid-turn, not a full path, the folder it's in) | none: `inspector`, then `tap details-folder` |
 | Tool calls | text "Tool calls" | "Done" | none |
 | Attachment preview | a sheet with "Done"; on the iPhone it is Quick Look, whose button is "close" | "Done" ("close" on the iPhone), "Share" | none (the `chat` fixture's two attachments are both labelled "Open the attachment": tap them by `attachment-‹file›`) |
 | Fork, Branch, Side Questions, Subagent | its title: "Fork of …", "Branch of …", "Side Questions", or the subagent's description | the chat's | none |
@@ -170,7 +174,9 @@ The fixture's canned data: one computer, "Snapshot Mac", with the sessions
 approval), `fixture-busy` ("Widget layout", Codex, mid-turn),
 `fixture-docs` ("Release notes", a goal and a loop) and `fixture-api`
 ("Rate limits"). So `tap session-fixture-chat` opens a chat from the
-`sessions` screen. To start a walk from the chat with the model pill
+`sessions` screen. Its computer gives a session the folder typed in
+Working Directory (any full path), and refuses, as a server does, a path
+not from the root, the folder it's in, and `fixture-busy`, mid-turn. To start a walk from the chat with the model pill
 showing, use the `goal` fixture (the `chat` fixture has an approval
 waiting).
 

@@ -46,8 +46,9 @@ public enum ClaudeSessionFiles {
     /// realpath(3) gives it — not Foundation's resolvingSymlinksInPath,
     /// which strips "/private" on a Mac and so names /tmp's directory
     /// "-tmp" where Claude Code has "-private-tmp". Any other path is
-    /// given back as it is.
-    static func realPath(_ path: String) -> String {
+    /// given back as it is. The server's too: a session's move names the
+    /// folder Claude Code will see with it (FolderMove+Session).
+    public static func realPath(_ path: String) -> String {
         guard path.hasPrefix("/") else { return path }
         var resolved = ""
         var pending = path.split(separator: "/").map(String.init)
