@@ -214,7 +214,7 @@ jobs:
         uses: ./.github/actions/bazel_cache
         with:
           group: ubuntu
-          buildbuddy-api-key: ${{ (github.event_name == 'release' || (github.event_name != 'pull_request' && github.ref == 'refs/heads/main')) && secrets.BUILDBUDDY_API_KEY || '' }}
+          buildbuddy-api-key: ${{ secrets.BUILDBUDDY_API_KEY }}
       - name: The apps
         run: tools/ci/container_build.sh
       - name: The client's screens, headless
@@ -236,7 +236,7 @@ jobs:
         uses: ./.github/actions/bazel_cache
         with:
           group: apple
-          buildbuddy-api-key: ${{ (github.event_name == 'release' || (github.event_name != 'pull_request' && github.ref == 'refs/heads/main')) && secrets.BUILDBUDDY_API_KEY || '' }}
+          buildbuddy-api-key: ${{ secrets.BUILDBUDDY_API_KEY }}
       - name: The Apple apps
         run: tools/ci/container_build.sh
       - uses: ./.github/actions/bazel_cache_save
@@ -648,7 +648,7 @@ jobs:
       - uses: ./.github/actions/bazel_cache
         with:
           group: apple
-          buildbuddy-api-key: ${{ (github.event_name == 'release' || (github.event_name != 'pull_request' && github.ref == 'refs/heads/main')) && secrets.BUILDBUDDY_API_KEY || '' }}
+          buildbuddy-api-key: ${{ secrets.BUILDBUDDY_API_KEY }}
       # The app group shared with Applications, and Applications' bundle ids
       # on a Mac (UpdateKit; tools/signing), from the repository's secrets,
       # so neither the public source nor a log names them. A build published
@@ -748,7 +748,7 @@ jobs:
       - uses: ./.github/actions/bazel_cache
         with:
           group: ubuntu
-          buildbuddy-api-key: ${{ (github.event_name == 'release' || (github.event_name != 'pull_request' && github.ref == 'refs/heads/main')) && secrets.BUILDBUDDY_API_KEY || '' }}
+          buildbuddy-api-key: ${{ secrets.BUILDBUDDY_API_KEY }}
       # Into a folder of its own (container_build.sh empties the one it is
       # given).
       - name: Build Android
@@ -814,7 +814,7 @@ jobs:
       - uses: ./.github/actions/bazel_cache
         with:
           group: apple
-          buildbuddy-api-key: ${{ (github.event_name == 'release' || (github.event_name != 'pull_request' && github.ref == 'refs/heads/main')) && secrets.BUILDBUDDY_API_KEY || '' }}
+          buildbuddy-api-key: ${{ secrets.BUILDBUDDY_API_KEY }}
       - uses: actions/download-artifact@v4
         with:
           name: alpha-assets
@@ -964,7 +964,7 @@ jobs:
       - uses: ./.github/actions/bazel_cache
         with:
           group: apple
-          buildbuddy-api-key: ${{ (github.event_name == 'release' || (github.event_name != 'pull_request' && github.ref == 'refs/heads/main')) && secrets.BUILDBUDDY_API_KEY || '' }}
+          buildbuddy-api-key: ${{ secrets.BUILDBUDDY_API_KEY }}
       - name: Update settings
         env:
           UPDATE_APP_GROUP: ${{ secrets.VISOR_UPDATE_APP_GROUP }}
@@ -1052,7 +1052,7 @@ jobs:
       - uses: ./.github/actions/bazel_cache
         with:
           group: ubuntu
-          buildbuddy-api-key: ${{ (github.event_name == 'release' || (github.event_name != 'pull_request' && github.ref == 'refs/heads/main')) && secrets.BUILDBUDDY_API_KEY || '' }}
+          buildbuddy-api-key: ${{ secrets.BUILDBUDDY_API_KEY }}
       - name: Build
         env:
           VISOR_CI_PACKAGE: .ci/android
@@ -1131,7 +1131,7 @@ jobs:
       - uses: ./.github/actions/bazel_cache
         with:
           group: ubuntu
-          buildbuddy-api-key: ${{ (github.event_name == 'release' || (github.event_name != 'pull_request' && github.ref == 'refs/heads/main')) && secrets.BUILDBUDDY_API_KEY || '' }}
+          buildbuddy-api-key: ${{ secrets.BUILDBUDDY_API_KEY }}
       # What to sign: Apple's (unless a run before signed them) and the APK
       # if there is one.
       - name: The builds to sign
@@ -1183,7 +1183,7 @@ jobs:
       - uses: ./.github/actions/bazel_cache
         with:
           group: apple
-          buildbuddy-api-key: ${{ (github.event_name == 'release' || (github.event_name != 'pull_request' && github.ref == 'refs/heads/main')) && secrets.BUILDBUDDY_API_KEY || '' }}
+          buildbuddy-api-key: ${{ secrets.BUILDBUDDY_API_KEY }}
       - uses: actions/download-artifact@v4
         with:
           name: release-assets
