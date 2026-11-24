@@ -1274,11 +1274,13 @@ container agents.
     checkout (`--experimental_convenience_symlinks=ignore`), written by
     main's builds alone (.github/actions/bazel_cache_save). BuildBuddy's
     remote cache (`--config=buildbuddy` in .bazelrc, with no key) is turned
-    on with the `BUILDBUDDY_API_KEY` secret only in main's builds and the
-    alpha and release jobs, in a file of the job's own in its home (mode
-    600, the key unset once written); never a pull request's, whose
-    scripts could upload with it: a pull request builds on GitHub's cache
-    alone.
+    on with the `BUILDBUDDY_API_KEY` secret in every job, before a merge
+    and after it, each reading and writing (Logan, 2026-11-23: outside
+    contributors' runs wait for his approval), in a file of the job's own
+    in its home (mode 600, the key unset once written). main's and a
+    release's runs, which alone sign, use the default instance; a pull
+    request's or a branch's its own, `visor-unreviewed`, so nothing
+    unreviewed lands by mistake where a signed build reads.
   - **A pull request** runs `container`, main's required check (the rules,
     tools/check_rules.py; the Linux client and blue Visor's APK built; the
     client's screens walked headless, `bazel test --config=headless

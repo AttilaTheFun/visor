@@ -129,10 +129,10 @@ build:drive --@isomer//drive:headful
 build:headless --@isomer//headless
 
 # BuildBuddy's remote cache and build results (--config=buildbuddy): no key
-# here. CI turns it on with the key, the BUILDBUDDY_API_KEY secret, only in
-# main's builds and the alpha and release jobs, in a file of the job's own
-# outside the checkout (tools/ci/ci_bazel.sh); a pull request never has it,
-# as its scripts could upload with it, and builds on GitHub's cache alone.
+# here. CI turns it on with the key, the BUILDBUDDY_API_KEY secret, in every
+# job, in a file of the job's own outside the checkout (tools/ci/ci_bazel.sh):
+# main's and a release's runs in the default instance, which the signed
+# builds read, a pull request's or a branch's in `visor-unreviewed`.
 build:buildbuddy --bes_results_url=https://app.buildbuddy.io/invocation/
 build:buildbuddy --bes_backend=grpcs://remote.buildbuddy.io
 build:buildbuddy --remote_cache=grpcs://remote.buildbuddy.io
