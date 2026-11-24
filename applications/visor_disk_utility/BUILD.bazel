@@ -2,6 +2,8 @@ load("//tools/swift:defs.bzl", "STRICT_SWIFT")
 load("@rules_apple//apple:macos.bzl", "macos_application")
 load("@rules_swift//swift:swift.bzl", "swift_library")
 load("//tools/app_groups:defs.bzl", "app_group_entitlements")
+load("//tools/shared_sign_in:defs.bzl", "shared_sign_in_infoplist")
+load("//tools/signing:defs.bzl", "update_infoplist")
 load("//tools/variant:defs.bzl", "variant_infoplist")
 load("@bazel_skylib//rules:write_file.bzl", "write_file")
 load("//tools/team_id:defs.bzl", "TEAM_ID_REAL")
@@ -10,11 +12,26 @@ package(default_visibility = ["//visibility:public"])
 
 BUNDLE_ID = "com.LoganShire.Visor.DiskUtility"
 
-# Which build this is (tools/variant), and its name, as Visor's.
+# The Info.plist, for the test that holds Shireworks Kit's keys out of it
+# (tests/visor_plists_tests).
+exports_files(["Info.plist"])
+
+# Which build this is (tools/variant), its name, as Visor's, and its link
+# scheme, its own name (Shireworks Kit's rule: Applications opens it by
+# it, and builds.json's urlSchemes says it).
 variant_infoplist(
     name = "variant_plist",
     display_name = "Visor Disk Utility",
+    url_scheme = "visor-disk-utility",
 )
+
+# Shireworks Kit's keys, as Visor.app's (applications/visor_mac): the app
+# group shared with Shireworks and its bundle ids (tools/signing), and, in
+# CI's builds to publish, the shared sign-in and the repository crashes and
+# reports are filed in (tools/shared_sign_in).
+update_infoplist(name = "update_plist")
+
+shared_sign_in_infoplist(name = "shared_sign_in_plist")
 
 # Visor Disk Utility: a small app of its own, beside Visor.app (Logan, 19
 # Nov 2026), that makes and adopts the three APFS volumes Visor keeps what
@@ -53,6 +70,7 @@ swift_library(
     srcs = glob(["Sources/*.swift"]) + [":signing_team"],
     module_name = "VisorDiskUtility",
     deps = [
+        "@swiftpkg_shireworks_kit//:ShireworksKit",
         "//:foundation",
         "//libraries/visor_disk_volumes",
         "//libraries/visor_uninstall",
@@ -90,8 +108,12 @@ macos_application(
     }),
     infoplists = [
         "Info.plist",
+        ":update_plist",
         ":variant_plist",
-    ],
+    ] + select({
+        "//applications/visor_mac:ci_signed": [":shared_sign_in_plist"],
+        "//conditions:default": [],
+    }),
     minimum_os_version = "15.0",
     deps = [":disk_utility_lib"],
 )

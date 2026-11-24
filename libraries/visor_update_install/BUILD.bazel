@@ -3,7 +3,7 @@ load("//tools/swift:defs.bzl", "STRICT_SWIFT")
 
 package(default_visibility = ["//visibility:public"])
 
-# A build Shireworks handed Visor.app to install (UpdateKit's offer), made
+# A build Shireworks handed Visor.app to install (Shireworks Kit's offer), made
 # safe to: a real folder, not a link, copied out of the app group's
 # container (which every member of the group may write) into Visor's own,
 # and that copy checked with codesign against a requirement of Apple's

@@ -32,6 +32,7 @@
 import Darwin
 import DiskVolumes
 import Foundation
+import ShireworksKit
 import Synchronization
 import VisorLaunchAgent
 import VisorProtocol
@@ -127,6 +128,12 @@ enum MacServerAgent {
                 exit(1)
             }
         }
+        // Its crashes caught and filed (Shireworks Kit's ShireworksCrashes,
+        // in the Info.plist's ShireworksRepository), once TERM is the stop
+        // signals' (KSCrash leaves a signal already ignored alone). Not
+        // ShireworksKit.start(), which would write the build for Shireworks
+        // from here too: that's the app's process's to write.
+        ShireworksCrashes.start()
         server.start()
         if !server.listening, server.password.isEmpty, !server.settings.asksNothing {
             log("the server agent has no password: it serves once one is set")

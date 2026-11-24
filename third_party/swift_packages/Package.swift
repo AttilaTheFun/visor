@@ -48,30 +48,21 @@ let package = Package(
             url: "https://github.com/AttilaTheFun/swift_sql.git",
             exact: "0.35.0"
         ),
-        // UpdateKit (ApplicationUpdates until it left the applications
-        // repository, 7 Nov 2026): the build this app is, written at launch to
-        // the database it shares with Applications (in the app group its
-        // Info.plist names, tools/signing). Applications alone tells of
-        // updates (0.17). 0.18 adds UpdateKitInstall (a sandboxed app's
-        // installer service) and the zip hand-over, neither of which Visor.app
-        // asks for (no UpdateKitInstallsFromZip): it is handed the unpacked
-        // build as before (VisorUpdates).
+        // Shireworks Kit (shake_kit and update_kit in one package, Logan, 24
+        // Nov 2026): what an app developed through Shireworks builds in. Its
+        // crashes filed as GitHub issues (ShireworksCrashes, on KSCrash), a
+        // shake or Help › Report a Bug… filing one (ShireworksShake), and its
+        // build written to the database it shares with Shireworks, whose
+        // offers of an update it answers (ShireworksUpdates). Visor's Apple
+        // apps alone (applications/visor_ios, visor_mac, visor_disk_utility),
+        // at their root views and scenes: nothing portable (visor_ui,
+        // visor_client) depends on it. Each capability does nothing without
+        // the Info.plist keys and entitlements CI's builds to publish carry
+        // (tools/signing, tools/shared_sign_in). By revision until its 0.1.0
+        // tag, which it'll be pinned to exactly then.
         .package(
-            url: "https://github.com/AttilaTheFun/update_kit.git",
-            exact: "0.18.0"
-        ),
-        // ShakeKit: a shake (Help › Report a Bug… on a Mac) files a GitHub
-        // issue in this repository, with a screenshot and the app's logs.
-        // Visor.app and Visor for iOS alone (applications/visor_mac,
-        // visor_ios), at their root view and scene: nothing portable
-        // (visor_ui, visor_client) depends on it. Every build opts in
-        // (`ShakeKitScope` in their Info.plists); its only sign-in, the one
-        // Logan's apps share (Shireworks signed in on the same device), is
-        // stamped into his CI builds alone (tools/shared_sign_in), so
-        // anyone else's build reports nothing.
-        .package(
-            url: "https://github.com/AttilaTheFun/shake_kit.git",
-            exact: "0.3.0"
+            url: "https://github.com/AttilaTheFun/shireworks_kit.git",
+            revision: "6e61e129ca8ee4bcff16ff17ba1056deaa761928"
         ),
         // Apple's Containerization (docs/containers.md): the Sessions
         // container's image store, ext4 unpacking and init filesystem, and,

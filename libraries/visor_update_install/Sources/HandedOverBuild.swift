@@ -1,7 +1,7 @@
 import Foundation
 
 /// A build Shireworks handed over for Visor.app to install itself
-/// (UpdateKit's `UpdateOffer.bundle`), made safe to install. It lies in the
+/// (Shireworks Kit's `UpdateOffer.bundle`), made safe to install. It lies in the
 /// app group's container, which every member of the group may write, so it
 /// is taken only when it is a real folder, not a symbolic link (lstat);
 /// then copied into a folder of Visor's own, and that copy, the one that is
@@ -13,7 +13,7 @@ import Foundation
 /// system's own verdict (notarized). A build of another identifier or
 /// team, one signed for development or distribution rather than Developer
 /// ID, one changed since it was signed, or one the system won't run, is
-/// refused. What it can't take, it says why, for UpdateKit's
+/// refused. What it can't take, it says why, for Shireworks Kit's
 /// `installFailed`; the running app stays.
 public struct HandedOverBuild: Sendable {
     /// A command's end: its exit status and what it wrote (its output and

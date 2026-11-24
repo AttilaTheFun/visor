@@ -664,9 +664,29 @@ removed (still only when `agentProxy` is set).
   restart that doesn't come up is started once more. The agents' hosts
   outlive all of it, and every session that was running is carried on (the
   job starts with no `--resume-sessions` list). Visor.app's own updates
-  (UpdateKit), with the agent serving, go through it the same way; the app
+  (Shireworks Kit), with the agent serving, go through it the same way; the app
   reopens once the agent has stayed up with the new build. AppRelauncher
   stays for the server in the app, which is kept a release as the fallback.
+- **Shireworks Kit (0.70; Logan, 24 Nov 2026):** every Apple app (Visor
+  for iOS, Visor.app, Visor Disk Utility) links shireworks_kit's
+  `ShireworksKit` in place of update_kit and shake_kit, and has
+  `.shireworks()` on its window's root view: at its first appearance it
+  starts crashes (filed as issues) and updates (the build written for
+  Shireworks; on a Mac, Shireworks' offers answered), once a process, and
+  puts shake to report on the view. On a Mac, Help › Report a Bug… is
+  `ShakeKitCommands`; Visor.app, a menu bar app, adds
+  `ShakeKitReportWindow` and the menu's `ShakeKitReportButton`, and starts
+  the kit from VisorUpdates too (its window may never open), after
+  registering its own answer to offers (`.installMyself`), which wins over
+  the kit's update sheet. The server agent (`Visor --server`) starts
+  `ShireworksCrashes` alone: `ShireworksKit.start()` would write the
+  build for Shireworks from it too, which is the app's. The keys
+  (`ShireworksRepository`, `UpdateKitAppGroup` and, on a Mac,
+  `UpdateKitApplicationsBundleIDs`, `BuildVariant`, the `GitHubShared…`
+  keys) are stamped in by CI's builds to publish, never committed
+  (tools/signing, tools/variant, tools/shared_sign_in); a build without
+  them files nothing and writes no build. builds.json's Visor macOS line
+  `replaces` the retired Mac client app's bundle id.
 - **What phones and the other Mac see:** an ordinary server restart. The
   data folder (`/Volumes/Visor/Data` on the Visor volume, else
   `~/Library/Application Support/Visor`: docs/containers.md, Visor's
