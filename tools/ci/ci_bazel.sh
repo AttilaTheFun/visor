@@ -32,11 +32,16 @@
 #   BUILDBUDDY_API_KEY is set: the config and the key's headers in a file of
 #   the job's own in the home folder, outside the checkout (mode 600), which
 #   .bazelrc.user imports by its path; the key never on a command line nor
-#   in the log, and unset once written. The workflow hands the key only to
-#   main's builds (a push to main: populate, populate-apple) and the alpha
-#   and release jobs, never to a pull request's or a branch's (whose copy of
-#   this script could upload with it). Those upload; any other run that has
-#   a key reads alone (--noremote_upload_local_results). A writer downloads
+#   in the log, and unset once written. The workflow hands the key to every
+#   job, before a merge and after it, and each reads and writes (Logan,
+#   2026-11-23: pull requests write the cache, and outside contributors'
+#   runs wait for his approval). The cache the signed builds read is
+#   reviewed code's alone: runs on main and a release tag's (the Alphas and
+#   the release jobs sign what they build) use BuildBuddy's default
+#   instance, and every other run (a pull request's, a branch's) its own,
+#   `visor-unreviewed`, so a pull request's scripts can't by mistake put a
+#   result where a signed build would take it. main's builds (a push to
+#   main: populate, populate-apple) and the alpha and release jobs download
 #   every output, so the disk cache GitHub's cache keeps (above) stays whole
 #   for the runs without a key. Without a key, nothing of BuildBuddy's.
 # Never the Apple targets on Linux (.bazelrc's apple_on_linux, which takes
@@ -81,11 +86,16 @@ setup)
     # BuildBuddy, with the key: never traced, never echoed.
     if [ -n "${BUILDBUDDY_API_KEY:-}" ]; then
         set +x
-        writer=0
+        # Whether this run downloads every output, and whether it is
+        # reviewed code's, which alone shares the signed builds' instance
+        # (above).
+        whole=0
+        reviewed=0
         case "${GITHUB_EVENT_NAME:-}:${GITHUB_REF:-}" in
-            push:refs/heads/main | release:refs/tags/v*) writer=1 ;;
+            push:refs/heads/main | release:refs/tags/v*) whole=1 reviewed=1 ;;
             workflow_dispatch:refs/heads/main)
-                case "${GITHUB_JOB:-}" in alpha | alpha-apple) writer=1 ;; esac ;;
+                reviewed=1
+                case "${GITHUB_JOB:-}" in alpha | alpha-apple) whole=1 ;; esac ;;
         esac
         secret_dir="$HOME/.config/visor-ci"
         (umask 077 && mkdir -p "$secret_dir")
@@ -97,18 +107,15 @@ setup)
             echo "common --config=buildbuddy"
             printf 'common --remote_header=x-buildbuddy-api-key=%s\n' "$BUILDBUDDY_API_KEY"
             printf 'common --bes_header=x-buildbuddy-api-key=%s\n' "$BUILDBUDDY_API_KEY"
-            if [ $writer -eq 1 ]; then
-                echo "common --remote_download_all"
-            else
-                echo "common --noremote_upload_local_results"
-            fi
+            if [ $reviewed -eq 0 ]; then echo "common --remote_instance_name=visor-unreviewed"; fi
+            if [ $whole -eq 1 ]; then echo "common --remote_download_all"; fi
         } >> "$secret_rc"
         unset BUILDBUDDY_API_KEY
         lines+=("try-import $secret_rc")
-        if [ $writer -eq 1 ]; then
+        if [ $reviewed -eq 1 ]; then
             echo "ci_bazel: BuildBuddy's remote cache, read and written (${GITHUB_EVENT_NAME:-}, ${GITHUB_REF:-}, ${GITHUB_JOB:-})"
         else
-            echo "ci_bazel: BuildBuddy's remote cache, read only (${GITHUB_EVENT_NAME:-}, ${GITHUB_REF:-}, ${GITHUB_JOB:-})"
+            echo "ci_bazel: BuildBuddy's remote cache, read and written in visor-unreviewed (${GITHUB_EVENT_NAME:-}, ${GITHUB_REF:-}, ${GITHUB_JOB:-})"
         fi
     else
         echo "ci_bazel: no BUILDBUDDY_API_KEY: no remote cache, GitHub's cache alone"
