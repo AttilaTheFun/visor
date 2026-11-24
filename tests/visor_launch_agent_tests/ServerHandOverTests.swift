@@ -200,6 +200,35 @@ private actor FakeSteps: ServerHandOverSteps {
         #expect(await !said.all.contains { $0.localizedCaseInsensitiveContains("not permitted") })
     }
 
+    /// Just after 0.64's plist is removed, Background Items keeps its item
+    /// for a while (62 s in NCH's check of 0.68.1): the registration is
+    /// waited for about five minutes then, the usual minute and a half
+    /// first, and given up after that, saying how long.
+    @Test func aRegistrationJustAfter064sPlistIsWaitedForLonger() async {
+        let after = ServerAgentJob.refusedBackoff(afterLegacy: true)
+        #expect(ServerAgentJob.refusedBackoff(afterLegacy: false) == ServerAgentJob.refusedBackoff)
+        #expect(Array(after.prefix(ServerAgentJob.refusedBackoff.count)) == ServerAgentJob.refusedBackoff)
+        let total = after.reduce(0) { $0 + $1.components.seconds }
+        #expect(total >= 280 && total <= 320, "about five minutes: \(total) s")
+        // Allowed at 62 s, as in NCH's check: the usual wait had room, the
+        // longer one has more.
+        let tries = Calls()
+        let elapsed = Calls()
+        let problem = await ServerAgentJob.reregister(refusedBackoff: after, refresh: {}, unregister: {}, stop: {},
+                                                      register: {
+                                                          await tries.add("register")
+                                                          let waited = await elapsed.all.count
+                                                          return waited < 9 ? "Operation not permitted" : nil
+                                                      },
+                                                      running: { true }, pause: { _ in await elapsed.add("pause") })
+        #expect(problem == nil)
+        // Never allowed: given up only after the whole five minutes.
+        let never = await ServerAgentJob.reregister(refusedBackoff: after, refresh: {}, unregister: {}, stop: {},
+                                                    register: { "Job is not allowed to bootstrap" },
+                                                    running: { true }, pause: { _ in })
+        #expect(never?.contains("about \(total) seconds") == true, "\(never ?? "")")
+    }
+
     /// Refused for good: given up after about a minute and a half, saying
     /// so, never silently.
     @Test func aRegistrationMacOSNeverAllowsEndsInAClearNotice() async {

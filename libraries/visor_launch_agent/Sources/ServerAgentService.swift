@@ -55,11 +55,14 @@ public enum ServerAgentService {
     /// which starts it from the bundle in place now, its launch constraint
     /// that bundle's; again while launchd has no process of it. What `Visor server-agent register` runs (the update's
     /// watcher, after an update or a rollback), and how the hand-over starts
-    /// one that isn't running.
-    public static func reregister(bundleID: String, bundle: String = Bundle.main.bundlePath,
+    /// one that isn't running. `afterLegacy`: just after 0.64's plist was
+    /// removed, whose item Background Items keeps a while longer
+    /// (ServerAgentJob.refusedBackoffAfterLegacy).
+    public static func reregister(bundleID: String, bundle: String = Bundle.main.bundlePath, afterLegacy: Bool = false,
                                   waiting: (String) -> Void = { _ in }) async -> String? {
         let label = ServerAgentJob.label(bundleID: bundleID)
-        return await ServerAgentJob.reregister(refresh: { await launchServices(bundle) },
+        return await ServerAgentJob.reregister(refusedBackoff: ServerAgentJob.refusedBackoff(afterLegacy: afterLegacy),
+                                               refresh: { await launchServices(bundle) },
                                                unregister: { try? await service(bundleID: bundleID).unregister() },
                                                stop: { await Launchctl.stop(label: label) },
                                                register: { register(bundleID: bundleID) },
@@ -132,10 +135,10 @@ public enum ServerAgentService {
             await Launchctl.stop(label: job.label)
             log("\(job.name): \(unwanted): stopped and unregistered")
         case .start, .restart:
-            await removeLegacy(job: job, bundleID: bundleID, log: log)
+            let removed = await removeLegacy(job: job, bundleID: bundleID, log: log)
             // Not running: booted out and registered again, whatever bundle
             // it was registered from.
-            if let problem = await reregister(bundleID: bundleID, waiting: { log("\(job.name): " + $0); notice($0) }) {
+            if let problem = await reregister(bundleID: bundleID, afterLegacy: removed, waiting: { log("\(job.name): " + $0); notice($0) }) {
                 log("\(job.name): couldn't be registered: \(problem)")
                 return .hold(problem)
             }
