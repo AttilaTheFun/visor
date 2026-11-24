@@ -13,8 +13,8 @@
 // and not mounted, it ends, for launchd to start it again.
 //
 // `Visor server-agent register`: the agent registered afresh with
-// SMAppService from this bundle (LaunchServices told of it again, unregistered,
-// booted out, then registered:
+// SMAppService from this bundle (0.64's plist removed, LaunchServices told
+// of it again, unregistered, booted out, then registered:
 // ServerAgentService.reregister), for the update's watcher after an update
 // or a rollback, when SMAppService's launch constraint still names the
 // bundle that was replaced. `Visor server-agent unregister`: stopped and
@@ -71,12 +71,19 @@ enum MacServerAgent {
 
     /// Registered afresh from this bundle (LaunchServices told of it again,
     /// unregistered, booted out, then registered, again until it runs:
-    /// ServerAgentService.reregister), which starts it; ends.
+    /// ServerAgentService.reregister), which starts it; ends. 0.64's plist
+    /// goes first, as the app's launch takes it (ServerAgentService.settle):
+    /// while it's there, Background Items keeps its item of the same label
+    /// and macOS refuses the registration however long it's waited for, the
+    /// rollback's too (the Mini's update to 0.67.1, 24 Nov: its 0.65.1 had
+    /// come in by 0.64.1's watcher, which writes that plist).
     private static func register() -> Never {
         let bundleID = MacPlaces.own
+        let job = ServerAgentJob.job(bundleID: bundleID, logs: VisorFolders.locate().logs.path)
         let problem = Mutex<String?>(nil)
         let done = DispatchSemaphore(value: 0)
         Task.detached {
+            await ServerAgentService.removeLegacy(job: job, bundleID: bundleID, log: { print($0) })
             let said = await ServerAgentService.reregister(bundleID: bundleID)
             problem.withLock { $0 = said }
             done.signal()
