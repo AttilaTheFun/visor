@@ -259,9 +259,15 @@ nothing has been swapped; fix the cause and run that line again with
 Utility, click Refresh, then **Swap In Sessions and Sources**, and approve
 the prompt. The box shows, for each: "Case-sensitive APFS, mounted at
 /Volumes/<Name>, owned by logan", and "<Name>-old-ci (…, not mounted): kept
-for rollback". If it refuses, it says why (Visor running, a file open, the
-marker too old or not matching, the volume changed since the copy), and
-nothing was renamed.
+for rollback". If it refuses, it says why (Visor running, Apple's Disk
+Utility open, a file open, the marker too old or not matching, the volume
+changed since the copy), and nothing was renamed. **Quit Apple's Disk
+Utility first**: it can hold a volume it shows, which stopped the Mini's
+first Swap In after its first rename (24 Nov). If a Swap In does stop
+part-way, the old volume is `<Name>-old-ci` with nothing named `<Name>`
+(mounted at `/Volumes/<Name>-old-ci`, as diskutil moves a renamed volume's
+mount point): **don't delete it**, it holds everything. Swap In says so;
+run `unswap <role>` to name it back, then Swap In again.
 
 **5. Check (NCH, read-only):**
 

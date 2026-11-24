@@ -25,6 +25,20 @@ import Testing
         #expect(ConversionPreflight.visorProcesses(ps: "  1 /sbin/launchd\n 2 /usr/libexec/logd\n").isEmpty)
     }
 
+    /// Apple's Disk Utility open stopped the Mini's first Swap In after its
+    /// first rename (24 Nov): swap and unswap refuse while it runs.
+    @Test func applesDiskUtilityRunningIsRefused() {
+        let open = """
+              1 /sbin/launchd
+          36015 /System/Applications/Utilities/Disk Utility.app/Contents/MacOS/Disk Utility
+            640 /Applications/Visor Disk Utility.app/Contents/MacOS/Visor Disk Utility
+            """
+        #expect(ConversionPreflight.diskUtilityRefusal(ps: open)?.contains("Apple's Disk Utility is open: quit it first") == true)
+        // Visor Disk Utility alone is not Apple's.
+        #expect(ConversionPreflight.diskUtilityRefusal(ps: "  640 /Applications/Visor Disk Utility.app/Contents/MacOS/Visor Disk Utility\n") == nil)
+        #expect(ConversionPreflight.diskUtilityRefusal(ps: "  1 /sbin/launchd\n") == nil)
+    }
+
     @Test func openFilesAreFoundSpotlightAndTheSystemsFoldersAside() {
         // `lsof -F pcn /Volumes/Sessions`, as root sees it.
         let lsof = """

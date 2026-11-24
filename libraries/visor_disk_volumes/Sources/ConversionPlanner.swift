@@ -137,8 +137,17 @@ public enum ConversionPlanner {
     /// at `/Volumes/<Name>`. Refused without a marker that names these two
     /// volumes and is at most two hours old (`now`).
     public static func swapCommands(_ role: VolumeRole, in survey: DiskSurvey, marker: ConversionMarker?, now: Date = Date()) throws -> [DiskCommand] {
-        let pair = try copyPair(role, in: survey)
         let named = survey.containers.flatMap(\.volumes).filter { $0.name == role.volumeName }
+        // A swap that stopped after its first rename: the old volume is
+        // `<Name>-old-ci` and nothing is `<Name>`. It holds everything, so
+        // it's never to be deleted: unswap names it back (the Mini's window,
+        // 24 Nov, where the refusal below would have said to delete it).
+        if named.isEmpty, let old = KeptVolume.found(in: survey).first(where: { $0.role == role && $0.kind == .rollback }) {
+            throw DiskVolumesError.blocked("A Swap In of \(role.volumeName) stopped part-way: \(old.name) (\(old.volume.device)) is the old "
+                + "\(role.volumeName), renamed, and no volume is named \(role.volumeName). Don't delete it: run `unswap \(role.rawValue)` "
+                + "to name it back, then Swap In again.")
+        }
+        let pair = try copyPair(role, in: survey)
         guard named.count == 1 else {
             throw DiskVolumesError.blocked("\(named.count) volumes are named \(role.volumeName): rename the others before swapping.")
         }

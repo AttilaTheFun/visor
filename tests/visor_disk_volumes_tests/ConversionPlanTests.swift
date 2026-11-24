@@ -194,6 +194,24 @@ import Testing
         ])
     }
 
+    /// The Mini's window (24 Nov): Swap In stopped after its first rename,
+    /// diskutil moving the renamed old volume's mount point with it. Swap In
+    /// again says so and points to unswap (never "delete it"), and unswap
+    /// names it back.
+    @Test func aSwapStoppedAfterItsFirstRenameIsSaidAndUndoneByUnswap() throws {
+        var stopped = ConversionDisks.staged()
+        ConversionDisks.rename(&stopped, "disk3s7", to: "Sessions-old-ci", mountedAt: "/Volumes/Sessions-old-ci")
+        expectRefusal("A Swap In of Sessions stopped part-way: Sessions-old-ci (disk3s7) is the old Sessions") {
+            try ConversionPlanner.swapCommands(.sessions, in: stopped, marker: ConversionDisks.marker(.sessions), now: now)
+        }
+        expectRefusal("Don't delete it: run `unswap sessions`") {
+            try ConversionPlanner.swapCommands(.sessions, in: stopped, marker: ConversionDisks.marker(.sessions), now: now)
+        }
+        #expect(try ConversionPlanner.unswapCommands(.sessions, in: stopped).map(\.description) == [
+            "diskutil rename disk3s7 Sessions", "diskutil unmount disk3s7", "diskutil mount disk3s7",
+        ])
+    }
+
     /// NCH's review of #506: days on the converted volume, then unswap,
     /// would bring back stale data; it wants --force when it's changed.
     @Test func unswapWarnsWhenTheConvertedVolumeChangedSinceTheSwap() {

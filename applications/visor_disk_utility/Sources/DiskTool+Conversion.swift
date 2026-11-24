@@ -204,6 +204,7 @@ extension DiskTool {
         // The person's checks first, for a refusal that says why before
         // the prompt; the root's again in the prompt, before the first rename.
         try refuseWhileVisorRuns()
+        try refuseWhileDiskUtilityRuns()
         try refuseOpenFiles(on: roles.flatMap { [$0.mountPoint, $0.stagedMountPoint] })
         for role in roles {
             guard case let .swap(marker, _)? = steps[role] else { continue }
@@ -270,6 +271,7 @@ extension DiskTool {
             }
         }
         try refuseWhileVisorRuns()
+        try refuseWhileDiskUtilityRuns()
         try refuseOpenFiles(on: roles.flatMap { [$0.mountPoint, "/Volumes/" + $0.keptName] })
         do {
             return try change([ConversionPlanner.unswapCheck(checker: checker, roles: roles)] + commands, route: route,
@@ -387,6 +389,13 @@ extension DiskTool {
         if let why = ConversionPreflight.serverRefusal(processes: processes, portAnswers: answers(port: ConversionPreflight.serverPort)) {
             throw DiskVolumesError.blocked(why)
         }
+    }
+
+    /// Throws while Apple's Disk Utility runs: it can hold a volume, which
+    /// stops a swap's prompt after its first rename.
+    static func refuseWhileDiskUtilityRuns() throws {
+        let listed = String(decoding: try run(["/bin/ps", "-axo", "pid=,comm="]), as: UTF8.self)
+        if let why = ConversionPreflight.diskUtilityRefusal(ps: listed) { throw DiskVolumesError.blocked(why) }
     }
 
     /// Throws while anything but Spotlight has a file open on one of the

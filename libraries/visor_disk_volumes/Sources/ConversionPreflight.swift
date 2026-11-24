@@ -14,6 +14,21 @@ public enum ConversionPreflight {
     /// the agents' hosts, wherever the app is.
     public static let visorExecutables = ["/Visor.app/Contents/MacOS/Visor", "/Visor.app/Contents/Helpers/visor-agent-host"]
 
+    /// Apple's Disk Utility's executable, wherever the system keeps it.
+    public static let diskUtilityExecutable = "/Disk Utility.app/Contents/MacOS/Disk Utility"
+
+    /// The refusal while Apple's Disk Utility runs (in `ps -axo
+    /// pid=,comm=`'s output), or nil. It can hold a volume it shows, so an
+    /// unmount in the swap's prompt fails after the first rename has been
+    /// done, and the swap stops part-way (the Mini's window, 24 Nov: open
+    /// beside Visor Disk Utility, it stopped the first Swap In).
+    public static func diskUtilityRefusal(ps output: String) -> String? {
+        let running = output.split(separator: "\n").contains { line in
+            line.trimmingCharacters(in: .whitespaces).hasSuffix(diskUtilityExecutable)
+        }
+        return running ? "Apple's Disk Utility is open: quit it first. It can hold a volume it shows, which stops a swap part-way." : nil
+    }
+
     /// Visor's processes in `ps -axo pid=,comm=`'s output: "<pid>
     /// <executable>", a line each.
     public static func visorProcesses(ps output: String) -> [String] {
