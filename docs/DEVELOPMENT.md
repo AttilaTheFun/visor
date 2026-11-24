@@ -784,7 +784,7 @@ removed (still only when `agentProxy` is set).
   The link stays through 0.66, whose socket file may move again, to the
   app group's container (below). **Remove in 0.67:** the links
   (VisorServer.linkLegacySockets, `legacySocketLinks`, and the legacy
-  socket in MacServerAgent.otherServerGone). Uninstall… removes `~/.visor`.
+  socket in MacServerAgent.otherServerGone).
 - **Visor on the Mac (0.66's groundwork; the design of 24 Nov 2026).**
   docs/sandboxed.md is Logan's model: Visor.app bundles its notarized
   server background process (the server agent), which runs native and
@@ -834,7 +834,8 @@ removed (still only when `agentProxy` is set).
     (libraries/agent_host_wire: the session, folder, harness, command,
     environment, JWT or token file, socket; JSON, documented there).
     The one there is is the server's own (ProcessAgentHostSpawner, as
-    before): the server runs native sessions itself.
+    before): the server runs native sessions itself, and no other takes
+    its place.
 - **Uninstall…** (0.65; Visor Disk Utility's toolbar, or `Visor Disk
   Utility uninstall`, a dry run unless `--yes`): libraries/visor_uninstall
   plans, from what's there, everything Visor left on the Mac outside its
