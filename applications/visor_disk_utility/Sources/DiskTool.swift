@@ -78,23 +78,6 @@ enum DiskTool {
     /// there (VisorFolders), else in Application Support, as before.
     static var statusURL: URL { VolumesStatus.url(inDataDirectory: VisorFolders.locate().data) }
 
-    /// The Sessions container's folder on the Visor volume emptied: its
-    /// image, root filesystem, caches and logs, all made again when it next
-    /// starts. A folder of this user's, so no administrator is asked; the
-    /// volume, which holds Visor's data too, is never erased. What was
-    /// removed (the folder's path); nil when there was nothing to remove.
-    static func clearContainers() throws -> String? {
-        guard let folder = VisorFolders.locate().containers else {
-            throw DiskVolumesError.blocked("There's no Visor volume at \(VolumeRole.visor.mountPoint), so no container's folder on it.")
-        }
-        let files = FileManager.default
-        guard files.fileExists(atPath: folder.path) else { return nil }
-        for name in try files.contentsOfDirectory(atPath: folder.path) {
-            try files.removeItem(at: folder.appendingPathComponent(name))
-        }
-        return folder.path
-    }
-
     /// Writes volumes.json for the survey, keeping the UUIDs of Visor's own
     /// volumes the last one recorded; the file's path.
     @discardableResult

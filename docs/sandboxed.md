@@ -7,7 +7,7 @@
 | App | Bundle id | Sandboxed | Role |
 |---|---|---|---|
 | **Visor** | com.LoganShire.Visor | **yes** | Menu bar, client window, and the **server** with **container sessions**. A client only until the three volumes are picked. |
-| **Visor Disk Utility** | com.LoganShire.Visor.DiskUtility | no (optional) | Creates the three case-sensitive volumes, with owner and Spotlight, and checks they're as they should be. Nothing else (Logan, 24 Nov 2026): no conversion, migration or uninstall. |
+| **Visor Disk Utility** | com.LoganShire.Visor.DiskUtility | no (optional) | Creates the three case-sensitive volumes, with owner and Spotlight; Uninstall's privileged parts. As 0.65. |
 | **Visor Agent Utility** | com.LoganShire.Visor.AgentUtility | no (optional, new) | Runs **native** sessions: agent hosts with the user's access, and the native MCP on 7439 including gh. |
 | Visor Client | com.LoganShire.VisorClient.macOS | yes | **Retires**: Visor without volumes is the same thing. |
 
@@ -21,7 +21,7 @@
   - **application-groups** `group.com.LoganShire.Visor` (the Visor family: presence, messaging, sockets) and `group.com.LoganShire.Shireworks` (shared with Shireworks: UpdateKit's installed-version advert and the shared sign-in's lock; Logan, 23 Nov 2026, in place of `group.com.LoganShire.Applications`);
   - aps-environment.
 - **Agent Utility:** not sandboxed, with the same keychain group and both app groups.
-- **Disk Utility:** as 0.65, plus both app groups (which only Uninstall, now gone, used).
+- **Disk Utility:** as 0.65, plus both app groups, so Uninstall can find the group container.
 - **The updater:** an **embedded, unsandboxed XPC service** inside Visor.app, Sparkle-installer style, because a sandboxed app can't replace itself in /Applications. Developer ID allows it. It also takes over the 2-minute "stayed up" watcher.
 
 ## 2. Where things live
@@ -66,7 +66,7 @@
   - microphone and Local Network stay with Visor.app;
   - Background Items shows Visor (the main app) and Agent Utility when it's installed.
 - **Keychain:** one group, `<team>.com.LoganShire.Visor`, shared by all three apps. **#502's fix is a prerequisite**, since it makes the group keep items. The client's **ungrouped login-keychain items** (server passwords, SSH key), which a sandboxed app can't read, are **copied** into the group in a **0.66 prep step** run by the still-unsandboxed 0.66 app (written to the group and read back; reads prefer the group's, writes go to the group alone).
-  - **The login-keychain copies are kept** for a rollback through the prep release (to 0.66.1, or the update watcher's own undo after a failed update, which read the login keychain alone). Nothing is deleted or updated there: a legacy-flavoured delete reaches the group's item (#502), and an update may too. The copies go stale after the prep release, and stay until a person removes them in Keychain Access (there's no Uninstall… since 24 Nov 2026); sandboxed Visor can neither read nor delete them (NCH's review of #503).
+  - **The login-keychain copies are kept** for a rollback through the prep release (to 0.66.1, or the update watcher's own undo after a failed update, which read the login keychain alone). Nothing is deleted or updated there: a legacy-flavoured delete reaches the group's item (#502), and an update may too. The copies go stale after the prep release, and Uninstall… removes them; sandboxed Visor can neither read nor delete them (NCH's review of #503).
 
 ## 6. Migration from 0.65
 1. **0.66 prep (unsandboxed):**
@@ -91,7 +91,7 @@
    - **Containerization inside the sandbox**, proved in a lease (virtiofs of bookmarked volumes, sockets in the group container);
    - the client audit (reused from Visor Client);
    - the updater XPC service.
-5. **Migration, Disk Utility and retiring Visor Client (about 4–6 h):** a signed-alpha lease proof of 0.65 → 0.67. (No Uninstall: Logan, 24 Nov 2026, "as long as everything is self contained they can just delete the volumes in Disk Utility".)
+5. **Migration, Disk Utility and retiring Visor Client (about 4–6 h):** Uninstall covers the group container and Agent Utility, plus a signed-alpha lease proof of 0.65 → 0.67.
 
 **Total about 25–30 h, over 2–3 days with reviews: 0.66 (prep) and 0.67 (the switch).**
 

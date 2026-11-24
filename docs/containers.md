@@ -128,8 +128,8 @@ used with the container alone has no Claude Code of its own writing
 ## The assets
 
 All of them are on the Visor volume, in `Containers/`. All of it can be
-thrown away and made again (Visor Disk Utility's Erase Containers…, which
-empties the folder; the volume, with Visor's data on it, is never erased):
+thrown away and made again (the folder's contents deleted with the
+container stopped; the volume, with Visor's data on it, is never erased):
 
 | Path | What | Pinned by |
 | --- | --- | --- |

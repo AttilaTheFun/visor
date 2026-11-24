@@ -74,14 +74,6 @@ final class VolumesModel {
         }
     }
 
-    /// The container's folder on Visor emptied (Erase Containers…).
-    func eraseContainers() async {
-        await perform {
-            _ = try DiskTool.clearContainers()
-            return try DiskTool.survey()
-        }
-    }
-
     /// The typed sizes in bytes; nil, with a failure said, if one isn't a size.
     private func sizes(for role: VolumeRole) -> (reserve: Int64, quota: Int64)? {
         guard let reserve = ByteSize.gigabytes(reserve[role] ?? ""), let quota = ByteSize.gigabytes(quota[role] ?? "") else {

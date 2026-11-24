@@ -23,9 +23,8 @@ variant_infoplist(
 # Visor. Nothing else (Logan, 24 Nov 2026): no conversion of a volume, no
 # migration and no uninstall; with everything of Visor's on its volumes, a
 # person removes it by deleting them in Apple's Disk Utility. Its command
-# line (`status`, `create`, `fix-owner`, `exclude-visor`,
-# `erase-containers`) runs the same code, for scripts, NCH over SSH and
-# test machines.
+# line (`status`, `create`, `fix-owner`, `exclude-visor`) runs the same
+# code, for scripts, NCH over SSH and test machines.
 swift_library(
     name = "disk_utility_lib",
     copts = STRICT_SWIFT,

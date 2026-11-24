@@ -4,8 +4,7 @@
 import DiskVolumes
 import Foundation
 
-/// `Visor Disk Utility status`, `… create sessions|sources|visor`, `…
-/// erase-containers --yes` (the container's folder on Visor emptied);
+/// `Visor Disk Utility status`, `… create sessions|sources|visor`;
 /// options `--reserve-gb <n>`, `--quota-gb <n>` (the role's defaults
 /// otherwise) and `--sudo` (`sudo -n` instead of the administrator prompt).
 /// `… fix-owner sessions|sources|visor`: an adopted volume's mount point
@@ -14,7 +13,7 @@ import Foundation
 /// found indexing (Time Machine's exclusion is the person's: it says how).
 /// Each writes volumes.json after.
 enum DiskUtilityCLI {
-    static let verbs: Set<String> = ["status", "create", "erase-containers", "fix-owner", "exclude-visor"]
+    static let verbs: Set<String> = ["status", "create", "fix-owner", "exclude-visor"]
 
     /// Runs and exits when the arguments are a command; else returns, for
     /// the app.
@@ -55,11 +54,6 @@ enum DiskUtilityCLI {
             let commands = try survey.state(for: .visor).exclusionCommands(DiskTool.exclusions())
             commands.forEach { print("running: \($0)") }
             if !commands.isEmpty { survey = try DiskTool.change(commands, route: route) }
-        case "erase-containers":
-            guard arguments.contains("--yes") else {
-                throw DiskVolumesError.blocked("erase-containers deletes the container's image, root filesystem, caches and logs: add --yes.")
-            }
-            print(try DiskTool.clearContainers().map { "emptied \($0)" } ?? "the container's folder was empty already")
         default:
             break
         }
