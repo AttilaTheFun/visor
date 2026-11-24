@@ -8,8 +8,9 @@ package(default_visibility = ["//visibility:public"])
 # settled the same way: agent-proxy's (`--agent-proxy`, AgentProxyJob) and
 # the server's (`--server`, ServerAgentJob: the server as a background
 # agent, its hand-over from the app, ServerHandOver, and its restart and
-# watch, ServerAgentRestart). launchctl is the Mac's alone; what's decided,
-# and the watcher's script, build and are tested on Linux too
+# watch, ServerAgentRestart), and whether the app relaunches into the
+# bundle an update left (AppRelaunchCheck). launchctl is the Mac's alone;
+# what's decided, and the watcher's script, build and are tested on Linux too
 # (//tests/visor_launch_agent_tests).
 swift_library(
     name = "visor_launch_agent",

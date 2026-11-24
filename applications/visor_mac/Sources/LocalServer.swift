@@ -115,7 +115,12 @@ final class LocalServer {
         guard mode != .handingOver else { return }
         do {
             let now = try await client.controls()
+            // It answers again after it didn't, or with another version:
+            // the server restarted, maybe into another build of the
+            // bundle, which the app relaunches into too (MacAppRelaunch).
+            let restarted = controls == nil || controls?.version != now.version
             controls = now
+            if restarted { MacAppRelaunch.check("the server answered as \(now.version)") }
             unreachable = nil
             sessions = (try? await client.sessions()) ?? sessions
         } catch {
@@ -255,6 +260,12 @@ final class LocalServer {
 
     // MARK: Updates
 
+    /// The app is installing an update itself (`install`), and reopens at
+    /// its end.
+    @ObservationIgnored private(set) var installing = false
+    /// The app is ending, to be opened again (`reopen`).
+    @ObservationIgnored private(set) var reopening = false
+
     /// Whether any session is mid-turn, as the server says.
     func busy() async -> Bool {
         ((try? await client.sessions()) ?? []).contains { $0.busy }
@@ -267,6 +278,8 @@ final class LocalServer {
     /// from the bundle once the new build has stayed up. What went wrong,
     /// or nil.
     func install(_ path: String) async -> String? {
+        installing = true
+        defer { installing = false }
         guard mode == .agent else {
             do {
                 try await client.restartServer(installing: path)
@@ -303,8 +316,11 @@ final class LocalServer {
     }
 
     /// The app ended and opened again from its bundle, by a shell that
-    /// outlives it. The server agent runs on throughout.
+    /// outlives it: once this process has gone, so the new one never meets
+    /// it. The server agent runs on throughout: the app quits alone
+    /// (AppDelegate.applicationShouldTerminate). Once.
     func reopen() {
+        guard !reopening else { return }
         let bundle = Bundle.main.bundlePath
         let script = "while kill -0 \(ProcessInfo.processInfo.processIdentifier) 2>/dev/null; do sleep 0.2; done; sleep 0.5; "
             + "open -a \(ServerAgentWatch.quoted(bundle))"
@@ -312,6 +328,7 @@ final class LocalServer {
         process.executableURL = URL(fileURLWithPath: "/bin/sh")
         process.arguments = ["-c", script]
         guard (try? process.run()) != nil else { return }
+        reopening = true
         NSApplication.shared.terminate(nil)
     }
 }

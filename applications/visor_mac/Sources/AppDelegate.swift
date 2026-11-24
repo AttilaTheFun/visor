@@ -29,6 +29,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         // from the public source; CI's distribution builds stamp it in,
         // tools/signing) or its container, the library does nothing.
         VisorUpdates.start()
+        // An update installed by anything else replaces the bundle and
+        // restarts the server agent, not the app: it relaunches into the
+        // new build itself (MacAppRelaunch; looked at as the server answers
+        // again, and every few minutes).
+        MacAppRelaunch.start()
         Self.followWindows()
     }
 

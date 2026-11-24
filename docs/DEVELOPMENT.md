@@ -662,6 +662,19 @@ removed (still only when `agentProxy` is set).
   (UpdateKit), with the agent serving, go through it the same way; the app
   reopens once the agent has stayed up with the new build. AppRelauncher
   stays for the server in the app, which is kept a release as the fallback.
+- **The app after an update it didn't install** (AppRelaunchCheck,
+  MacAppRelaunch): an update from anywhere else replaces the bundle and
+  restarts the agent, not the app, which ran on (0.64.1's and 0.65.1's for
+  days beside a 0.69.1 server, and Shireworks never told the build
+  installed: UpdateKit writes that at the app's start). So the app, while
+  the agent serves, reads its bundle's Info.plist afresh when the server
+  answers again or with another version, and every five minutes, and
+  reopens (LocalServer.reopen: a shell waits for this process to end, then
+  `open -a`s the bundle; the app quits alone, the agent running on) once
+  the bundle is whole and another version or build than the one running.
+  Not while an update's watch holds its lock (it looks again once the watch
+  is over), from a copy outside /Applications, while the app installs an
+  update itself (it reopens at its end), or while the app is in front.
 - **What phones and the other Mac see:** an ordinary server restart. The
   data folder (`/Volumes/Visor/Data` on the Visor volume, else
   `~/Library/Application Support/Visor`: docs/containers.md, Visor's
