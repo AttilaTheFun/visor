@@ -191,6 +191,21 @@ public enum ServerAgentJob {
     public static let refusedBackoff: [Duration] = [.seconds(2), .seconds(4), .seconds(8), .seconds(15), .seconds(15), .seconds(15),
                                                      .seconds(15), .seconds(15)]
 
+    /// The pauses when 0.64's plist was removed just before: about five
+    /// minutes in all. Background Items keeps 0.64's item (a "legacy agent"
+    /// of the same label) after its plist is gone, until its own clean-up
+    /// drops it, and refuses the registration until then: 62 s in NCH's
+    /// check of 0.68.1 (24 Nov), and the Mini may take longer. Given up,
+    /// the update rolls back to a build whose registration meets the same
+    /// item, with nothing left to start the server from.
+    public static let refusedBackoffAfterLegacy: [Duration] = refusedBackoff + Array(repeating: .seconds(15), count: 14)
+
+    /// The pauses for a registration that does (`afterLegacy`) or doesn't
+    /// come just after 0.64's plist was removed.
+    public static func refusedBackoff(afterLegacy: Bool) -> [Duration] {
+        afterLegacy ? refusedBackoffAfterLegacy : refusedBackoff
+    }
+
     /// Whether a registration's refusal is macOS not allowing it yet (EPERM,
     /// "not permitted", "not allowed"), which passes, rather than a refusal
     /// for good.
