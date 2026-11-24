@@ -1,7 +1,7 @@
 // Visor's application delegate on the Mac: the server's life (started at
 // launch, its agents ended before a quit, as Visor Server did, asked over
 // the server's API), the
-// client's pushes (the token and the notifications, as the Mac client did),
+// client's pushes (the token and the notifications),
 // and the Dock icon, which the app shows only while one of its windows is
 // open: it is a menu bar app first.
 

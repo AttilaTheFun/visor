@@ -11,7 +11,7 @@ load("//tools/variant:defs.bzl", "variant_infoplist")
 package(default_visibility = ["//visibility:public"])
 
 # The Info.plist, for the test that holds ShakeKit on in every build
-# (tests/visor_macos_tests).
+# (tests/visor_plists_tests).
 exports_files(["Info.plist"])
 
 # Signing: the bundle id here, and your Apple team id in .bazelrc.user
@@ -64,7 +64,7 @@ shared_sign_in_entitlements(
 shared_sign_in_infoplist(name = "shared_sign_in_plist")
 
 # The client on a phone: compiled Swift, real SwiftUI, the shared VisorUI
-# screens. The host sources are shared with the Mac client (a filegroup);
+# screens. The host sources are shared with Visor.app on the Mac (a filegroup);
 # only the @main is guarded by os().
 filegroup(
     name = "host_srcs",

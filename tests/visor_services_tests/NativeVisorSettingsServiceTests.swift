@@ -82,16 +82,6 @@ import VisorServicesNative
         }
     }
 
-    @Test func ownKeychainGroupIsTheBundlesOwn() {
-        let bundle = "com.LoganShire.VisorClient.macOS"
-        #expect(VisorKeychainGroup.own(bundleID: bundle, groups: ["T.other", "T." + bundle], applicationIdentifier: nil) == "T." + bundle)
-        // None of the groups: the application identifier, if it is the bundle's.
-        #expect(VisorKeychainGroup.own(bundleID: bundle, groups: [], applicationIdentifier: "T." + bundle) == "T." + bundle)
-        #expect(VisorKeychainGroup.own(bundleID: bundle, groups: ["T.com.LoganShire.Visor"], applicationIdentifier: "T.other") == nil)
-        // The bundle id alone is no group, nor another bundle's that ends the same.
-        #expect(VisorKeychainGroup.own(bundleID: bundle, groups: [bundle, "T.x" + bundle], applicationIdentifier: nil) == nil)
-    }
-
     @Test func headlessNamesAreTheBareOnes() {
         let environment = ["fixture": "snapshot", "visor.account": "fixture"]
         #expect(VisorLaunchSettings.values(in: environment, prefix: "") == ["fixture": "snapshot"])

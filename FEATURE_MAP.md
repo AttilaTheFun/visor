@@ -1,6 +1,6 @@
 # Visor's feature map
 
-What a person can reach in the Visor client, and how, drawn so that an
+What a person can reach in Visor, and how, drawn so that an
 agent or a UI test can walk the same graph through Isomer's driver
 protocol (isomer's `shared/wire/headless.proto`) on the iPhone and on
 Android. Every screen below is a node; every arrow is the driver command
@@ -12,10 +12,10 @@ Visor Disk Utility (applications/visor_disk_utility), the Mac app that
 makes the Sessions, Sources and Visor volumes, is a separate app with a window
 of its own, outside that tree: it isn't mapped here.
 
-Visor Client (applications/visor_macos, docs/visor-client.md) is the same
-tree, sandboxed: its Settings end with `settings-forget-everything`
-(Forget Everything…, asked first, then the app quits), which no other
-build shows, and an exported session there is shared, not saved.
+Visor.app shows this tree on iOS and on macOS alike (Logan, 24 Nov 2026:
+there's no separate client app for the Mac). Settings' `settings-forget-everything`
+(Forget Everything…) shows only where a host offers it
+(VisorHost.forgetEverything), which none does today.
 
 How to read it:
 

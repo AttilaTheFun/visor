@@ -6,13 +6,19 @@ and the gotchas. Read it whole once; keep it current as things change.
 
 ## 1. What this is
 
-Visor is a Mac menu bar app that runs coding agents (Claude Code, Codex,
-OpenRouter models) as sessions on the Mac and serves them to clients on
-iPhone, iPad, Mac and the web, over whatever reaches the Mac. Clients chat
-with a session and watch it work. The agent doing this work can drive its
-own development through Visor: you talk to an agent in the Visor client;
-the agent edits, builds, tests, and redeploys the very server it is
-running under.
+Visor is Visor.app, on iOS and macOS (Logan, 24 Nov 2026: there's no
+separate "client" app). On the Mac it bundles Visor's server, notarized
+with it, as a background process (the server agent: Visor.app's own
+executable, `--server`), which runs coding agents (Claude Code, Codex,
+OpenRouter models) as sessions, natively or in the containers it manages,
+whose files are only on the Visor, Sessions and Sources volumes (Visor
+Disk Utility creates them and checks they're as they should be:
+docs/containers.md). Visor on the iPhone, iPad and Mac (and on Android
+and the web) reaches a Mac's server over whatever reaches the Mac, chats
+with a session and watches it work. The agent doing this work can drive
+its own development through Visor: you talk to an agent in Visor; the
+agent edits, builds, tests, and redeploys the very server it is running
+under.
 
 The repos (github.com/AttilaTheFun):
 
@@ -213,9 +219,8 @@ nextSeq), syncs (revision, generation), nodes (the source tree), messages
 Server cache: `~/Library/Application Support/com.LoganShire.VisorServer.macOS/
 messages.sqlite` (Visor.app's: `…/com.LoganShire.Visor/Server/
 messages.sqlite`), keyed by Visor session id; every agent's rows are
-written by the indexer from its log. Client cache: `…/com.LoganShire.
-VisorClient.macOS/messages.sqlite` (Visor.app's: `…/com.LoganShire.Visor/
-Client/messages.sqlite`; iOS in its container), keyed
+written by the indexer from its log. Client cache: Visor.app's
+`…/com.LoganShire.Visor/Client/messages.sqlite` (iOS in its container), keyed
 `<host id>/<session id>`; a session opens from it synchronously
 (`AgentServerConnection.transcript(for:)`, called from `AgentScreen.init`)
 with its latest 100 rows, and syncs only what moved; earlier pages are 50
@@ -1089,7 +1094,7 @@ container agents.
   runs: it compiles, and traps on the first callback
   (`_dispatch_assert_queue_fail`). The staging server and the probes are
   how that is found before a deploy.
-- Build: `bazel build //applications/visor_menubar //applications/visor_macos`
+- Build: `bazel build //applications/visor_mac //applications/visor_disk_utility`
   (fastbuild). `bazel-bin` points at the LAST configuration built — always
   locate outputs with `bazel cquery [-c opt] --output=files <target>`.
 - Build on Linux (a container, say): the same targets, with no Xcode. The
@@ -1343,10 +1348,14 @@ container agents.
     `Visor-Disk-Utility-<version>-macos.zip` (no disk image), with its own
     builds.json line (tools/ci/sign_builds.sh); `alpha-launch` and
     `release-launch` check it's signed and opens
-    (tools/ci/mac_app_opens.sh). So is Visor Client
-    (applications/visor_macos, sandboxed: docs/visor-client.md),
-    `Visor-Client-<version>-macos.zip`, checked sandboxed too
-    (`mac_app_opens.sh --sandboxed`). The agent
+    (tools/ci/mac_app_opens.sh). Nothing else: the separate Mac client
+    app retired (Logan, 24 Nov 2026), so no release carries its .zip, icon
+    or builds.json line. Every release, drafts included,
+    still carries builds.json, with Visor's lines (iOS and macOS, their
+    `urlSchemes` naming `visor`) and Visor Disk Utility's, and each app's
+    icon, `Visor-<version>-icon.png` and
+    `Visor-Disk-Utility-<version>-icon.png`, which Shireworks'
+    Applications tab is drawn from. The agent
     image of that version follows when tools/containers/ changed
     (`agent-image`, built with buildah on GitHub's arm64 Ubuntu, arm64
     alone). A branch's builds are experiments only (Logan, 12 Nov 2026):
@@ -1788,10 +1797,10 @@ to step anyway; a phone away on another network is where it showed.
   and the user's yes (System Settings → Privacy & Security → Local
   Network). Without it macOS refuses its connections with "No route to
   host" (errno 65) and never asks, while Terminal reaches the same address:
-  the Mac client's LAN paths failed that way until 0.23.
+  Visor's LAN paths on the Mac failed that way until 0.23.
 - The client's connection log is in UserDefaults while it runs
-  (`defaults read com.LoganShire.VisorClient.macOS visor.connectionLog`),
-  and a failed keychain call is in the system log
+  (`defaults read com.LoganShire.Visor visor.connectionLog`), and a failed
+  keychain call is in the system log
   (`log show --predicate 'subsystem == "com.LoganShire.VisorClient"'`).
 
 - A subagent's plain `sleep` is blocked by the harness; use

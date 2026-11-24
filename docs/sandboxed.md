@@ -1,6 +1,8 @@
 # Visor, sandboxed (the Nimbus model): design note (22 Nov 2026)
 
-**Logan (21:0xZ, verbatim):** "Visor is a sandboxed app with the menu bar and client that can out of the box run agents in containers. It will only allow you to do this if you point it to volumes for the Sessions Sources and Visor which you can either create by hand with Disk Utility or install the non-sandboxed Visor Disk Utility to do it. Additionally Visor Agent Utility is an optional application for running native sessions which handles that part."
+**Logan (24 Nov 2026, verbatim), the model this note now serves:** "It's Visor.app on iOS and macOS. The mac version also bundles the notarized visor server background process which can run sessions natively or in containers it manages whose files are exclusively on the Visor, Sessions and Sources volumes. The Visor Disk Utility app should be stripped of all the migration code and serves purely to create / validate those volumes are created and configured correctly." So: Visor.app, on iOS and macOS; on the Mac, with its server, a background process notarized with it, running sessions natively or in the containers it manages, their files only on the three volumes; Visor Disk Utility, which creates the volumes and checks them. There's no separate client app for the Mac any more. Where the 22 Nov design below differs (the server in Visor.app's own process, with no separate server agent; native sessions through Visor Agent Utility), this model stands, and those parts are to be brought in line with it.
+
+**Logan (22 Nov, 21:0xZ, verbatim):** "Visor is a sandboxed app with the menu bar and client that can out of the box run agents in containers. It will only allow you to do this if you point it to volumes for the Sessions Sources and Visor which you can either create by hand with Disk Utility or install the non-sandboxed Visor Disk Utility to do it. Additionally Visor Agent Utility is an optional application for running native sessions which handles that part."
 
 ## 1. The apps
 
@@ -9,7 +11,6 @@
 | **Visor** | com.LoganShire.Visor | **yes** | Menu bar, client window, and the **server** with **container sessions**. A client only until the three volumes are picked. |
 | **Visor Disk Utility** | com.LoganShire.Visor.DiskUtility | no (optional) | Creates the three case-sensitive volumes, with owner and Spotlight; Uninstall's privileged parts. As 0.65. |
 | **Visor Agent Utility** | com.LoganShire.Visor.AgentUtility | no (optional, new) | Runs **native** sessions: agent hosts with the user's access, and the native MCP on 7439 including gh. |
-| Visor Client | com.LoganShire.VisorClient.macOS | yes | **Retires**: Visor without volumes is the same thing. |
 
 **Entitlements:**
 - **Visor:**
@@ -78,7 +79,7 @@
    - the **volume picker**: Visor asks for Sessions, Sources and Visor once, with each name pre-selected;
    - the server starts in-app and unregisters 0.65/0.66's SMAppService server agent (another Login Items change, with the calm wait from #501);
    - native sessions: if Agent Utility is installed, their hosts are re-spawned by it (claude resumes each conversation); if not, Visor offers it, or moving the session into the container.
-3. **Visor Client:** its users install Visor instead; no data to move.
+3. **The retired Mac client app:** its users install Visor.app instead; no data to move.
 
 ## 7. PR plan (agent hours, plus review and lease runs)
 1. **This note, agreed by Logan.**
@@ -89,9 +90,9 @@
    - the volume picker and bookmarks;
    - the in-app server with the mainApp login item;
    - **Containerization inside the sandbox**, proved in a lease (virtiofs of bookmarked volumes, sockets in the group container);
-   - the client audit (reused from Visor Client);
+   - the client audit (reused from the retired sandboxed Mac client app);
    - the updater XPC service.
-5. **Migration, Disk Utility and retiring Visor Client (about 4–6 h):** Uninstall covers the group container and Agent Utility, plus a signed-alpha lease proof of 0.65 → 0.67.
+5. **Migration, Disk Utility and retiring the Mac client app (about 4–6 h; the app retired 24 Nov 2026):** Uninstall covers the group container and Agent Utility, plus a signed-alpha lease proof of 0.65 → 0.67.
 
 **Total about 25–30 h, over 2–3 days with reviews: 0.66 (prep) and 0.67 (the switch).**
 
