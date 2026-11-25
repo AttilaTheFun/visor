@@ -12,8 +12,10 @@ enum MacCommandLine {
     /// The commands, as `Visor --help` lists them.
     static let usage = """
         usage: Visor                               the app (its window, menu and server)
-               Visor --server                      the server agent (launchd's, as SMAppService registers it)
-               Visor server-agent register         the server agent registered afresh from this app
+               Visor app-agent start               the app started by launchd as its agent, from this bundle
+               Visor app-agent unregister          the app's agent unregistered (no start at login, or after a crash)
+               Visor --server                      the server agent (until 0.72.1; kept a release for the hand-back)
+               Visor server-agent register         the server agent registered afresh from this app (the same)
                Visor admin-token                   the admin token, for a script
                Visor agent-proxy secret-set <name> agent-proxy's secret, read from standard input
                Visor agent-proxy secret-remove <name>

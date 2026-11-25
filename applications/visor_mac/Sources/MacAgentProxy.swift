@@ -2,18 +2,17 @@
 // executable, so it reads the server's keychain items (MacPlaces'
 // server service) as the app does.
 //
-// - `Visor --agent-proxy`: the proxy itself, the launchd job the server
-//   keeps (AgentProxyJob), never the app's UI.
+// - `Visor --agent-proxy`: the proxy itself, the launchd job the server in
+//   the app kept until 0.72.1 (AgentProxyJob), never the app's UI; its job
+//   is removed as the server folds the proxy in.
 // - `Visor agent-proxy secret-set <name>` (and `secret-remove`): one of its
 //   secrets kept, piped in on standard input.
-// - At the start of the server in the app: the job settled to
-//   settings.json's `agentProxy` (none: none, the job removed if there was
-//   one).
-// - In the server agent (`Visor --server`): folded in, as on Linux. The job
-//   is stopped and removed first, then the proxy started inside the server
-//   when `agentProxy` is set, and started again when it changes (`refold`:
-//   the Sessions container turned on gives it a relay port). Here, beside
-//   the Sessions container, its MCP pass-through takes each container
+// - In the server, in the app's process (from 0.72.1, MacServer.run) or the
+//   server agent's (`Visor --server`, until then): folded in, as on Linux.
+//   The job is stopped and removed first, then the proxy started inside the
+//   server when `agentProxy` is set, and started again when it changes
+//   (`refold`: the Sessions container turned on gives it a relay port). Here,
+//   beside the Sessions container, its MCP pass-through takes each container
 //   agent's own token too, the server saying whose it is; and the server
 //   asks it who those agents commit as (the GitHub App's bot).
 
@@ -46,7 +45,7 @@ enum MacAgentProxy {
         }
     }
 
-    /// What runs inside the server agent, held for its life, and the
+    /// What runs inside the server, held for its life, and the
     /// settings it was started with (AgentProxyHost.digest); nil until
     /// it's folded in.
     private static var folded: AgentProxyHost.Running?
@@ -55,7 +54,7 @@ enum MacAgentProxy {
     /// says (VisorServer.passThroughSession), once it's folded in.
     private static var agentSession: (@Sendable (String) async -> String?)?
 
-    /// In the server agent: the job gone (its ports are the proxy's here),
+    /// In the server: the job gone (its ports are the proxy's here),
     /// then the proxy started in this process, with the server's secrets,
     /// when `agentProxy` is set. A change takes a restart, as on Linux.
     static func foldIn(_ server: VisorServer) async {
@@ -72,7 +71,7 @@ enum MacAgentProxy {
                                       agentSession: session, log: log)
     }
 
-    /// In the server agent, once folded in: started again with `settings`
+    /// In the server, once folded in: started again with `settings`
     /// when they aren't what it runs with (the Sessions container turned
     /// on, giving it a relay port: docs/containers.md). Else nothing.
     static func refold(_ settings: AgentProxySettings?) {
@@ -90,17 +89,5 @@ enum MacAgentProxy {
     /// (none: no identity).
     static func gitIdentity() async -> ContainerGitIdentity? {
         await folded?.gitIdentity()
-    }
-
-    /// The launchd job made to match settings.json and this app, off the
-    /// main thread.
-    static func settle() {
-        let bundleID = MacPlaces.own
-        let version = VisorMacApp.bundleVersion
-        let places = places
-        let logs = MacPlaces.folders.logs.path
-        Task.detached {
-            await AgentProxyJob.settle(bundleID: bundleID, version: version, places: places, logs: logs, log: { ServerPlatform.current.log($0) })
-        }
     }
 }

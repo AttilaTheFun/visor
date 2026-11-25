@@ -20,6 +20,8 @@ struct ServerSettingsPane: View {
     var local: LocalServer
     @State private var draft = ""
     @State private var message: String?
+    /// Why Start at Login wasn't changed.
+    @State private var loginProblem: String?
     /// Whether this Mac's sshd answers on port 22 (Remote Login), as last
     /// checked; nil before the check.
     @State private var remoteLogin: Bool?
@@ -47,11 +49,8 @@ struct ServerSettingsPane: View {
             } else {
                 Form {
                     Section {
-                        Text(local.mode == .handingOver ? "This Mac's server is starting in the background."
+                        Text(local.mode == .handingBack ? "This Mac's server is starting."
                                                         : "This Mac's server isn't answering\(local.unreachable.map { ": \($0)" } ?? ".")")
-                        if local.mode == .agent {
-                            Button("Start Server") { Task { message = await local.startServer() } }
-                        }
                         if let message { Text(message).font(.caption).foregroundColor(.red) }
                     }
                 }
@@ -73,7 +72,7 @@ struct ServerSettingsPane: View {
             ContainerSettingsSection(settings: controls.settings, client: local.client, send: send)
             devicesSection(controls)
             pushSection(controls)
-            if local.mode == .agent || local.note != nil { backgroundSection }
+            whereItRunsSection
         }
         .formStyle(.grouped)
         .frame(width: 520, height: 760)
@@ -294,14 +293,22 @@ struct ServerSettingsPane: View {
         }
     }
 
-    private var backgroundSection: some View {
+    private var whereItRunsSection: some View {
         Section {
             if let note = local.note { Text(note).font(.caption) }
-            Text(local.mode == .agent
-                 ? "This Mac's server runs in the background, as the launchd agent \(LocalServer.job.label), whether or not Visor is open. Quitting Visor leaves it serving; the menu's Stop Server stops it."
-                 : "This Mac's server runs in Visor itself, and stops when Visor quits.")
-            Text("Set the default \(ServerAgentJob.defaultsKey) on or off, and open Visor again, to change where it runs.")
-                .font(.caption).foregroundColor(.secondary)
+            Text(local.mode == .elsewhere
+                 ? "Another server answers on this Mac, and Visor is its client: Visor runs no server of its own while it does."
+                 : "This Mac's server runs in Visor itself: the eye in the menu bar is it. Quitting Visor stops it, its agents ended; an update restarts it, its agents left running.")
+            if let problem = LocalServer.startsAtLoginProblem {
+                Text("Start at Login is for Visor in /Applications: \(problem).").font(.caption).foregroundColor(.secondary)
+            } else {
+                Toggle("Start at Login", isOn: Binding(get: { local.startsAtLogin }, set: { on in
+                    Task { loginProblem = await local.setStartsAtLogin(on) }
+                }))
+                Text("Visor opens when you log in, and opens again if it crashes (a launchd agent, in Login Items). Changing it restarts Visor.")
+                    .font(.caption).foregroundColor(.secondary)
+                if let loginProblem { Text(loginProblem).font(.caption).foregroundColor(.red) }
+            }
         } header: {
             Text("Where it runs")
         }

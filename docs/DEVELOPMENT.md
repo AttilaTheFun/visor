@@ -7,9 +7,10 @@ and the gotchas. Read it whole once; keep it current as things change.
 ## 1. What this is
 
 Visor is Visor.app, on iOS and macOS (Logan, 24 Nov 2026: there's no
-separate "client" app). On the Mac it bundles Visor's server, notarized
-with it, as a background process (the server agent: Visor.app's own
-executable, `--server`), which runs coding agents (Claude Code, Codex,
+separate "client" app). On the Mac, Visor's server runs in Visor.app's own
+process, the menu bar app (0.72.1; Logan, 25 Nov 2026: "The background
+process IS the menu-bar app, so that I can always tell when it's running,
+and its windows are the clients."), which runs coding agents (Claude Code, Codex,
 OpenRouter models) as sessions, natively or in the containers it manages,
 whose files are only on the Visor, Sessions and Sources volumes (Visor
 Disk Utility creates them and checks they're as they should be:
@@ -105,12 +106,9 @@ fails when the copy differs from what the protos make.
    the same LAN when unplugged.
 6. Xcode: `bazel run //:xcodeproj` generates Visor.xcodeproj
    (rules_xcodeproj); it is not committed.
-7. Keeping the server up: a LaunchAgent with RunAtLoad that runs
-   `open -a "/Applications/Visor Server.app"` starts it at login (no
-   KeepAlive — the server's relauncher owns restarts; the agents are under
-   their own hosts and outlive it). Or, with Visor.app's `ServerAsAgent`
-   default on, the server agent (section 3, The server as a background
-   agent), which the app installs itself.
+7. Keeping the server up: Visor.app registers its own launchd agent,
+   which starts the app at login and again after a crash (Start at Login,
+   on by default: section 3, The server in the app).
 
 ## 3. Architecture, as built
 
@@ -574,99 +572,159 @@ never shows the password: Copy Password puts it on the pasteboard.
 `POST /api/restart {path, session}` installs a bundle over itself via
 a detached relauncher and resumes named sessions with a nudge
 ("[Visor] The Visor server restarted while you were working…"). The
-relauncher (`AppRelauncher`) keeps the running bundle aside (`Previous/` in
-the data directory) and watches the new one for two minutes: if it quits,
-crashes or never answers on its port, the previous build is put back and
-opened, carrying the same sessions, and `relaunch-rollback.txt` says why,
-which the server shows in its menu (`updateNotice`) once. Once the new build
-has stayed up, the one it replaced is removed (no backups left behind).
+relauncher (`AppRelauncher`, its script AppRelaunchWatch's) keeps the
+running bundle aside (`Previous/` in the data directory) and watches the
+new one for two minutes: if it quits, crashes or never answers (on its
+port from its own process, or at its socket file while it has no password
+to listen with), the previous build is put back and started, and
+`relaunch-rollback.txt` says why, which the server shows in its menu
+(`updateNotice`) once. Once the new build has stayed up, the one it
+replaced is removed (no backups left behind).
 
-**The server as a background agent** (0a of the container engine's plan;
-off by default). Visor.app's own executable with `--server`
-(applications/visor_mac's MacServerAgent) runs the whole server headless,
-with no AppKit UI: the sessions and their agents' hosts, the native
-runner, the driver on 7434, REST and WebSocket on 7433, the socket file
-(`/Volumes/Visor/run/server.sock` on the Visor volume, else
-`~/.visor/server.sock`), pushes, MCP and relaunch, started by the same code
-as the server in the app (MacServer). It runs as a launchd LaunchAgent,
-`com.LoganShire.Visor.server`, whose plist is the app bundle's own
-(`Contents/Library/LaunchAgents/com.LoganShire.Visor.server.plist`, from
-applications/visor_mac/LaunchAgents: BundleProgram the app's executable
-with `--server`, RunAtLoad, KeepAlive after a failure,
-AbandonProcessGroup), registered with SMAppService.agent (0.65: ServerAgentJob,
-ServerAgentService in libraries/visor_launch_agent), so nothing of it is
-written outside the app, and unregistering it takes it out of launchd and
-Background Items alike. Its log, `Visor-server.log` in Visor's logs (the
-Visor volume's `Logs/`, else `~/Library/Logs`), it opens itself as its
-standard output and error. 0.64 wrote the plist to
-`~/Library/LaunchAgents/…server.plist`; the app's launch stops that job and
-removes the file before it registers the bundle's (once). Only for an app in
-/Applications. In it, agent-proxy runs inside the server, as on Linux, and
-the separate `com.LoganShire.Visor.agent-proxy` job (a LaunchAgentJob in
-`~/Library/LaunchAgents`, still, for the server in the app) is stopped and
-removed (still only when `agentProxy` is set).
-- **Turning it on:** `defaults write com.LoganShire.Visor ServerAsAgent
-  -bool true`, then restart Visor's server (a restart from a client, or
-  `POST /api/restart`): the server in the app goes as an in-place relaunch
-  does, the agents' hosts left running, and the app that reopens hands
-  over. Off (the default) with no agent there, the app makes its server as
-  it always has and looks at nothing else.
-- **The hand-over** (ServerHandOver, at the app's launch, before the app
-  makes a server): the app registers the agent afresh (LaunchServices
-  told of the bundle again, unregistered, booted out, then registered:
-  ServerAgentService.reregister) unless it's running, which is
-  left as it is, then waits up to the watch (two minutes) for `/api/hello`
-  on 7433 from the job's own process (lsof's listener, where it says).
-  Then the app is the agent's client. While `ServerAsAgent` is on, the app
-  never serves itself and never stops the agent (NCH's check of #491: an
-  app that fell back to its own server took the socket and port from the
-  agent it had just registered, which gave way to it every 35 seconds): an
-  agent that doesn't answer yet (waiting for approval in Login Items, or
-  slow) is waited for, the app its client, saying why in the menu. With
-  the default turned off, the app removes the agent (launchd's TERM: the
-  agent steps aside, leaving the hosts) and runs its own server, which
-  picks the hosts up. A copy outside /Applications never registers or
-  removes the agent; it uses or waits for one that's registered, and only
-  with none runs its own server. `Visor --help` (or a word it has no
-  command for) prints the usage and ends, never opening the app.
-- **Quitting the app** (Quit Visor in the agent's menu, or killing it)
-  leaves the server serving. `killall Visor` reaches the agent too (its
-  process is Visor's): sent TERM by anyone, it steps aside (the hosts left
-  running) and exits 1, and KeepAlive starts it again at once. `/api/quit`
-  stops it (an exit of 0, which KeepAlive leaves stopped until the app's
-  next launch or the next login).
-- **Updates and rollback** (ServerAgentRestart, ServerAgentWatch):
-  `POST /api/restart {path}` on the agent checks the bundle (the same
-  bundle id) and starts a detached watcher; the server lets its hosts go
-  and exits 0. The watcher, once it has gone, moves the running bundle aside
-  (`Previous/`), copies the new one in (its plist with it), and registers
-  the job afresh from it (`Visor server-agent register`: `lsregister -f`
-  of the bundle, SMAppService's unregister, launchctl bootout, then
-  register; a plain restart is `launchctl kickstart
-  -k`). SMAppService's launch constraint is the bundle registered: launchd
-  won't spawn the job from another bundle put in its place (`spawn failed`,
-  last exit 78, "Launch Constraint Violation", "needs LWCR update"): its
-  Background Items record keeps the registered build's checksum through a
-  bootout and register, and through an unregister and register, until
-  LaunchServices is told of the bundle again (`lsregister -f`); and on
-  macOS 27.0.1 the first registration after the bundle changed was
-  refused even then (Background Items drops its record of the job about
-  five seconds on), the next one running the new build, so all four go
-  together, and again, eight seconds on and three times at most, while
-  launchd has no process of it: an update to another build and a rollback both go
-  through that one function (ServerAgentService.reregister). An update to a build that isn't byte-identical wants a
-  check on a real Mac before each release that changes this path (NCH
-  checked a byte-identical one and a rollback on macOS 27.0.1). It watches it as
-  AppRelauncher does: up to ten minutes for the first answer on 7433 from
-  the job's process, then two minutes up. If the process goes or never
-  answers, the job is stopped, the previous bundle is put back,
-  `relaunch-rollback.txt` says why, and it is started again; once it has stayed up, the replaced bundle is removed. A plain
-  restart that doesn't come up is started once more. The agents' hosts
-  outlive all of it, and every session that was running is carried on (the
-  job starts with no `--resume-sessions` list). Visor.app's own updates
-  (Shireworks Kit), with the agent serving, go through it the same way; the app
-  reopens once the agent has stayed up with the new build. AppRelauncher
-  stays for the server in the app, which is kept a release as the fallback.
+**The server in the app** (0.72.1; Logan, 25 Nov 2026: "The background
+process IS the menu-bar app, so that I can always tell when it's running,
+and its windows are the clients."). Visor's server runs in Visor.app's own
+process: the menu bar app (LSUIElement, with a Dock icon only while one of
+its windows is open), whose window, menu and Settings are the server's
+clients at its socket file, as before (LocalServer, MacServer): the
+sessions and their agents' hosts, the native runner, the driver on 7434,
+REST and WebSocket on 7433, the socket file, pushes, MCP, agent-proxy
+folded in (MacAgentProxy.foldIn: its separate launchd job is removed), and
+the Sessions container's engine, whose VM is in this process
+(docs/containers.md). The eye in the menu bar is the server: if it's
+there, Visor runs. Its lines go to the system log and to `Visor-server.log`
+in Visor's logs. The server agent of the builds before (`Visor --server`, 0.65 on) is no
+longer a place it runs, and the `ServerAsAgent` default isn't read.
+- **The app's own launchd agent** (AppAgentJob, AppAgentService in
+  libraries/visor_launch_agent): `com.LoganShire.Visor.app`, its plist the
+  bundle's own (`Contents/Library/LaunchAgents/com.LoganShire.Visor.app.plist`,
+  from applications/visor_mac/LaunchAgents), registered with
+  SMAppService.agent: BundleProgram and ProgramArguments the app's own
+  executable with no argument (the app itself, menu bar and all), RunAtLoad,
+  `KeepAlive {SuccessfulExit: false}`, LimitLoadToSessionType Aqua,
+  ProcessType Interactive, AbandonProcessGroup (the agents' hosts and the
+  update's watcher outlive it), and `VISOR_APP_AGENT=1` in its environment,
+  so the app knows launchd started it (and takes it out of its own
+  environment at once). launchd starts Visor at login, and again after a
+  crash (a signal, or an exit that isn't 0); never after Quit Visor, which
+  exits 0. **Start at Login** (the menu, and Settings › Where it runs: the
+  `StartsAtLogin` default, on unless turned off) registers or unregisters
+  it; only for an app in /Applications. There's no SMAppService.mainApp
+  login item.
+- **One instance, launchd's where it can be** (MacAppInstance, at the
+  launch before anything else): a lock (InstanceLock: flock on
+  `<bundle id>.instance.lock` in the user's temporary folder, let go by the
+  system when the process ends, however it ends) keeps one Visor running. A
+  second instance exits 0 at once (so KeepAlive doesn't start it again) and
+  brings the first forward with its window (a distributed notification),
+  unless launchd started it: a crash's restart that met a person's open.
+  An instance a person opened (the Finder, the Dock, `open`), with the agent
+  wanted, hands itself to launchd: `launchctl kickstart` of the agent, else
+  the agent registered afresh from the bundle (lsregister, unregister,
+  bootout, register, as SMAppService's launch constraint wants after the
+  bundle changed), which starts the app as the agent; it exits 0 once that
+  one holds the lock, so a crash of the Visor that runs is answered. If
+  launchd doesn't start it within a few seconds (Login Items waiting for
+  the person, a refusal), Visor runs where it is and says why in the system
+  log. Launches by launchd, and the update watcher's fallback open
+  (`--without-agent`), run where they are; as second instances they're
+  quiet, the window mid-update being the present marker's alone. A copy
+  outside /Applications (a build to run here, one in Downloads) is a
+  client alone, with no server and no lock, unless
+  `ServesOutsideApplications` (a default) or
+  `VISOR_SERVE_OUTSIDE_APPLICATIONS=1` (CI's launch check) says it may
+  serve. With the agent wanted, the app opts out of macOS's relaunch at
+  login (`disableRelaunchOnLogin`: launchd's is the one start), and its
+  window is never restored from the launch before (`restorationBehavior
+  (.disabled)`), so a login keeps to the menu bar.
+- **The window at launch** (Logan, 25 Nov 2026; AppAgentJob.showsWindow):
+  launchd's own launches, at login and after a crash (and so the start of
+  an update's new build), keep to the menu bar (the window scene's
+  `.suppressed`). A person's open shows it, and so does launchd's process
+  a person's open was handed to: the opener writes a marker beside the
+  lock (`<bundle id>.present`, the time) before it asks launchd, and
+  launchd's process reads it and takes it away; one older than three
+  minutes says nothing. An update's relaunch gives back the window it
+  found: with a window open as the app went, the watcher writes the same
+  marker just before each start (AppRelauncher, AppRelaunchWatch's
+  `present`); with none, the new build keeps to the menu bar. Opening
+  Visor again while it runs shows the window, as before
+  (applicationShouldHandleReopen).
+- **Failing closed** (NCH's check of #537): an instance lock that can't
+  be had at all (its file can't be opened or locked) has that copy run as
+  a client alone, with no server of its own, saying why in the menu,
+  Settings and the system log: it can't know it's the only one. A lock
+  left by an update's watch whose process id now names another process
+  (its start time, from the system, isn't when the lock says the watcher
+  started: RelaunchWatchHolder) holds the hand-back up for nothing.
+- **Quitting** (Quit Visor in the menu; ⌘Q in the window only closes it):
+  the server ends its agents (`/api/quit`), then the app exits 0, which the
+  agent leaves stopped until the next login or the next time Visor is
+  opened.
+- **A crash** restarts the app through launchd: the agents' hosts outlive
+  it and are picked up; the Sessions container's VM, in the process, goes
+  with it and its placed sessions' agents start again on their latest
+  conversations (docs/containers.md, A server's start).
+- **Updates and rollback** (AppRelauncher, its watcher's script
+  AppRelaunchWatch, tested on Linux): `POST /api/restart {path}` (Visor's
+  own updates through Shireworks Kit, VisorUpdates, the only update path)
+  checks the bundle and starts a detached watcher; the server lets its
+  hosts go and the app exits 0. The watcher, once it has gone, moves the
+  running bundle aside (`Previous/<token>/`), copies the new one in, and
+  starts it through launchd: `<new executable> app-agent start` registers
+  the agent afresh from the bundle in place (its launch constraint is the
+  bundle it was registered from: launchd won't start the job from another
+  until it is) and waits until launchd runs the app. Exiting 0 first, and
+  the watcher starting it, means launchd and the watcher never race: KeepAlive
+  never answers an exit of 0. With Start at Login off it unregisters the
+  agent and ends 1, and the watcher opens the app itself (`open -a …
+  --without-agent`, in the background: `open -g`), as it does if launchd
+  doesn't start it and its copy hasn't come up meanwhile. The app that goes
+  has a minute to end, then TERM, then KILL ten seconds on (each logged).
+  The watch follows the app's process by the instance lock's holder (the
+  lock file's pid): launchd runs the app by a path relative to the bundle,
+  and a second copy that loses the race and exits 0 is never a crash (NCH's
+  check of #537). Up to ten minutes for a process to appear at all (the
+  system's first checks of a new build), then two minutes for its first
+  answer, on 7433 from that process (lsof's listener), or at its socket
+  file while it has no password to listen with, then two minutes up: a
+  build that runs and never serves is undone about five minutes after its
+  start began. `served` starts at 0 whatever the app was doing (until
+  0.72.1 it started at 1 for an app that didn't listen on its port, so
+  "never answered" couldn't be said). If the process goes (launchd's
+  restart after a crash is another process) or never answers, it's stopped
+  (`launchctl bootout` of the agent first, what launchctl said logged, so
+  KeepAlive starts nothing while the bundle is put back; then the lock's
+  holder, TERM then KILL, and one that can't be stopped is said to run
+  still), the previous bundle is put back, `relaunch-rollback.txt` says
+  why, and it's started again the same way.
+  Every session that was running is carried on (launchd starts the app
+  with no `--resume-sessions` list).
+- **The hand-back** (ServerHandBack, LaunchdHandBackSteps, at the app's
+  launch before it makes a server; tested with fakes on Linux): on the
+  first launch of 0.72.1 after an update that the server agent installed
+  (its watcher starts the new build as the agent, `Visor server-agent
+  register`, then the app of the build before reopens), the app finds the
+  server agent registered (or 0.64's plist, or a server answering at the
+  socket file or on 7433). It leaves its data where it is (MacPlaces.settle
+  only once the server is its own), waits out an update's watch still
+  holding `relaunch-watch.lock` (an agent gone mid-watch would be taken for
+  a crash and rolled back), unregisters the agent and boots it out of
+  launchd (TERM: it steps aside, leaving the agents' hosts running; not
+  `/api/quit` first, which ends them), removes 0.64's plist, and waits up to
+  40 seconds for the socket file and the port to be free; a server still
+  answering is then asked to quit (`/api/quit`, as the app's client), the
+  last resort. Then the server starts in the app and picks the hosts up.
+  Each step is logged (`hand-back: …`). A copy outside /Applications, which
+  may not remove the agent, and an app that finds a server still answering
+  after all that, are its clients and serve nothing themselves. The
+  `ServerAsAgent` default is removed.
+- **Kept one release** for the hand-back and for safety, then removed:
+  `Visor --server` (MacServerAgent), `Visor server-agent register`, the
+  server agent's bundled plist (`com.LoganShire.Visor.server.plist`, which
+  SMAppService needs in the bundle to unregister it), ServerAgentJob,
+  ServerAgentService, ServerAgentRestart and ServerAgentWatch. Nothing new
+  uses them.
 - **Shireworks Kit (0.70; Logan, 24 Nov 2026):** every Apple app (Visor
   for iOS, Visor.app, Visor Disk Utility) links shireworks_kit's
   `ShireworksKit` in place of update_kit and shake_kit, and has
@@ -678,9 +736,9 @@ removed (still only when `agentProxy` is set).
   `ShakeKitReportWindow` and the menu's `ShakeKitReportButton`, and starts
   the kit from VisorUpdates too (its window may never open), after
   registering its own answer to offers (`.installMyself`), which wins over
-  the kit's update sheet. The server agent (`Visor --server`) starts
-  `ShireworksCrashes` alone: `ShireworksKit.start()` would write the
-  build for Shireworks from it too, which is the app's. The keys
+  the kit's update sheet. The server agent (`Visor --server`, until
+  0.72.1) started `ShireworksCrashes` alone: `ShireworksKit.start()` would
+  write the build for Shireworks from it too, which is the app's. The keys
   (`ShireworksRepository`, `UpdateKitAppGroup` and, on a Mac,
   `UpdateKitApplicationsBundleIDs`, `BuildVariant`, the `GitHubShared…`
   keys) are stamped in by CI's builds to publish, never committed
@@ -724,8 +782,8 @@ removed (still only when `agentProxy` is set).
 - **One update's watch at a time (0.65; NCH's check of #491):** an
   update 43 seconds after another had the first watcher, still watching,
   take the second's restart for a crash and undo it over the second's
-  install, leaving no Visor.app. Now the watcher (ServerAgentWatch, or
-  AppRelauncher in the app) holds `relaunch-watch.lock` beside the rollback
+  install, leaving no Visor.app. Now the watcher (AppRelauncher's; the
+  server agent's ServerAgentWatch until 0.72.1) holds `relaunch-watch.lock` beside the rollback
   note while it watches (RelaunchWatchLock: `<pid> <started>`), stopping an
   earlier watcher still holding it as it starts; the server answers
   `/api/restart` with 409 ("An update is still being watched; try again in
@@ -756,9 +814,9 @@ removed (still only when `agentProxy` is set).
   socket in MacServerAgent.otherServerGone).
 - **Visor on the Mac (0.66's groundwork; the design of 24 Nov 2026).**
   docs/sandboxed.md is Logan's model: Visor.app bundles its notarized
-  server background process (the server agent), which runs native and
-  container sessions itself, container files only on the Visor, Sessions
-  and Sources volumes. It replaced the 22 Nov design (a sandboxed
+  server, which runs native and container sessions itself, container
+  files only on the Visor, Sessions and Sources volumes (from 0.72.1 in the
+  app's own process: The server in the app, above). It replaced the 22 Nov design (a sandboxed
   Visor.app with its server in-process, and Visor Agent Utility for native
   sessions), which is dropped. What 0.66 laid down for it still holds: the
   app groups `group.com.LoganShire.Visor` and
@@ -812,7 +870,7 @@ removed (still only when `agentProxy` is set).
   unregister`, which it ran, are gone: a person removes Visor by quitting
   it, moving the apps to the Trash and deleting Sessions, Sources and
   Visor in Apple's Disk Utility. What's still outside the volumes (the
-  server agent's registration, the keychain items, the apps' defaults, the
+  app's agent's registration, the keychain items, the apps' defaults, the
   `authorized_keys` lines, which Forget This Device takes out) is for
   Visor's own self-containment to bring onto them or drop.
 - **`Visor admin-token`** prints the admin token to standard output, from

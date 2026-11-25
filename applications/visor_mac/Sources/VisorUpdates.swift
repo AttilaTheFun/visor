@@ -3,12 +3,11 @@
 // session's agent with it, so it answers each offer "install myself"; once
 // the verified build is ready, it waits until no session is mid-turn, then
 // installs it through the server's own relaunch (`/api/restart {path}`,
-// over its socket file, whichever process serves: LocalServer), which
-// keeps the agents running under their hosts and puts the old build back if
-// the new one doesn't stay up: in the app's process the app relaunches
-// (AppRelauncher); the server agent restarts into the build (watched and
-// rolled back the same way: ServerAgentRestart), and the app reopens once
-// the new build has stayed up. A rollback the server says is reported to
+// over its socket file: LocalServer), which keeps the agents running under
+// their hosts and puts the old build back if the new one doesn't stay up:
+// the server is the app's own process, and the app relaunches into the
+// build (AppRelauncher: through its launchd agent, watched and rolled
+// back), from 0.72.1 the one update path. A rollback the server says is reported to
 // Shireworks. The build handed over lies in the app group's container,
 // which every member of the group may write: it's installed only as a
 // real folder, copied out into Visor's own and that copy checked against
@@ -94,7 +93,7 @@ enum VisorUpdates {
             return
         }
         // Until it's known which process serves.
-        while LocalServer.shared.mode == .handingOver {
+        while LocalServer.shared.mode == .handingBack {
             try? await Task.sleep(for: .seconds(2))
         }
         while await LocalServer.shared.busy() {

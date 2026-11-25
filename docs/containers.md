@@ -4,15 +4,16 @@ Each Mac's Visor runs one **Sessions container**: a Linux environment for
 its sessions, on Apple's [Containerization](https://github.com/apple/containerization)
 (each container its own lightweight VM, made by the framework: Visor
 supplies a kernel, an init filesystem and an image, and writes no VM code
-of its own). It lives in Visor's background server (`Visor --server`), so
-quitting or reopening Visor.app leaves it running; an update of the server
+of its own). It lives in Visor's server, which from 0.72.1 is Visor.app's
+own process (docs/DEVELOPMENT.md, The server in the app): quitting Visor
+stops it; an update of the app, or a crash (launchd starts Visor again),
 restarts it, and its sessions resume from Sessions.
 
 This is being built in steps. What's here now: **PR 1, the assets and
 settings** (the Containerization dependency, the virtualization
 entitlement, the assets fetched, checked and kept, Visor's Linux programs
 staged for it, its settings and Settings' readiness row), and **PR 2, the
-engine** (the container booted in the server agent, its relay to
+engine** (the container booted in the server, its relay to
 agent-proxy, the egress check, processes exec'd in it, the idle stop, and
 its status in the API and Settings), and **PR 3, the driver link and the
 Linux agent-wrapper** (Visor's driver carried in on a socket of its own,
@@ -95,14 +96,14 @@ in the data folder's `hosts/` (an update leaves the agents running): then
 the data folder stays in the home folder until a start with none running (a
 restart of the Mac, or Quit Visor). Without the volume, everything is where
 it was. Once the data is on the volume, a start that finds it unmounted
-waits a minute for it (at login it can come after the server agent), and
-the server agent ends rather than serve from an empty folder; launchd starts
-it again.
+waits a minute for it (at login it can come after Visor), and Visor
+started by launchd ends rather than serve from an empty folder; launchd
+starts it again.
 
 The goal (Logan, 21 Nov 2026): set Visor up on a clean Mac, use it with
 containers only, uninstall it, delete the volumes, and the Mac is as it
-was. So, beside the volumes: the server agent's plist is the app bundle's
-(SMAppService: docs/DEVELOPMENT.md, The server as a background agent), the
+was. So, beside the volumes: the app's launchd agent's plist is the app
+bundle's (SMAppService: docs/DEVELOPMENT.md, The server in the app), the
 `authorized_keys` lines Visor adds end in `visor:<device>` (Forget This
 Device, in a computer's settings over SSH, takes its own out), and, with the
 container on, the server's own `claude -p` runs in it (Containers only,
@@ -247,10 +248,12 @@ engine fetches them when it first starts), with the image it would run.
 
 `ContainerEngine` (`VisorContainerCore`, over a `ContainerBackend`:
 VisorContainer's `ContainerizationMachines` on a Mac, a fake in the tests)
-runs in the server agent (`Visor --server`, MacSessionsContainer), not in
-the app's own server: the VM lives in that one process, so an update of the
-server restarts it, and its sessions resume from Sessions (a turn in
-progress interrupted). There's no helper process of its own.
+runs in the server (MacSessionsContainer), which from 0.72.1 is Visor.app's
+own process (the server agent's, `Visor --server`, before): the VM lives in
+that one process, so quitting Visor stops it, and an update or a crash of
+Visor restarts it (launchd starts Visor again after a crash), and its
+sessions resume from Sessions (a turn in progress interrupted). There's no
+helper process of its own.
 
 - **One container per Mac,** `visor-sessions`: Containerization's
   `LinuxContainer` with `VZVirtualMachineManager`, the kernel, the init
@@ -313,7 +316,7 @@ progress interrupted). There's no helper process of its own.
 ### The driver link
 
 Visor's driver (agent_protocol's `AgentDriver`, gRPC on 127.0.0.1:7434 in
-the server agent) is carried in on **a socket of its own**, not through
+the server) is carried in on **a socket of its own**, not through
 agent-proxy:
 
 - On the Mac, a `UnixBridge` (HostRelay's other half: the same accept
@@ -622,8 +625,10 @@ intake's containment and caps).
   session whose agent isn't running there (stopped) has one started to hand
   back. Nothing returned in time, it carries on from where it was before it
   moved, saying so.
-- **A server's start** (its update, a crash) takes the container down with
-  it: once the engine is given, each session placed there whose agent ran
+- **A server's start** (its update, a crash: from 0.72.1 the server is
+  Visor.app's process, so a crash of Visor, which launchd answers by
+  starting it again, is one) takes the container down with it: once the
+  engine is given, each session placed there whose agent ran
   has its next agent started, on its latest conversation, and one whose turn
   was cut short is told to pick it up, as a host session is. The sessions
   placed there keep it from its idle stop, and start it with the server

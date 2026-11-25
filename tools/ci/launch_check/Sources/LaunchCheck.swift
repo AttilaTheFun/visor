@@ -83,7 +83,9 @@ enum LaunchCheck {
     static func run(_ app: VisorApp, path: String, options: Options) -> String? {
         let opened: Program
         do {
-            opened = try Program.run("/usr/bin/open", ["--env", "PATH=\(path)", app.url.path])
+            // Its copy isn't in /Applications, which Visor.app serves from
+            // alone unless told it may (VISOR_SERVE_OUTSIDE_APPLICATIONS).
+            opened = try Program.run("/usr/bin/open", ["--env", "PATH=\(path)", "--env", "VISOR_SERVE_OUTSIDE_APPLICATIONS=1", app.url.path])
         } catch {
             return "\(error)"
         }
