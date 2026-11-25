@@ -628,6 +628,15 @@ longer a place it runs, and the `ServerAsAgent` default isn't read.
   the person, a refusal), Visor runs where it is and says why in the system
   log. Launches by launchd, and the update watcher's fallback open
   (`--without-agent`), run where they are.
+- **The window at launch** (Logan, 25 Nov 2026; AppAgentJob.showsWindow):
+  launchd's own launches, at login and after a crash (and so the start of
+  an update's new build), keep to the menu bar (the window scene's
+  `.suppressed`). A person's open shows it, and so does launchd's process
+  a person's open was handed to: the opener writes a marker beside the
+  lock (`<bundle id>.present`, the time) before it asks launchd, and
+  launchd's process reads it and takes it away; one older than a minute
+  says nothing. Opening Visor again while it runs shows the window, as
+  before (applicationShouldHandleReopen).
 - **Quitting** (Quit Visor in the menu; ⌘Q in the window only closes it):
   the server ends its agents (`/api/quit`), then the app exits 0, which the
   agent leaves stopped until the next login or the next time Visor is

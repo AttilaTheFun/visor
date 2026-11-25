@@ -18,6 +18,11 @@
 // - Started by launchd (the agent's `VISOR_APP_AGENT`), or by the update
 //   watcher's open (`--without-agent`: it asked launchd already), it runs
 //   here.
+// - The window: a person's open shows it, and so does launchd's process
+//   that a person's open was handed to (a marker beside the lock, written
+//   before launchd is asked and taken away by launchd's process); launchd's
+//   own launches, at login and after a crash, keep to the menu bar
+//   (AppAgentJob.showsWindow; Logan, 25 Nov 2026).
 // - `Visor app-agent start` (the update's watcher, AppRelauncher): the
 //   same start, waited out as long as a registration takes, ending 0 once
 //   launchd runs the app; 1 when it doesn't, or the agent isn't wanted (it's
@@ -43,6 +48,11 @@ enum MacAppInstance {
     /// Whether launchd started this process as the app's agent: read once,
     /// before the variable is taken out of the environment.
     private(set) static var fromAgent = false
+
+    /// Whether Visor's window shows at this launch: a person's open, or
+    /// one handed to launchd, does; launchd's own, at login or after a
+    /// crash, keeps to the menu bar (AppAgentJob.showsWindow).
+    private(set) static var showsWindow = true
 
     /// The lock's file.
     static var lockPath: String { InstanceLock.path(bundleID: MacPlaces.own) }
@@ -75,6 +85,14 @@ enum MacAppInstance {
         fromAgent = ProcessInfo.processInfo.environment[AppAgentJob.environmentVariable] != nil
         unsetenv(AppAgentJob.environmentVariable)
         if arguments.contains("-visor.fixture") { return }
+        let marker = AppAgentJob.presentMarker(bundleID: MacPlaces.own)
+        if fromAgent {
+            // A person's open handed to launchd asked for the window; taken
+            // away, so a crash's restart later doesn't show it.
+            let asked = AppAgentJob.askedAt(try? String(contentsOfFile: marker, encoding: .utf8))
+            showsWindow = AppAgentJob.showsWindow(fromAgent: true, askedAt: asked, now: Int(Date().timeIntervalSince1970))
+            try? FileManager.default.removeItem(atPath: marker)
+        }
         let path = lockPath
         let launch = AppAgentJob.launch(lockHeld: heldByAnother(path), fromAgent: fromAgent,
                                         withoutAgent: arguments.contains(AppRelauncher.withoutAgent), wanted: AppAgentService.wanted,
@@ -86,6 +104,8 @@ enum MacAppInstance {
             exit(0)
         case .handToLaunchd:
             let bundleID = MacPlaces.own
+            // launchd's process shows the window this person opened Visor for.
+            try? "\(Int(Date().timeIntervalSince1970))\n".write(toFile: marker, atomically: true, encoding: .utf8)
             let started = finished {
                 await AppAgentService.start(bundleID: bundleID, attempts: 1, refusedBackoff: [],
                                             started: { InstanceLock.isHeld(path) }, log: { NSLog("Visor: %@", $0) })
@@ -94,6 +114,7 @@ enum MacAppInstance {
                 NSLog("Visor: launchd runs Visor as its agent (process %d): this one ends", InstanceLock.holder(path) ?? 0)
                 exit(0)
             }
+            try? FileManager.default.removeItem(atPath: marker)
             NSLog("Visor: launchd didn't start Visor as its agent: it runs here, with no restart after a crash until it's next started at login")
         case .run:
             break

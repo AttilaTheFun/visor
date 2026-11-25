@@ -107,6 +107,41 @@ public enum AppAgentJob {
         return .handToLaunchd
     }
 
+    /// Whether the window shows at the launch (Logan, 25 Nov 2026: at login
+    /// and after a crash, the menu bar alone):
+    ///
+    /// | started by                                  | window |
+    /// |---------------------------------------------|--------|
+    /// | a person (the Finder, the Dock, `open`)     | yes    |
+    /// | launchd, at login or after a crash          | no     |
+    /// | launchd, handed a person's open (`askedAt`) | yes    |
+    ///
+    /// A person's open handed to launchd leaves a marker first, the time it
+    /// was written (`presentMarker`), which launchd's process reads and
+    /// takes away; one older than `presentWithin` seconds (a hand-off that
+    /// came to nothing), or from the future, says nothing.
+    public static func showsWindow(fromAgent: Bool, askedAt: Int?, now: Int) -> Bool {
+        guard fromAgent else { return true }
+        guard let askedAt else { return false }
+        return askedAt <= now && now - askedAt <= presentWithin
+    }
+
+    /// How long a hand-off's marker holds: longer than a hand-off takes
+    /// (a registration afresh, about 20 seconds at most).
+    public static let presentWithin = 60
+
+    /// The marker of a person's open handed to launchd: beside the instance
+    /// lock, in this user's temporary folder.
+    public static func presentMarker(bundleID: String, temporary: String = InstanceLock.userTemporaryFolder) -> String {
+        (temporary as NSString).appendingPathComponent(bundleID + ".present")
+    }
+
+    /// The time a marker says it was written (seconds since 1970); nil when
+    /// it says nothing readable.
+    public static func askedAt(_ text: String?) -> Int? {
+        text.flatMap { Int($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
+    }
+
     /// The pauses a handing to launchd gives launchd's process to take the
     /// lock: about 5 seconds.
     public static let handPolls = 25

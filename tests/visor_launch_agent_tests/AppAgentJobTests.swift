@@ -73,6 +73,41 @@ import Testing
     }
 }
 
+/// The window at a launch (Logan, 25 Nov 2026): launchd's own, at login
+/// and after a crash, keeps to the menu bar; a person's open shows it, and
+/// so does launchd's process a person's open was handed to.
+@Suite struct WindowAtLaunchTests {
+    let now = 1_795_000_000
+
+    @Test func launchdAtLoginOrAfterACrashKeepsToTheMenuBar() {
+        #expect(!AppAgentJob.showsWindow(fromAgent: true, askedAt: nil, now: now))
+    }
+
+    @Test func aPersonsOpenShowsTheWindow() {
+        #expect(AppAgentJob.showsWindow(fromAgent: false, askedAt: nil, now: now), "the Finder, the Dock, open")
+        #expect(AppAgentJob.showsWindow(fromAgent: false, askedAt: now - 3_600, now: now), "whatever marker is about")
+    }
+
+    @Test func aPersonsOpenHandedToLaunchdShowsTheWindow() {
+        #expect(AppAgentJob.showsWindow(fromAgent: true, askedAt: now - 2, now: now))
+        #expect(AppAgentJob.showsWindow(fromAgent: true, askedAt: now - AppAgentJob.presentWithin, now: now), "a slow registration")
+    }
+
+    @Test func anOldOrStrangeMarkerSaysNothing() {
+        #expect(!AppAgentJob.showsWindow(fromAgent: true, askedAt: now - AppAgentJob.presentWithin - 1, now: now),
+                "a hand-off that came to nothing: a crash's restart later stays in the menu bar")
+        #expect(!AppAgentJob.showsWindow(fromAgent: true, askedAt: now + 30, now: now), "from the future")
+    }
+
+    @Test func theMarkerIsBesideTheLockAndSaysWhenItWasWritten() {
+        #expect(AppAgentJob.presentMarker(bundleID: "com.LoganShire.Visor", temporary: "/var/folders/xy/T")
+            == "/var/folders/xy/T/com.LoganShire.Visor.present")
+        #expect(AppAgentJob.askedAt("1795000000\n") == 1_795_000_000)
+        #expect(AppAgentJob.askedAt(nil) == nil)
+        #expect(AppAgentJob.askedAt("nonsense") == nil)
+    }
+}
+
 @Suite(.serialized) struct InstanceLockTests {
     private func path() -> String {
         FileManager.default.temporaryDirectory.appendingPathComponent("visor-instance-\(UUID().uuidString).lock").path

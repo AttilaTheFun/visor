@@ -118,8 +118,10 @@ struct VisorMacApp: App {
                 .shireworks()
         }
         .handlesExternalEvents(matching: ["*"])
-        // Shown at launch: a menu bar app's window is not, unless asked.
-        .defaultLaunchBehavior(.presented)
+        // Shown at a person's launch: a menu bar app's window is not, unless
+        // asked. launchd's, at login and after a crash, keeps to the menu
+        // bar (MacAppInstance.showsWindow).
+        .defaultLaunchBehavior(MacAppInstance.showsWindow ? .presented : .suppressed)
         // The sidebar, and a thread about as wide as the transcript grows.
         .defaultSize(width: 1200, height: 820)
         .commands {
