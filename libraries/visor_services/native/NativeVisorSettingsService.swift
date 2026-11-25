@@ -60,8 +60,8 @@ public final class NativeVisorSettingsService: VisorSettingsService {
     /// Everything kept here forgotten: every setting (the `visor.` keys,
     /// and with `domain` the whole of that defaults domain, the app's own)
     /// and every secret, the keychain's under the service where there is
-    /// one, in the group and out of it. Settings' Forget Everything (Visor
-    /// Client on the Mac), before the app quits.
+    /// one, in the group and out of it. Settings' Forget Everything, where
+    /// the host offers it (VisorHost.forgetEverything), before the app quits.
     public func forgetEverything(domain: String? = nil) {
         launch = [:]
         for key in defaults.dictionaryRepresentation().keys where key.hasPrefix("visor.") {

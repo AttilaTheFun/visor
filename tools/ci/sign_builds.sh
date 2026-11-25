@@ -20,17 +20,18 @@
 #   production for a release: ad hoc, else enterprise, else development
 #   profiles), with APPLE_DEVELOPMENT_P12, APPLE_DEVELOPMENT_PASSWORD (empty
 #   or unset: a .p12 with no password) and APPLE_PROFILES;
-# - .zip (Visor.app, its Linux programs sealed in; Visor Disk Utility.app;
-#   Visor Client.app, sandboxed, applications/visor_macos):
+# - .zip (Visor.app, its Linux programs sealed in; Visor Disk Utility.app):
 #   apple_sign.sh, Developer ID, notarized and stapled, with --dmg Visor's
 #   disk image too (Visor.app's alone), with
 #   APPLE_DEVELOPER_ID_P12, APPLE_DEVELOPER_ID_PASSWORD, APPLE_NOTARY_KEY,
 #   APPLE_NOTARY_KEY_ID, APPLE_NOTARY_ISSUER and APPLE_PROFILES (its
-#   Developer ID profile: Visor.app asks for push and the app group;
-#   Visor Client for push and its keychain group; Visor Disk Utility needs
-#   none). Each Mac app's assets go by its own name (mac_app_name):
-#   Visor-<version>-macos.zip, and Visor-Disk-Utility-<version>-macos.zip
-#   and Visor-Client-<version>-macos.zip, each with its own builds.json line;
+#   Developer ID profile: Visor.app asks for push and the app group; Visor
+#   Disk Utility needs none). Each Mac
+#   app's assets go by its own name (mac_app_name): Visor-<version>-macos.zip
+#   and Visor-Disk-Utility-<version>-macos.zip, each with its own
+#   builds.json line and icon (Visor-<version>-icon.png,
+#   Visor-Disk-Utility-<version>-icon.png), which Shireworks' Applications
+#   tab is drawn from;
 # - .apk: android_sign.sh with Visor's release key (`visor`), its
 #   certificate pinned (--android-pin, the workflow's VISOR_ANDROID_PIN),
 #   with ANDROID_SIGNING_KEYSTORE and ANDROID_SIGNING_PASSWORD; the JDK
@@ -60,17 +61,26 @@ ANDROID_KEY=visor
 
 # The name a Mac app's assets go by, by its bundle id: Visor's for
 # Visor.app (Visor-<version>-macos.zip, beside Visor's iPhone and Android
-# apps), and Visor Disk Utility's and Visor Client's own for them, separate
-# apps that Applications offers on lines of their own
-# (Visor-Disk-Utility-<version>-macos.zip, Visor-Client-<version>-macos.zip:
-# the client alone, sandboxed, for a Mac with no server). Any other Mac app
-# isn't one this repository releases.
+# apps), and Visor Disk Utility's own for it, a separate app that
+# Applications offers on a line of its own
+# (Visor-Disk-Utility-<version>-macos.zip). Any other Mac app isn't one this
+# repository releases (the Mac client app, com.LoganShire.VisorClient.macOS,
+# retired: Logan, 24 Nov 2026), and fails the signing.
 mac_app_name() {
     case "$1" in
         com.LoganShire.Visor) echo "$APP" ;;
         com.LoganShire.Visor.DiskUtility) echo "Visor Disk Utility" ;;
-        com.LoganShire.VisorClient.macOS) echo "Visor Client" ;;
         *) return 1 ;;
+    esac
+}
+
+# The bundle ids a build takes the place of, for Applications (builds.json's
+# "replaces", tools/ci/release_assets.sh): Visor.app on a Mac the retired
+# Mac client app (Logan, 24 Nov 2026), whose install it's offered in place
+# of.
+release_asset_replaces() {
+    case "$1:$2" in
+        com.LoganShire.Visor:macos) echo '["com.LoganShire.VisorClient.macOS"]' ;;
     esac
 }
 

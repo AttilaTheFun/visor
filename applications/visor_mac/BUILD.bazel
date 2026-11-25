@@ -12,8 +12,8 @@ package(default_visibility = ["//visibility:public"])
 # (//tests/visor_launch_agent_tests, which checks it is ServerAgentJob's).
 exports_files(["LaunchAgents/com.LoganShire.Visor.server.plist"])
 
-# The Info.plist, for the test that holds ShakeKit on in every build
-# (tests/visor_macos_tests).
+# The Info.plist, for the test that holds Shireworks Kit's keys out of it
+# (tests/visor_plists_tests).
 exports_files(["Info.plist"])
 
 BUNDLE_ID = "com.LoganShire.Visor"
@@ -27,17 +27,17 @@ variant_infoplist(
 )
 
 # The app group shared with Applications and Applications' bundle ids, for
-# UpdateKit (tools/signing; CI's distribution builds set them). The group's
+# Shireworks Kit's updates (tools/signing; CI's distribution builds set them). The group's
 # entitlement is in CI's builds alone: outside the Mac App Store a `group.`
 # group needs a Developer ID profile that grants it, or macOS asks at
 # launch, and Shireworks' signing embeds that profile as it signs them. A
-# build to run here names none, so UpdateKit finds no container and does
+# build to run here names none, so the kit finds no container and does
 # nothing.
 update_infoplist(name = "update_plist")
 
 # And the Visor family's app group, `group.com.LoganShire.Visor`, beside
 # Applications' (tools/app_groups: the sockets in its container, 0.66
-# behind a setting, and the sandboxed release's, docs/sandboxed.md), and the
+# behind a setting, docs/sandboxed.md), and the
 # app's own keychain access group (`<team>.com.LoganShire.Visor`, the
 # data-protection keychain's: Sources/MacSecrets.swift), which the Developer
 # ID profile grants too (its `<team>.*`, and both groups since 22 Nov 2026).
@@ -46,23 +46,24 @@ update_infoplist(name = "update_plist")
 # profile's, with the application identifier beside it.
 # And, where the builder has it (tools/shared_sign_in: CI's builds to
 # publish), the keychain group of the sign-in Logan's apps share
-# (`<team>.com.LoganShire.github`, ShakeKit's), which the profile's
+# (`<team>.com.LoganShire.github`, Shireworks Kit's), which the profile's
 # `<team>.*` grants; its lock is in UPDATE_APP_GROUP's container, above.
 app_group_entitlements(
     name = "app_ci_entitlements",
     template = "app.ci.entitlements",
 )
 
-# ShakeKit's shared sign-in (GitHubShared…): in CI's builds alone, where the
-# builder has it. It is ShakeKit's only sign-in (shake_kit 0.3): every other
-# build, or a Mac not signed in to Shireworks, reports nothing.
+# Shireworks Kit's shared sign-in (GitHubShared…, and ShireworksRepository):
+# in CI's builds alone, where the builder has it. It is the kit's only
+# sign-in: every other build, or a Mac not signed in to Shireworks, files
+# nothing.
 shared_sign_in_infoplist(name = "shared_sign_in_plist")
 
 # Visor on the Mac: a menu bar app whose
-# window is Visor's macOS client, with the Mac's Visor server under it. It
-# took over from Visor Server (applications/visor_menubar) and the Mac
-# client (applications/visor_macos) in 0.46, and keeps what it has in places
-# of its own (Sources/MacPlaces.swift). The same executable is the server
+# window is Visor's client, with the Mac's Visor server under it. It took
+# over from Visor Server (applications/visor_menubar) and the Mac's own
+# client app in 0.46, and keeps what it has in places of its own
+# (Sources/MacPlaces.swift). The same executable is the server
 # agent with `--server` (Sources/MacServerAgent.swift: the server headless,
 # a launchd job, while the app's `ServerAsAgent` default is on) and
 # agent-proxy with `--agent-proxy`. The app is its server's client alone,
@@ -79,8 +80,7 @@ swift_library(
     module_name = "VisorMac",
     deps = [
         "//:foundation",
-        "@swiftpkg_shake_kit//:ShakeKit",
-        "@swiftpkg_update_kit//:UpdateKit",
+        "@swiftpkg_shireworks_kit//:ShireworksKit",
         "//libraries/message_cache",
         "//libraries/visor_agent_proxy:visor_agent_proxy_host",
         "//libraries/visor_client",

@@ -1,13 +1,12 @@
 // The app's side of push notifications on iOS: the token the system gives
 // and the notification the user opens, handed to the shared handler (which
 // the client listens to). The one place the app meets UIKit's application
-// delegate, which is where iOS delivers both. And its build, written at
-// launch for Applications (UpdateKit), which alone tells of updates.
-// And which ways the app turns, which the fixture's pictures on its side
+// delegate, which is where iOS delivers both. (Its build is written for
+// Shireworks by the root view's `.shireworks()`: VisorApp.) And which ways
+// the app turns, which the fixture's pictures on its side
 // hold.
 
 #if os(iOS)
-import UpdateKit
 import UIKit
 import UserNotifications
 import VisorClient
@@ -16,9 +15,9 @@ import VisorServices
 final class PushDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        // Before the root view's `.shireworks()` starts Shireworks Kit,
+        // which leaves an app's own delegate in place.
         UNUserNotificationCenter.current().delegate = self
-        // After the delegate: the library leaves an app's own in place.
-        AppUpdates.start()
         return true
     }
 

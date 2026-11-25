@@ -6,7 +6,7 @@
 // socket file (LocalServer).
 
 import AppKit
-import ShakeKit
+import ShireworksKit
 import SwiftUI
 import VisorClient
 import VisorProtocol
@@ -26,6 +26,11 @@ struct VisorMacApp: App {
 
     /// The window that is Visor's client.
     static let mainWindow = "main"
+
+    /// Where a bug reported from the menu, with no window open, is filed:
+    /// the Info.plist's ShireworksRepository (CI stamps it in), else this
+    /// repository.
+    static var reportRepository: String { CrashesConfiguration.main.repository ?? "AttilaTheFun/visor" }
 
     /// This app's version and build ("0.31 (8)").
     static var bundleVersion: String {
@@ -94,10 +99,12 @@ struct VisorMacApp: App {
                 .onOpenURL { url in store.open(url.absoluteString) }
                 .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
                 .background(SceneOpeners())
-                // Help › Report a Bug… (below) files one in this
-                // repository, as an issue (ShakeKit: on in every build, by
-                // its Info.plist).
-                .shakeToReport(repository: "AttilaTheFun/visor")
+                // Shireworks Kit: crashes and Help › Report a Bug… (below)
+                // filed as issues in the Info.plist's ShireworksRepository,
+                // and Shireworks' offers of an update answered as
+                // VisorUpdates registered (CI's builds to publish carry the
+                // keys: tools/shared_sign_in, tools/signing).
+                .shireworks()
         }
         .handlesExternalEvents(matching: ["*"])
         // Shown at launch: a menu bar app's window is not, unless asked.
@@ -138,5 +145,8 @@ struct VisorMacApp: App {
         Settings {
             ServerSettingsPane(local: local)
         }
+        // Report a Bug… with every window closed (the menu's button,
+        // VisorMenu, or Help's command): Shireworks Kit's own window.
+        ShakeKitReportWindow(repository: Self.reportRepository)
     }
 }

@@ -35,13 +35,13 @@ public enum VisorHost {
     public static var appVersion = ""
     public static var platformName = ""
     /// Whether the host can save a file where the person chooses (a save
-    /// panel): not Visor Client on the Mac, whose sandbox reads the files
-    /// the person picks and writes none. An exported session is shared
-    /// from there instead.
+    /// panel): not a sandboxed host that reads the files the person picks
+    /// and writes none. An exported session is shared from there instead.
     public static var savesFiles = true
     /// What the host does to forget everything it keeps, where it can, and
-    /// quit: Settings' Forget Everything (Visor Client on the Mac: its
-    /// keychain items, its computers and its settings). Nil elsewhere.
+    /// quit: Settings' Forget Everything (its keychain items, its computers
+    /// and its settings). Nil where the host has none, as every host has
+    /// today.
     public static var forgetEverything: (@MainActor () -> Void)?
 }
 

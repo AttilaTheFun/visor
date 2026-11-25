@@ -1,0 +1,25 @@
+load("@rules_swift//swift:swift.bzl", "swift_test")
+load("//tools/swift:defs.bzl", "STRICT_SWIFT")
+
+# The app groups CI's builds of Visor.app and Visor Disk Utility ask for
+# (tools/app_groups), the shared sign-in's Info.plist fragments
+# (tools/shared_sign_in: all of it or none), and the apps' own Info.plists,
+# which carry none of Shireworks Kit's keys (CI stamps them in). Plists read
+# as data, so on Linux too (//tests:linux).
+swift_test(
+    name = "visor_plists_tests",
+    copts = STRICT_SWIFT,
+    srcs = glob(["*.swift"]),
+    data = [
+        "//applications/visor_mac:app_ci_entitlements",
+        "//applications/visor_disk_utility:app_ci_entitlements",
+        "//applications/visor_disk_utility:Info.plist",
+        "//applications/visor_disk_utility:shared_sign_in_plist",
+        "//applications/visor_ios:Info.plist",
+        "//applications/visor_ios:shared_sign_in_plist",
+        "//applications/visor_mac:Info.plist",
+        "//applications/visor_mac:shared_sign_in_plist",
+    ],
+    module_name = "VisorPlistsTests",
+    deps = ["//:foundation"],
+)

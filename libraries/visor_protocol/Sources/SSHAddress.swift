@@ -109,7 +109,7 @@ public struct SSHAddress: Equatable, Hashable, Sendable {
 
     /// The places the socket file has been, in turn, for a server that
     /// gave none: the Visor volume's (0.65; a link to the group's in 0.66),
-    /// the app group's container's (0.66, behind a setting; 0.67's), and
+    /// the app group's container's (0.66, behind a setting), and
     /// `~/.visor`'s (before the volume; a link to the one placed, for a
     /// release).
     public static let defaultAttachCommand = "sh -c 'if [ -S /Volumes/Visor/run/server.sock ]; then exec nc -U /Volumes/Visor/run/server.sock; "

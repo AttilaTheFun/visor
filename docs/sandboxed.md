@@ -1,115 +1,46 @@
-# Visor, sandboxed (the Nimbus model): design note (22 Nov 2026)
+# Visor on the Mac: Visor.app and its server (design, 24 Nov 2026)
 
-**Logan (21:0xZ, verbatim):** "Visor is a sandboxed app with the menu bar and client that can out of the box run agents in containers. It will only allow you to do this if you point it to volumes for the Sessions Sources and Visor which you can either create by hand with Disk Utility or install the non-sandboxed Visor Disk Utility to do it. Additionally Visor Agent Utility is an optional application for running native sessions which handles that part."
+**Logan (24 Nov 2026, verbatim):** "It's Visor.app on iOS and macOS. The mac version also bundles the notarized visor server background process which can run sessions natively or in containers it manages whose files are exclusively on the Visor, Sessions and Sources volumes. The Visor Disk Utility app should be stripped of all the migration code and serves purely to create / validate those volumes are created and configured correctly." And, the same day: Visor Agent Utility is dropped from the plan.
+
+This replaces the design of 22 Nov 2026 (a sandboxed Visor.app with its server in its own process, and an unsandboxed Visor Agent Utility for native sessions). What changed, and why, is in section 4.
 
 ## 1. The apps
 
-| App | Bundle id | Sandboxed | Role |
-|---|---|---|---|
-| **Visor** | com.LoganShire.Visor | **yes** | Menu bar, client window, and the **server** with **container sessions**. A client only until the three volumes are picked. |
-| **Visor Disk Utility** | com.LoganShire.Visor.DiskUtility | no (optional) | Creates the three case-sensitive volumes, with owner and Spotlight; Uninstall's privileged parts. As 0.65. |
-| **Visor Agent Utility** | com.LoganShire.Visor.AgentUtility | no (optional, new) | Runs **native** sessions: agent hosts with the user's access, and the native MCP on 7439 including gh. |
-| Visor Client | com.LoganShire.VisorClient.macOS | yes | **Retires**: Visor without volumes is the same thing. |
+| App | Bundle id | Role |
+|---|---|---|
+| **Visor** | com.LoganShire.Visor | Visor.app, on iOS and macOS. On the Mac: the menu bar, the window, and **Visor's server**, a background process bundled in the app and notarized with it. |
+| **Visor Disk Utility** | com.LoganShire.Visor.DiskUtility | Creates the Sessions, Sources and Visor volumes and checks they're as they should be (mounted where Visor looks, case-sensitive, the person's, Visor's left out of Time Machine and Spotlight). Nothing else: no conversion, migration or uninstall. |
 
-**Entitlements:**
-- **Visor:**
-  - app-sandbox, network.client, network.server (7433, LAN, the SSH tunnel);
-  - **virtualization** (Containerization, as Nimbus);
-  - device.audio-input;
-  - files.user-selected.read-write and **files.bookmarks.app-scope** (the volumes);
-  - keychain-access-groups `<team>.com.LoganShire.Visor` (team-prefixed: the keychain group is separate from app groups);
-  - **application-groups** `group.com.LoganShire.Visor` (the Visor family: presence, messaging, sockets) and `group.com.LoganShire.Shireworks` (shared with Shireworks: UpdateKit's installed-version advert and the shared sign-in's lock; Logan, 23 Nov 2026, in place of `group.com.LoganShire.Applications`);
-  - aps-environment.
-- **Agent Utility:** not sandboxed, with the same keychain group and both app groups.
-- **Disk Utility:** as 0.65, plus both app groups, so Uninstall can find the group container.
-- **The updater:** an **embedded, unsandboxed XPC service** inside Visor.app, Sparkle-installer style, because a sandboxed app can't replace itself in /Applications. Developer ID allows it. It also takes over the 2-minute "stayed up" watcher.
+There's no separate client app for the Mac: Visor.app is the client on both systems.
 
-## 2. Where things live
-- **Volumes:** the user picks Sessions, Sources and Visor once, with NSOpenPanel. Visor keeps **security-scoped bookmarks** (app scope) and starts accessing them at launch. Without all three: client only.
-- **The server runs in Visor.app's own process.** It starts at login through `SMAppService.mainApp` (a sandboxed app may register itself), and stays as a menu bar app when its window is closed. There's no separate server agent any more.
-- **Server data:** `/Volumes/Visor/Data`, `Caches`, `Logs` and `Containers` (as 0.65), reached through the bookmark. Client-only data lives in the app's sandbox container.
-- **Sockets:** a sandboxed app can't reach ~/.visor or arbitrary paths, so sockets live in the **group container** under a short folder, `~/Library/Group Containers/group.com.LoganShire.Visor/r/`, about 70 bytes. Host sockets get short names (`h-<8 hex>.sock`), so every path stays under the 104-byte limit:
-  - `server.sock`: the app, local tools, and the SSH fronts' `nc -U`;
-  - the relay and driver sockets for containers;
-  - the agent hosts' sockets.
-- **SSH from the phone:** macOS sshd, then `nc -U` the group-container socket. The connection code carries the path. `~/.visor` goes away.
+## 2. The server
 
-## 3. The split of work
-**Visor.app (sandboxed) owns:**
-- session records (the JSONL → SQLite index), mail, sync, push and clients (REST, WebSocket, gRPC later);
-- the **container engine** (Containerization: VM, mounts of the bookmarked Sessions and Sources, the relay);
-- **agent-proxy** (egress gate, GitHub gate, relay, Visor's MCP for containers);
-- Super Compact and the periodic models check, run **in the container**;
-- JWT minting;
-- the menu, Settings, and the volume picker.
+- **What it is:** today's server agent. Visor.app's own executable, run with `--server` by the user's launchd, registered with SMAppService from the bundle (applications/visor_mac, MacServerAgent; docs/DEVELOPMENT.md, "The server as a background agent"). It's signed and notarized as part of Visor.app, so an update of the app is an update of the server.
+- **What it runs:** every session, natively and in containers:
+  - **native sessions:** agent hosts it starts itself (AgentChildren and HostedChild, through the AgentHostSpawner seam, whose one spawner is the server's own, ProcessAgentHostSpawner), with the user's access, PATH, folders and TCC grants;
+  - **container sessions:** in the Sessions container it manages (Containerization, docs/containers.md), whose files are only on the Visor, Sessions and Sources volumes;
+  - Visor's MCP on 7439, gh included, and agent-proxy (egress gate, GitHub gate, relay), as now.
+- **Its data:** on the Visor volume (`Data`, `Caches`, `Logs`, `Containers`), once it's there (VisorFolders). The volumes are found through volumes.json, which Visor Disk Utility writes, and their mount points.
+- **The app** is the server's client, at its socket file, whichever process runs the server.
 
-**Visor Agent Utility (unsandboxed, optional) owns native sessions:**
-- **spawning** agent hosts (`visor-agent-host`, plus claude or codex with the user's PATH, folders and TCC);
-- the **native MCP on 7439**, including **gh** (#499's in-process gh_mcp, which execs `agent-token` and `/usr/bin/git`; that's simplest outside the sandbox);
-- oss and shireworks pass-through;
-- native sessions' egress, which isn't needed.
+## 3. What still holds from 22 Nov
 
-**The link:** the server already talks to agent hosts over Unix sockets (AgentChildren/HostedChild). With Agent Utility, those sockets sit in the group container, and the server asks the utility to spawn a host instead of `posix_spawn`ing it.
-- The spawn request carries the session id, folder, harness, JWT and environment, over a small socket API in the group container. Presence: each app writes a heartbeat file in the group container, so the others can tell it's installed and running.
-- Everything after the spawn is today's host protocol.
-- Without Agent Utility, native sessions aren't offered, and Migrate… lists only containers and other Macs.
+- **App groups:** `group.com.LoganShire.Visor` (the Visor family's: presence, messaging, the sockets) and `group.com.LoganShire.Shireworks` (shared with Shireworks: Shireworks Kit's installed versions, the shared sign-in's lock; Logan, 23 Nov 2026, in place of `group.com.LoganShire.Applications`). The keychain group stays team-prefixed, `<team>.com.LoganShire.Visor`.
+- **Sockets in the group's container** (0.66, behind a setting until every profile grants the group: MacPlaces' `groupSockets`): `~/Library/Group Containers/group.com.LoganShire.Visor/r/`, with `server.sock`, the Sessions container's `relay.sock` and `driver.sock`, and the agent hosts' `h-<8 hex>.sock`, each path under the 104 bytes a socket's may have (VisorPlaces). The SSH addresses carry the path (`?socket=`), and a client tries the volume's, the group's and `~/.visor`'s in turn without one.
+- **The keychain:** #502's fix, and #503's copy of the client's login-keychain items into the group (written and read back; reads prefer the group's, writes go to the group alone). The login-keychain copies are kept for a rollback to a build that reads them alone; they go stale after, and stay until a person removes them.
+- **The update helper:** Visor.app's updates are installed and watched outside the app's window: download, verify, replace, relaunch, the "stayed up" watch with its rollback, its lock, the 409 while a watch runs, and the per-watch backup (today the server agent's watcher, ServerAgentWatch, and `Visor server-agent register` after an update). **The quarantine lesson** (Shireworks 0.20.1, #561) holds for anything that installs an update: copy with `ditto --noqtn`, check the signature and team, then swap; and CI checks a self-update through the real path in a VM, then launches the new copy.
+- **TCC:** the grants native agents need stay with Visor.app's identity (its server agent's), with no re-prompt; Background Items shows Visor.
 
-## 4. Updates
-- **Visor.app** updates through its embedded unsandboxed installer XPC service: download, verify, replace, relaunch, and the watched rollback with the lock, the 409 and the per-watch backup from 0.65.
-- **Accessories:** each updates itself, through UpdateKit as today, or Visor's updater offers them.
-- **The quarantine lesson (Shireworks 0.20.1, #561):** a sandboxed app that installs its own update from inside the sandbox puts `com.apple.quarantine` on the new copy, which then won't launch (translocation, launchd EPERM, -10810). So the unsandboxed installer XPC must copy with `ditto --noqtn`, check the signature and team, then swap. **The same CI check as #561** goes into 0.67: self-update through the real path in a VM, then launch the new copy. Any sandboxed Visor-family app updates only through an unsandboxed installer, never in-sandbox.
+## 4. What changed, and why
 
-## 5. TCC and keychain
-- **TCC:**
-  - native agents' grants (folders, etc.) move to **Agent Utility's** identity, so there's one re-prompt per grant;
-  - container sessions need none;
-  - microphone and Local Network stay with Visor.app;
-  - Background Items shows Visor (the main app) and Agent Utility when it's installed.
-- **Keychain:** one group, `<team>.com.LoganShire.Visor`, shared by all three apps. **#502's fix is a prerequisite**, since it makes the group keep items. The client's **ungrouped login-keychain items** (server passwords, SSH key), which a sandboxed app can't read, are **copied** into the group in a **0.66 prep step** run by the still-unsandboxed 0.66 app (written to the group and read back; reads prefer the group's, writes go to the group alone).
-  - **The login-keychain copies are kept** for a rollback through the prep release (to 0.66.1, or the update watcher's own undo after a failed update, which read the login keychain alone). Nothing is deleted or updated there: a legacy-flavoured delete reaches the group's item (#502), and an update may too. The copies go stale after the prep release, and Uninstall… removes them; sandboxed Visor can neither read nor delete them (NCH's review of #503).
+- **Visor Agent Utility is dropped.** Its design (an optional unsandboxed app spawning native agent hosts over a socket in the group's container, the native MCP on 7439 and gh moved into it, native agents' TCC grants moved to its identity, native sessions re-spawned by it on migration) existed only because a sandboxed Visor.app couldn't run native agents. Visor.app's server runs them itself, as it does today: one app to install, sign, notarize and update, and no second identity for the grants.
+- **The server stays a background process, not the app's own process.** The 22 Nov design moved it into a sandboxed Visor.app (`SMAppService.mainApp`, no separate server agent). It now stays the bundled, notarized server agent, which runs native and container sessions alike.
+- **Not planned now** (they were for the sandboxed app): the volume picker and its security-scoped bookmarks (the server finds the volumes through volumes.json), Containerization inside the App Sandbox, the in-app server, and the embedded installer XPC service as a sandbox's way out (the update helper above does that work).
+- **The separate Mac client app is retired** (#525): Visor.app is the client.
+- **Visor Disk Utility only creates and checks the volumes** (#524): no conversion of a case-insensitive volume, no migration, no Uninstall… With everything of Visor's on its volumes, a person removes it by deleting the apps and the volumes in Apple's Disk Utility.
 
-## 6. Migration from 0.65
-1. **0.66 prep (unsandboxed):**
-   - copy the client keychain items into the group, keeping the login keychain's for a rollback;
-   - move the sockets and host sockets to the group container (with a ~/.visor link for one release);
-   - keep data on the Visor volume, where 0.65 put it.
-2. **0.67 (sandboxed) first launch:**
-   - container-migration of the app's defaults and small client files into the sandbox container;
-   - the **volume picker**: Visor asks for Sessions, Sources and Visor once, with each name pre-selected;
-   - the server starts in-app and unregisters 0.65/0.66's SMAppService server agent (another Login Items change, with the calm wait from #501);
-   - native sessions: if Agent Utility is installed, their hosts are re-spawned by it (claude resumes each conversation); if not, Visor offers it, or moving the session into the container.
-3. **Visor Client:** its users install Visor instead; no data to move.
+## 5. Open
 
-## 7. PR plan (agent hours, plus review and lease runs)
-1. **This note, agreed by Logan.**
-2. **0.66 prep (about 4 h):** the group container and short socket paths; client keychain items copied into the group; the spawner seam in AgentChildren (posix_spawn now, a remote spawner later).
-3. **Visor Agent Utility (about 6–8 h):** the new app and its SMAppService agent; the spawn API; 7439 with gh moved there; tests; a lease run.
-4. **Visor.app sandboxed (about 8–10 h):**
-   - entitlements;
-   - the volume picker and bookmarks;
-   - the in-app server with the mainApp login item;
-   - **Containerization inside the sandbox**, proved in a lease (virtiofs of bookmarked volumes, sockets in the group container);
-   - the client audit (reused from Visor Client);
-   - the updater XPC service.
-5. **Migration, Disk Utility and retiring Visor Client (about 4–6 h):** Uninstall covers the group container and Agent Utility, plus a signed-alpha lease proof of 0.65 → 0.67.
-
-**Total about 25–30 h, over 2–3 days with reviews: 0.66 (prep) and 0.67 (the switch).**
-
-## 8. Risks
-- **Containerization in the sandbox:** Nimbus does it, so it's feasible. The specifics to prove early in a lease are virtiofs sharing of bookmarked volumes and vsock/Unix sockets in the group container.
-- **Native tools from a sandbox:** that's why gh, agent-token, git, claude and codex for native sessions all live in Agent Utility. In the sandbox, `claude -p` runs only inside the container.
-- **Phone SSH path change:** the connection code must carry the group-container socket path. 0.64-style clients need the ~/.visor link until they update.
-- **Two re-prompts:** Login Items, and TCC for native agents.
-
-## 9. Order
-1. 0.65.2 (in flight).
-2. The Mini volume window.
-3. The container check on the Mini.
-4. **The session moves into containers**, once Shireworks is a pure client and Nimbus carries the workloads. **Do these before 0.67:** container sessions carry over to the sandboxed Visor unchanged (same volumes, same container), while native sessions would otherwise have to be moved to Agent Utility first. Fewer native sessions means a simpler migration.
-5. The design note's PRs (0.66 prep, Agent Utility, sandboxed Visor) can proceed **in parallel** with waiting for Shireworks and Nimbus.
-6. Visor 0.67 ships.
-
-## Logan's decisions (22 Nov, 21:1xZ)
-- **The design is OK'd:** "Sounds good".
-- **App groups:** `group.com.LoganShire.Visor` for the Visor family, `group.com.LoganShire.Nimbus` for the Nimbus family, and `group.com.LoganShire.Applications` for advertising installed versions. All three Visor apps get Visor and Applications. **Changed 23 Nov:** Logan replaced Applications with `group.com.LoganShire.Shireworks` on the Visor family's App IDs; Visor's builds name Visor and Shireworks. Keychain access stays team-prefixed.
-- Go ahead with the PRs, in parallel with the current queue.
+- **Sandboxing.** Whether any part of Visor.app is sandboxed later. Its server, the app's own executable, runs native agents with the user's access, which a sandbox forbids, so a sandboxed app would need the server as a separate helper.
+- **What's still outside the volumes:** the server agent's registration, the keychain items, the apps' defaults, and the `authorized_keys` lines Visor adds (Forget This Device takes a device's out). Deleting the volumes doesn't remove them yet.
+- **Group sockets on by default**, once every Developer ID profile grants the group; then the links in `~/.visor` and the volume's `run/` go.

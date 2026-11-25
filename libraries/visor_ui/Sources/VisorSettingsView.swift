@@ -2,8 +2,8 @@
 // has one, from a Settings button in the navigation bar, and no tab bar):
 // the computers, each one's settings a page of its own; the accounts, the
 // fork's and each Runner's; this device's notifications and appearance
-// (VisorPreferences); About; and, where the host can (Visor Client on the
-// Mac), Forget Everything. The window's one trailing pane
+// (VisorPreferences); About; and, where the host can
+// (VisorHost.forgetEverything), Forget Everything. The window's one trailing pane
 // (VisorRootView, TrailingPane) shows it beside the detail in two columns
 // and as a sheet in one; the Mac's server keeps its own settings in the
 // menu bar app.
@@ -128,9 +128,9 @@ struct VisorSettingsView: View {
         .navigationTitle("Settings")
     }
 
-    /// Forgetting all this app keeps, where its host can (Visor Client on
-    /// the Mac): its computers, their passwords and keys, and its
-    /// settings, then it quits. Asked first.
+    /// Forgetting all this app keeps, where its host can: its computers,
+    /// their passwords and keys, and its settings, then it quits. Asked
+    /// first.
     private func forgetEverything(_ forget: @escaping @MainActor () -> Void) -> some View {
         Section {
             Button("Forget Everything…", role: .destructive) { forgetting = true }
