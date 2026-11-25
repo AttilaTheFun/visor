@@ -74,6 +74,16 @@ mac_app_name() {
     esac
 }
 
+# The bundle ids a build takes the place of, for Applications (builds.json's
+# "replaces", tools/ci/release_assets.sh): Visor.app on a Mac the retired
+# Mac client app (Logan, 24 Nov 2026), whose install it's offered in place
+# of.
+release_asset_replaces() {
+    case "$1:$2" in
+        com.LoganShire.Visor:macos) echo '["com.LoganShire.VisorClient.macOS"]' ;;
+    esac
+}
+
 variant="" out="" ipa_kind="development" dmg="" android_pin=""
 packages=()
 while [ $# -gt 0 ]; do
