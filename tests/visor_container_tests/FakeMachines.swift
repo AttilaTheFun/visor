@@ -1,6 +1,7 @@
 // A ContainerBackend with no VM: a boot is recorded and answers at once;
 // `relay-client check` ends with the status given (a line written to its
-// log); any other process runs until it's signalled or the machine stops;
+// log), and the authorities' trust at once; any other process runs until
+// it's signalled or the machine stops;
 // the main process ends when it's stopped, or when a test says it crashed.
 
 import Foundation
@@ -55,6 +56,10 @@ actor FakeMachine: ContainerMachine {
                                         : "the relay (/run/agent-proxy/relay.sock) closed without an answer\n"
             try Self.append(line, to: process.log)
             return FakeProcess(ended: checkStatus)
+        }
+        // agent-proxy's authorities made the system's trust: done at once.
+        if process.arguments.first == "/bin/sh", process.arguments.last?.contains("update-ca-certificates") == true {
+            return FakeProcess(ended: 0)
         }
         let made = FakeProcess(ended: nil)
         processes.append(made)

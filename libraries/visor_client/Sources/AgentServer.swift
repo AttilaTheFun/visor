@@ -219,6 +219,11 @@ public protocol AgentServer: AnyObject {
     /// if one is given: the session, once its agent has started; else the
     /// server's refusal, in its words (the container off, not ready).
     func startSessionInContainer(title: String, model: String?, effort: String?, text: String?) async throws -> SessionInfo
+    /// The Claude credential of the container's agents (a `claude
+    /// setup-token` token) kept as agent-proxy's, or removed with nil: how
+    /// the container stands after; the server's refusal, in its words, when
+    /// it isn't a setup-token's.
+    func setContainerClaudeCredential(_ token: String?) async throws -> ContainerStatus
 
     // MARK: Super Compact (`/api/sessions/<id>/super-compact`)
 
@@ -308,6 +313,7 @@ public extension AgentServer {
     func startSessionInContainer(title: String, model: String?, effort: String?, text: String?) async throws -> SessionInfo {
         throw AgentServerError.unsupported
     }
+    func setContainerClaudeCredential(_ token: String?) async throws -> ContainerStatus { throw AgentServerError.unsupported }
     var superCompacts: Bool { false }
     func superCompact(of session: String) async throws -> SuperCompactStatus? { throw AgentServerError.unsupported }
     func startSuperCompact(_ session: String) async throws -> SuperCompactStatus { throw AgentServerError.unsupported }

@@ -11,6 +11,7 @@ extension ContainerStatus {
         if let relayPort { o["relayPort"] = .number(Double(relayPort)) }
         if let egress { o["egress"] = .string(egress) }
         if let held { o["held"] = .string(held) }
+        if let claudeCredential { o["claudeCredential"] = .bool(claudeCredential) }
         return .object(o)
     }
 
@@ -21,6 +22,6 @@ extension ContainerStatus {
                   memoryGiB: json["memoryGiB"].int, idleMinutes: json["idleMinutes"].int, image: json["image"].string,
                   since: json["since"].double, processes: json["processes"].int ?? 0, relayPort: json["relayPort"].int,
                   egress: json["egress"].string, errors: json["errors"].array?.compactMap(\.string) ?? [],
-                  held: json["held"].string)
+                  held: json["held"].string, claudeCredential: json["claudeCredential"].bool)
     }
 }

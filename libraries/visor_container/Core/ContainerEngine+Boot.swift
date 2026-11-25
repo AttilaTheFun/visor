@@ -1,9 +1,10 @@
 // Starting the Sessions container: the assets had (fetched once, checked
 // each time), Visor's Linux programs staged under the link rule (the
 // relay-client link check, before the boot), the root filesystem cloned
-// from the template when there's none of this image, the relay and the
-// driver link listening, the boot, and then `relay-client check` run in it
-// (the egress check).
+// from the template when there's none of this image, agent-proxy's
+// authorities staged (ContainerEngine+Trust), the relay and the driver link
+// listening, the boot, the authorities trusted, and then `relay-client
+// check` run in it (the egress check).
 
 import Foundation
 import VisorProtocol
@@ -58,6 +59,7 @@ extension ContainerEngine {
         guard let port = configuration.relayPort else { throw noEgress(ContainerEngineError.noRelayPort.description) }
 
         let rootfs = try prepareRootfs(layout, template: assets.template, image: image)
+        let trusted = stageAuthorities(layout)
         try FileManager.default.createDirectory(at: layout.logs, withIntermediateDirectories: true)
         let relay = HostRelay(socketPath: context.relaySocket.path, port: port, token: context.relayToken, log: context.log)
         try relay.start()
@@ -70,7 +72,9 @@ extension ContainerEngine {
         }
         let spec = ContainerBootSpec(
             name: Self.name, kernel: assets.kernel, initfs: assets.initfs, rootfs: rootfs, image: image.reference(), store: layout.store,
-            cpus: configuration.cpus, memoryBytes: UInt64(configuration.memoryGiB) << 30, shares: shares(tools, configuration),
+            cpus: configuration.cpus, memoryBytes: UInt64(configuration.memoryGiB) << 30,
+            shares: shares(tools, configuration) + (trusted ? [ContainerBootSpec.Share(source: layout.trust.path, destination: Self.trustInGuest,
+                                                                                       readOnly: true)] : []),
             sockets: [ContainerBootSpec.Socket(host: context.relaySocket.path, guest: HostRelay.guestPath),
                       ContainerBootSpec.Socket(host: context.driverSocket.path, guest: Self.driverInGuest)],
             arguments: Self.mainArguments, mainLog: layout.log(process: "relay-client"), bootLog: layout.bootLog)
@@ -95,6 +99,7 @@ extension ContainerEngine {
             let status = await machine.waitMain()
             await self?.mainEnded(status, generation: booting)
         }
+        if trusted { await trustAuthorities(machine, layout) }
         try await checkEgressAgain()
     }
 

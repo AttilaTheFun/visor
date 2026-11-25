@@ -115,6 +115,7 @@ struct ComputerSettingsForm: View {
                 }
             }
             if host.backsUp, host.state == .connected { BackupSection(host: host) }
+            if host.state == .connected { ContainerCredentialSection(host: host) }
             ConnectionCodeSection(host: host)
             // What the client did about its connections, to send to
             // whoever is finding out why one was slow.

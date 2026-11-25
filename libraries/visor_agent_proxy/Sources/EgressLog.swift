@@ -6,11 +6,13 @@
 // relay's TLV 0xE1), the agent the request claims to be, when it names one
 // (`agentClaimed`: its own `X-Agent-ID`, or a forward's client header, so
 // self-reported), the time (ISO 8601), the route (GitHub's
-// hosts, a dial-in, a forward, or plain egress) and how it went. Hosts, not
+// hosts, Anthropic's API, a dial-in, a forward, or plain egress) and how it
+// went. Hosts, not
 // contents: no request line past its target, no header, no token, nothing a
 // tunnel carries is ever written. GitHub's requests, opened by the
 // interceptor (phase 2), are a line each besides: the method, the path's
-// class and the gate's decision, never a body, a header or a token. The one before is kept as `<name>.1.<ext>`
+// class and the gate's decision, never a body, a header or a token; and so
+// are Anthropic's (its interceptor's: allow or refuse). The one before is kept as `<name>.1.<ext>`
 // once the file passes its limit. The file is opened afresh for each line,
 // never through a symbolic link, and kept 0600.
 
@@ -40,6 +42,10 @@ public final class EgressLog: Sendable {
     public enum Route: String, Codable, Sendable, CaseIterable {
         /// One of GitHub's hosts (GitHubHosts), intercepted or not.
         case github
+        /// api.anthropic.com (AnthropicInterceptor), intercepted or not; a
+        /// request in it a line each, with its method, its path's class and
+        /// whether it went on (`allow` or `refuse`).
+        case anthropic
         /// A server's loopback port, by its `<name>.agent.internal` (DialIn).
         case dialIn = "dial-in"
         /// Shireworks' API, with agent-proxy's key for it (Forward); a

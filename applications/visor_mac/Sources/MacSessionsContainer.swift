@@ -7,9 +7,12 @@
 // relay's socket in the data folder's run/ (this user's alone), carried to
 // agent-proxy's relay port in this same process with the relay's token from
 // the server's secrets; and the driver link's socket beside it, carried to
-// this server's driver (agent_protocol's AgentDriver, 127.0.0.1:7434). The
-// sessions placed in it (the server's container runner) have their
-// agent-wrappers started in it, and keep it from its idle stop.
+// this server's driver (agent_protocol's AgentDriver, 127.0.0.1:7434); and
+// agent-proxy's authorities' certificates (GitHub's, at agentProxy's
+// `caCertificate` or the data folder's `agent-proxy/ca.pem`, and Anthropic's
+// beside it), which its guest trusts. The sessions placed in it (the server's
+// container runner) have their agent-wrappers started in it, and keep it
+// from its idle stop.
 
 import DiskVolumes
 import Foundation
@@ -43,6 +46,7 @@ final class MacSessionsContainer: SessionsContainer {
         let resources = Bundle.main.resourceURL
         let linux = resources?.appendingPathComponent("Linux", isDirectory: true)
         let manifest = ContainerManifest.inResources(resources)
+        let proxyPlaces = MacAgentProxy.places
         engine = ContainerEngine(context: ContainerEngine.Context(
             host: .current,
             locate: { try ContainerLayout.locate(DiskVolumes.locate(dataDirectory: status)) },
@@ -53,6 +57,10 @@ final class MacSessionsContainer: SessionsContainer {
             relayToken: { token.value },
             driverSocket: group?.driverSocket.map { URL(fileURLWithPath: $0) } ?? run.appendingPathComponent("driver.sock"),
             driverPort: MacServer.agentProtocolPort,
+            authorities: {
+                [kept.current.agentProxy?.caCertificate ?? proxyPlaces.caCertificate, proxyPlaces.anthropicCertificate]
+                    .map { URL(fileURLWithPath: $0) }
+            },
             assets: images,
             backend: ContainerizationMachines(images: images),
             configuration: {

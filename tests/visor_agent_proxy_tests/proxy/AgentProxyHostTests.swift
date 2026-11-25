@@ -86,8 +86,9 @@ import VisorServer
         #expect(AgentProxySettings.importableName("mcp/token") == "mcp/token")
         #expect(AgentProxySettings.importableName("agent-proxy/mcp/token") == "mcp/token", "as Shireworks named it")
         #expect(AgentProxySettings.importableName("github-token") == "github-token")
+        #expect(AgentProxySettings.importableName("claude/oauth-token") == "claude/oauth-token")
         #expect(AgentProxySettings.importableName("mcp/gh/API_KEY") == "mcp/gh/api_key")
-        for refused in ["password", "relay-token", "ca-key.pem", "mcp/gh", "mcp//x", "mcp/gh/a b", "mcp/a/b/c", "agent-proxy/ca.pem", ""] {
+        for refused in ["password", "relay-token", "ca-key.pem", "mcp/gh", "mcp//x", "mcp/gh/a b", "mcp/a/b/c", "agent-proxy/ca.pem", "claude/other", ""] {
             #expect(AgentProxySettings.importableName(refused) == nil, "\(refused)")
         }
     }

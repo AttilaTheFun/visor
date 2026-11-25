@@ -49,11 +49,12 @@ import VisorProtocol
 
         var layout: ContainerLayout { ContainerLayout(root: root.appendingPathComponent("Visor/Containers", isDirectory: true)) }
 
-        func engine(sessions: String = "/Volumes/Sessions", driverPort: Int = 7434) -> ContainerEngine {
+        func engine(sessions: String = "/Volumes/Sessions", driverPort: Int = 7434, authorities: [URL] = []) -> ContainerEngine {
             let layout = layout
             return ContainerEngine(context: ContainerEngine.Context(
                 host: host.withLock { $0 }, locate: { layout }, linuxPrograms: programs, version: "0.64.7", sessions: sessions,
-                relaySocket: socketFolder.appendingPathComponent("relay.sock"), relayToken: { "relay-secret" }, driverPort: driverPort, assets: assets,
+                relaySocket: socketFolder.appendingPathComponent("relay.sock"), relayToken: { "relay-secret" }, driverPort: driverPort,
+                authorities: { authorities }, assets: assets,
                 pins: AssetsTests.pins(), backend: machines, configuration: { self.configuration.withLock { $0 } },
                 placedSessions: { self.placed.withLock { $0 } }, now: { self.clock.withLock { $0 } },
                 checkTimeout: .seconds(2), checkRetryPause: .milliseconds(10)))
@@ -112,6 +113,47 @@ import VisorProtocol
         // The status, as the API says it.
         #expect(ContainerStatus(json: status.json) == status)
         #expect(status.cpus == 4 && status.memoryGiB == 8 && status.image == AssetsTests.image.value && status.relayPort == 7438)
+        _ = await engine.stop()
+    }
+
+    /// agent-proxy's authorities (GitHub's, Anthropic's): staged, shared
+    /// read-only at /opt/visor/trust, each a `.crt` and all one file (Node's
+    /// NODE_EXTRA_CA_CERTS, as the server names it), made the guest's system
+    /// trust before the egress check; never a key.
+    @Test func agentProxysAuthoritiesAreTrustedInIt() async throws {
+        let rig = try await rig()
+        defer { rig.remove() }
+        let github = rig.root.appendingPathComponent("ca.pem"), anthropic = rig.root.appendingPathComponent("anthropic-ca.pem")
+        let key = rig.root.appendingPathComponent("ca-key.pem")
+        try Data("-----BEGIN CERTIFICATE-----\ngithub\n-----END CERTIFICATE-----\n".utf8).write(to: github)
+        try Data("-----BEGIN CERTIFICATE-----\nanthropic\n-----END CERTIFICATE-----".utf8).write(to: anthropic)
+        try Data("-----BEGIN EC PRIVATE KEY-----\nsecret\n-----END EC PRIVATE KEY-----\n".utf8).write(to: key)
+        let engine = rig.engine(authorities: [github, anthropic, key, rig.root.appendingPathComponent("missing.pem")])
+        let status = await engine.start()
+        #expect(status.state == .running, "\(status.errors)")
+        let machine = try #require(await rig.machines.last)
+        let trust = rig.layout.trust
+        #expect(machine.spec.shares.last == ContainerBootSpec.Share(source: trust.path, destination: "/opt/visor/trust", readOnly: true))
+        #expect(ContainerEngine.authoritiesInGuest == "/opt/visor/trust/agent-proxy-ca.pem")
+        let staged = try FileManager.default.contentsOfDirectory(atPath: trust.path).sorted()
+        #expect(staged == ["agent-proxy-ca.pem", "authority-1.crt", "authority-2.crt"], "no key, nothing missing")
+        let bundle = try String(contentsOf: trust.appendingPathComponent("agent-proxy-ca.pem"), encoding: .utf8)
+        #expect(bundle.contains("github") && bundle.contains("anthropic") && !bundle.contains("PRIVATE KEY"))
+        // Trusted first, then its egress check.
+        let execs = await machine.execs.map(\.arguments)
+        #expect(execs.count == 2 && execs.last == ["/opt/visor/bin/relay-client", "check"])
+        #expect(execs.first.map { Array($0.prefix(2)) } == ["/bin/sh", "-c"] && execs.first?.last?.contains("update-ca-certificates") == true)
+        _ = await engine.stop()
+    }
+
+    @Test func withNoAuthoritiesNothingIsTrusted() async throws {
+        let rig = try await rig()
+        defer { rig.remove() }
+        let engine = rig.engine()
+        _ = await engine.start()
+        let machine = try #require(await rig.machines.last)
+        #expect(!machine.spec.shares.contains { $0.destination == "/opt/visor/trust" })
+        #expect(await machine.execs.map(\.arguments) == [["/opt/visor/bin/relay-client", "check"]])
         _ = await engine.stop()
     }
 

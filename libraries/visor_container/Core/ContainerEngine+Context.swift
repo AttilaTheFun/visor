@@ -1,6 +1,7 @@
 // What the container engine is given by the server that runs it: this Mac,
 // where the Visor volume is, Visor's Linux programs, the relay's
-// socket and token, the driver link's socket and the driver's port, the backends, the settings as they are now, how many
+// socket and token, the driver link's socket and the driver's port, agent-proxy's
+// authorities' certificates to trust, the backends, the settings as they are now, how many
 // sessions are placed in the container, the clock and the log.
 
 import DiskVolumes
@@ -30,6 +31,10 @@ extension ContainerEngine {
         /// Visor's driver (agent_protocol's AgentDriver) on this Mac's
         /// loopback: 7434, unless a test runs its own.
         public var driverPort: Int
+        /// agent-proxy's authorities' certificates (public, never a key),
+        /// as they are at each boot: GitHub's and Anthropic's, which the
+        /// guest trusts (ContainerEngine+Trust). None: nothing trusted.
+        public var authorities: @Sendable () -> [URL]
         public var assets: any ContainerAssetBackend
         /// The kernel and init filesystem pinned (the build's; a test's own).
         public var pins: ContainerPins
@@ -48,7 +53,8 @@ extension ContainerEngine {
 
         public init(host: ContainerHost, locate: @escaping @Sendable () throws -> ContainerLayout, linuxPrograms: URL?, version: String,
                     sessions: String = VolumeRole.sessions.mountPoint, relaySocket: URL, relayToken: @escaping @Sendable () -> String?,
-                    driverSocket: URL? = nil, driverPort: Int = 7434, assets: any ContainerAssetBackend, pins: ContainerPins = .current, backend: any ContainerBackend,
+                    driverSocket: URL? = nil, driverPort: Int = 7434, authorities: @escaping @Sendable () -> [URL] = { [] },
+                    assets: any ContainerAssetBackend, pins: ContainerPins = .current, backend: any ContainerBackend,
                     configuration: @escaping @Sendable () -> ContainerEngineConfiguration,
                     placedSessions: @escaping @Sendable () async -> Int = { 0 }, now: @escaping @Sendable () -> Date = { Date() },
                     log: @escaping @Sendable (String) -> Void = { _ in }, checkTimeout: Duration = .seconds(20),
@@ -62,6 +68,7 @@ extension ContainerEngine {
             self.relayToken = relayToken
             self.driverSocket = driverSocket ?? relaySocket.deletingLastPathComponent().appendingPathComponent("driver.sock")
             self.driverPort = driverPort
+            self.authorities = authorities
             self.assets = assets
             self.pins = pins
             self.backend = backend
