@@ -94,7 +94,9 @@ public struct ServerCommand {
                    `agent-proxy secret-set <name>` keeps one of agent-proxy's
                    secrets (docs/agent-proxy.md), its value piped in on
                    standard input (never a terminal): github-token,
-                   mcp/token, or mcp/<upstream>/<header>;
+                   github-app/key (a PEM), github-app/id,
+                   github-app/installation, mcp/token, or
+                   mcp/<upstream>/<header>;
                    `agent-proxy secret-remove <name>` removes it. Linux's.
 
         Options for run and start:

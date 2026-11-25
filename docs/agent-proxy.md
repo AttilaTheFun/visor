@@ -58,7 +58,8 @@ What stayed in Shireworks:
   and the forward's relay tests;
 - logan-shire-agent's App key and its installation tokens (GitHubAppTokens).
   The gate attaches the auth token from Settings instead, so Visor has no
-  hard dependency on Logan's GitHub Apps;
+  hard dependency on Logan's GitHub Apps. From 0.71.1 an App's tokens are
+  back as a choice: see The GitHub App, below;
 - the relay token handed over on standard input. Here it is a secret of the
   server's, which agent-proxy makes the first time.
 
@@ -232,7 +233,10 @@ new one needs no restart.
 
 | name | what | made by |
 |------|------|---------|
-| `github-token` | the auth token: the GitHub credential the gate attaches for container sessions. Optional: without it, nothing that needs a token reaches GitHub through the proxy | you |
+| `github-token` | the auth token: the GitHub credential the gate attaches for container sessions. Optional: without it (and without the App), nothing that needs a token reaches GitHub through the proxy | you |
+| `github-app/key` | the GitHub App's private key, a PEM (PKCS #1, `BEGIN RSA PRIVATE KEY`, as GitHub issues it, or PKCS #8). With `github-app/id`, the gate attaches the App's installation tokens instead of `github-token` | you |
+| `github-app/id` | the GitHub App's id | you |
+| `github-app/installation` | the App's installation's id. Optional: without it, the installation of the gate's owner | you |
 | `mcp/token` | the sessions' token, shown in `X-Visor-Proxy` | you (on the Mini, Shireworks' `agent-proxy/mcp/token`, imported) |
 | `mcp/<upstream>/<header>` | an upstream's secret header (the header lower-cased) | you |
 | `claude/oauth-token` | the Claude credential (a `claude setup-token` token) the Anthropic interceptor attaches for container sessions. Optional: without it, every request to api.anthropic.com is refused | you, in Settings › Sessions Container (Sign In to Claude…), or the import |
@@ -253,7 +257,77 @@ printf '%s\n' "$token" | /Applications/Visor.app/Contents/MacOS/Visor agent-prox
 ```
 
 A name may also be given with its `agent-proxy/` prefix, as Shireworks names
-it (`agent-proxy/mcp/token`). The command takes one line of at most 16 KB.
+it (`agent-proxy/mcp/token`). The command takes one line of at most 16 KB;
+`github-app/key` takes its PEM, every line of it.
+
+## The GitHub App (optional, from 0.71.1)
+
+Container agents can act on GitHub as a GitHub App, logan-shire-agent,
+never as Logan: the gate mints the App's installation tokens and attaches
+them in place of the auth token. It is a choice (Logan's approval, for
+0.71.1); without the App's secrets nothing changes, so Visor still has no
+hard dependency on his GitHub Apps.
+
+**Which credential.** At each request, from the secrets as kept now:
+1. with `github-app/key` and `github-app/id` both set, the App's
+   installation token;
+2. otherwise `github-token`, as before;
+3. otherwise none: what needs a token is refused.
+
+The key or the id alone isn't the App, and the auth token is used. A
+broken App (a key that isn't one, no installation) doesn't fall back to the
+auth token: its requests are refused, saying why.
+
+**The installation** is `github-app/installation` when it is set.
+Otherwise it is found with the App's JWT: `GET /app/installations`, the one
+whose `account.login` is the gate's owner (the owner of its first
+repository, `AttilaTheFun` in the standard rules), case aside. It is kept.
+
+**The tokens.** The App's JWT is RS256 (issued a minute ago, good for nine
+minutes, the App's id its issuer), signed with its key by swift-crypto's
+_CryptoExtras, on a Mac and on Linux alike. It mints the installation's
+token with `POST /app/installations/{id}/access_tokens`, for the
+repositories the gate's rules list for the owner (none named for
+`owner/*`: all the installation's) and with the permissions the rules need
+(GateRules' `tokenRepositories` and `tokenPermissions`). With `owner/*`, a
+token reaches every repository of the owner the App is installed on, and
+the gate's rules are what limit it, as with a `github-token` today (NCH's
+review of the App source). A token is kept
+until five minutes before it expires, about an hour; requests that come
+while one is minted wait for that one. GitHub turning a token down (401)
+has the next request mint another.
+
+The secrets are read again at most once a minute, like the others, so
+setting or changing them needs no restart. With other secrets, the
+installation and the token kept are forgotten.
+
+**The import**, on a Mac in the desktop session (the secrets are in the
+keychain), from the App's files in `~/Library/Application Support/Agents/github`:
+
+```sh
+"/Applications/Visor.app/Contents/MacOS/Visor" agent-proxy secret-set github-app/key < "$HOME/Library/Application Support/Agents/github/logan-shire-agent.pem"
+python3 -I -c 'import json,sys;print(json.load(open(sys.argv[1]))["id"])' "$HOME/Library/Application Support/Agents/github/logan-shire-agent.json" | "/Applications/Visor.app/Contents/MacOS/Visor" agent-proxy secret-set github-app/id
+```
+
+On Linux, the same with `visor-server agent-proxy secret-set …`. Removing
+`github-app/key` (`agent-proxy secret-remove github-app/key`) goes back to
+`github-token`.
+
+**Its lines in the log** (agent-proxy's: the server's log, Visor-server.log,
+where it runs inside the server; `Visor-agent-proxy.log` as its own job):
+- at the start, and when the secrets change (at the next request):
+  `agent-proxy: github: tokens minted as the GitHub App <id> (installation <n> of <owner>), hourly, for <repositories, comma-separated | all of <owner>'s>`;
+- each mint: `agent-proxy: github: an installation token minted (expires <ISO 8601 time>)`;
+- what went wrong, once until it changes:
+  `agent-proxy: github: the App's key isn't a PEM`,
+  `… no installation of the App for <owner>`,
+  `… GitHub answered <status> minting a token: <GitHub's message>`,
+  `… GitHub answered <status> listing the App's installations: <message>`,
+  `… the App's installation (github-app/installation) isn't a number`.
+  The request is refused as with no token, saying why
+  (`agent-proxy has no auth token for GitHub: <why>`).
+
+No line, refusal or egress log entry holds the key, a JWT or a token.
 
 ## How it runs
 
@@ -312,8 +386,9 @@ don't change.
    to a pipe) into Visor's:
    `… | /Applications/Visor.app/Contents/MacOS/Visor agent-proxy secret-set mcp/token`.
    Set each upstream's secret headers again from their source
-   (`… secret-set mcp/gh/api_key`), and `github-token` when container
-   sessions are to have GitHub.
+   (`… secret-set mcp/gh/api_key`), and `github-token` (or the GitHub App's
+   `github-app/key` and `github-app/id`) when container sessions are to have
+   GitHub.
 2. Add `agentProxy` to Visor's settings.json, copying the upstreams from
    Shireworks' `nativeMCP.endpoints`, without `oss`. `shireworks` becomes
    Nimbus's MCP once it has one. Leave `relayPort` out until the container
