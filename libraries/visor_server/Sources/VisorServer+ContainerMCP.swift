@@ -19,6 +19,16 @@ extension VisorServer {
         containerRunner.passThroughSession(for: token)
     }
 
+    /// What agent-proxy's pass-through asks first, on its own thread, with
+    /// no wait on this server: whether `token` may be a runner's agent's of
+    /// this server's (signed with a live key of its own, for
+    /// `visor.runner-agent`, unexpired: AgentTokens.passThroughCheck). One
+    /// that can't be is refused at once, never waited on (NCH's check of
+    /// #536: forged tokens would fill the pass-through's places).
+    public var passThroughTokenCheck: @Sendable (String) -> Bool {
+        agentTokens.passThroughCheck
+    }
+
     /// Each server agent-proxy's MCP pass-through serves, by its name, at
     /// its URL in the container: what the Sessions container's Claude is
     /// told of keeps Nimbus's alone (ContainerClaudeMCP.served). None without
