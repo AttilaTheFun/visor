@@ -7,11 +7,15 @@
 // asking.
 //
 // The value comes on standard input alone (never an argument, never the
-// environment), its one line, at most 16 KB; a terminal is refused, so a
-// secret is piped in (`… | visor-server agent-proxy secret-set mcp/token`)
-// and never typed where it's echoed or kept in a shell's history. The names:
+// environment), its one line (the App's key: its PEM, every line), at most
+// 16 KB; a terminal is refused, so a secret is piped in (`… | visor-server
+// agent-proxy secret-set mcp/token`) and never typed where it's echoed or
+// kept in a shell's history. The names:
 //
 //   github-token               the GitHub credential the gate attaches
+//   github-app/key             the GitHub App's private key, a PEM: with
+//   github-app/id              its id, the App's installation tokens are
+//   github-app/installation    attached instead (the installation optional)
 //   mcp/token                  the sessions' token (X-Visor-Proxy)
 //   mcp/<upstream>/<header>    an upstream's secret header
 //
@@ -31,7 +35,8 @@ public enum AgentProxyCommand {
         Usage: agent-proxy secret-set <name>      (the value on standard input, not a terminal)
                agent-proxy secret-remove <name>
 
-          <name>   github-token, mcp/token, or mcp/<upstream>/<header>
+          <name>   github-token, github-app/key, github-app/id, github-app/installation,
+                   mcp/token, or mcp/<upstream>/<header>
         """
 
     /// The most a secret may be.
@@ -66,7 +71,8 @@ public enum AgentProxyCommand {
             throw Failure(message: "takes secret-set or secret-remove, and a name\n\n\(usage)", status: 2)
         }
         guard let name = AgentProxySettings.importableName(arguments[1]) else {
-            throw Failure(message: "\(arguments[1]) isn't one of agent-proxy's secrets: github-token, mcp/token, or mcp/<upstream>/<header>", status: 2)
+            throw Failure(message: "\(arguments[1]) isn't one of agent-proxy's secrets: github-token, github-app/key, github-app/id, "
+                          + "github-app/installation, mcp/token, or mcp/<upstream>/<header>", status: 2)
         }
         let key = AgentProxySettings.secretKey(name)
         if arguments[0] == "secret-remove" {
@@ -78,9 +84,21 @@ public enum AgentProxyCommand {
         }
         let data = input.readData(ofLength: maxValue + 1)
         guard data.count <= maxValue else { throw Failure(message: "a secret is at most \(maxValue >> 10) KB", status: 1) }
-        let lines = String(decoding: data, as: UTF8.self).split(whereSeparator: \.isNewline)
-        guard lines.count <= 1, let value = lines.first?.trimmingCharacters(in: .whitespaces), !value.isEmpty else {
-            throw Failure(message: lines.isEmpty ? "nothing on standard input" : "a secret is one line", status: 1)
+        let text = String(decoding: data, as: UTF8.self)
+        let value: String
+        if name == AgentProxySettings.githubAppKeyName {
+            // A PEM, its lines kept.
+            value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !value.isEmpty else { throw Failure(message: "nothing on standard input", status: 1) }
+            guard value.hasPrefix("-----BEGIN "), value.contains("PRIVATE KEY-----") else {
+                throw Failure(message: "\(key) is the GitHub App's private key, a PEM (-----BEGIN RSA PRIVATE KEY-----)", status: 1)
+            }
+        } else {
+            let lines = text.split(whereSeparator: \.isNewline)
+            guard lines.count <= 1, let line = lines.first?.trimmingCharacters(in: .whitespaces), !line.isEmpty else {
+                throw Failure(message: lines.isEmpty ? "nothing on standard input" : "a secret is one line", status: 1)
+            }
+            value = line
         }
         secrets.set(key, value)
         guard case .found(let kept) = secrets.lookup(key), kept == value else {
