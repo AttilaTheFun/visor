@@ -124,6 +124,38 @@ import Testing
         #expect(VisorFolderMove(folders: scratch.folders, answers: { _ in false }).moveData() == .moved(["hosts", "sessions.json"]))
     }
 
+    /// No host answers: the hosts' socket files are dead, and are removed
+    /// rather than moved (a socket can't be copied to another volume, which
+    /// left `hosts/` behind on the Mini), the rest of `hosts/` moving.
+    @Test func deadHostsSocketsAreRemovedNotMoved() throws {
+        let scratch = try Scratch()
+        defer { try? FileManager.default.removeItem(at: scratch.root) }
+        let legacy = scratch.folders.legacyData
+        try scratch.write("{}", "settings.json", in: legacy)
+        try scratch.write("", "hosts/abcdef12-1a2b.sock", in: legacy)
+        try scratch.write("t", "hosts/abcdef12-1a2b.token", in: legacy)
+        #expect(VisorFolderMove(folders: scratch.folders, answers: { _ in false }).moveData() == .moved(["hosts", "settings.json"]))
+        #expect(!scratch.exists("hosts/abcdef12-1a2b.sock", in: scratch.folders.data))
+        #expect(scratch.read("hosts/abcdef12-1a2b.token", in: scratch.folders.data) == "t")
+        #expect(VisorFolderMove.dataFolder(scratch.folders) == scratch.folders.data)
+    }
+
+    /// The settings on the volume and something left in the home folder (a
+    /// move that couldn't take it): the volume's data folder is used, never
+    /// the home folder the settings have left, where a server would make
+    /// new settings, a new id and no sessions.
+    @Test func withTheSettingsMovedTheVolumesDataFolderIsUsedWhateverIsLeft() throws {
+        let scratch = try Scratch()
+        defer { try? FileManager.default.removeItem(at: scratch.root) }
+        try scratch.write("{\"id\":\"kept\"}", "settings.json", in: scratch.folders.data)
+        try scratch.write("x", "hosts/left.token", in: scratch.folders.legacyData)
+        #expect(VisorFolderMove.pending(in: scratch.folders.legacyData) == ["hosts"])
+        #expect(VisorFolderMove.dataFolder(scratch.folders) == scratch.folders.data)
+        // Without settings on the volume, the home folder's is used, as before.
+        try FileManager.default.removeItem(at: scratch.folders.data.appendingPathComponent("settings.json"))
+        #expect(VisorFolderMove.dataFolder(scratch.folders) == scratch.folders.legacyData)
+    }
+
     @Test func whatTheVolumeHasAlreadyIsKeptAndTheHomeFoldersPutAside() throws {
         let scratch = try Scratch()
         defer { try? FileManager.default.removeItem(at: scratch.root) }

@@ -10,7 +10,8 @@
 // (ProtectedSecrets' `keepsLegacy`: written to the group and read back).
 // The login keychain's copies are kept, never deleted or updated, for a
 // rollback to a build that reads them alone (0.66.1, or the update
-// watcher's undo); they go stale after, and Uninstall… removes them. Reads
+// watcher's undo); they go stale after, and stay until a person removes
+// them in Keychain Access (there's no Uninstall… since 24 Nov 2026). Reads
 // ask the group first; writes go to the group alone. A build without the
 // group (signed ad hoc) keeps them in the login keychain, as the log says.
 

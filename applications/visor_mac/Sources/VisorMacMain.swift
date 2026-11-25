@@ -1,5 +1,5 @@
 // The program's start: the server agent when asked for (`--server`, the
-// launchd job's: MacServerAgent; `server-agent register|unregister`),
+// launchd job's: MacServerAgent; `server-agent register`),
 // agent-proxy when asked for (`--agent-proxy`, the launchd job's;
 // `agent-proxy …`, its secrets' command: MacAgentProxy), the admin token
 // for a script (`admin-token`: MacAdminTokenCommand), its usage for

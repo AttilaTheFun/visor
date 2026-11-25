@@ -53,11 +53,19 @@ public struct VisorFolderMove: Sendable {
     }
 
     /// The data folder to use: the volume's once nothing is left to move
-    /// there from the home folder; else the home folder's, as before.
+    /// there from the home folder, or once its settings are there (a move
+    /// that left something behind: what's left is tried again at the next
+    /// start); else the home folder's, as before. Never a home folder the
+    /// settings have left: a server started on one makes new settings, a
+    /// new server id and no sessions (the Mini's window, 24 Nov).
     public static func dataFolder(_ folders: VisorFolders) -> URL {
         guard folders.onVolume else { return folders.legacyData }
+        if FileManager.default.fileExists(atPath: folders.data.appendingPathComponent(settingsName).path) { return folders.data }
         return pending(in: folders.legacyData).isEmpty ? folders.data : folders.legacyData
     }
+
+    /// The server's settings file, which says whose data folder it is.
+    static let settingsName = "settings.json"
 
     /// The items of the home folder's data folder still to move.
     public static func pending(in legacy: URL) -> [String] {
@@ -78,6 +86,10 @@ public struct VisorFolderMove: Sendable {
             log("the data folder stays at \(legacy.path) for now (\(why)); it moves to \(folders.data.path) at a start with none running")
             return .waiting(why)
         }
+        // No host answers at any of them: their socket files are dead, and
+        // a socket can't be copied to another volume (Foundation's move
+        // there is a copy), which left `hosts/` behind on the Mini.
+        removeDeadSockets(in: legacy.appendingPathComponent("hosts", isDirectory: true))
         let files = FileManager.default
         let data = folders.data
         var moved: [String] = []
@@ -171,6 +183,14 @@ public struct VisorFolderMove: Sendable {
     private func answeringHost(in hosts: URL) -> String? {
         let names = (try? FileManager.default.contentsOfDirectory(atPath: hosts.path)) ?? []
         return names.sorted().lazy.map { hosts.appendingPathComponent($0).path }.first { $0.hasSuffix(".sock") && answers($0) }
+    }
+
+    /// The socket files of hosts that no longer answer, removed.
+    private func removeDeadSockets(in hosts: URL) {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: hosts.path)) ?? []
+        let dead = names.filter { $0.hasSuffix(".sock") }
+        for name in dead { try? FileManager.default.removeItem(at: hosts.appendingPathComponent(name)) }
+        if !dead.isEmpty { log("\(dead.count) socket files of hosts that no longer answer removed from \(hosts.path)") }
     }
 
     private func isLink(_ url: URL) -> Bool {
