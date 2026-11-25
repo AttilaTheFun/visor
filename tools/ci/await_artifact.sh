@@ -51,5 +51,5 @@ while [ $SECONDS -lt "$(deadline)" ] && [ $((SECONDS - started)) -lt 6000 ]; do
     fi
     sleep 30
 done
-echo "await_artifact: no $artifact after $(( (SECONDS - started) / 60 )) minutes${building:+ (40 of them with $job running)}" >&2
+echo "await_artifact: no $artifact after $(( (SECONDS - started) / 60 )) minutes${building:+ ($(( (SECONDS - building) / 60 )) of them with $job running)}" >&2
 exit 1
