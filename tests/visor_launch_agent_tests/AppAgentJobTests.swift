@@ -1,0 +1,109 @@
+// Visor.app's own launchd agent (0.72.1): its plist as the app bundle
+// carries it (SMAppService registers it), whose program is the app itself,
+// started at login and again after a crash, never after Quit; and what a
+// launch of the app does: one instance at a time, handed to launchd where
+// it can be. And the lock that keeps it to one.
+
+import Foundation
+import Testing
+@testable import VisorLaunchAgent
+
+@Suite struct AppAgentJobTests {
+    let bundleID = "com.LoganShire.Visor"
+
+    @Test func itsPlistRunsTheAppItselfAndStartsItAgainOnlyAfterACrash() {
+        #expect(AppAgentJob.label(bundleID: bundleID) == "com.LoganShire.Visor.app")
+        #expect(AppAgentJob.plistName(bundleID: bundleID) == "com.LoganShire.Visor.app.plist")
+        #expect(AppAgentJob.label(bundleID: bundleID) != ServerAgentJob.label(bundleID: bundleID), "not the server agent's job")
+        let plist = AppAgentJob.bundledPlist(bundleID: bundleID)
+        #expect(plist["BundleProgram"] as? String == "Contents/MacOS/Visor")
+        #expect(plist["ProgramArguments"] as? [String] == ["Contents/MacOS/Visor"], "the app, menu bar and all: no --server")
+        #expect(!(plist["ProgramArguments"] as? [String] ?? []).contains(ServerAgentJob.argument))
+        #expect(plist["RunAtLoad"] as? Bool == true, "started at login")
+        #expect((plist["KeepAlive"] as? [String: Bool]) == ["SuccessfulExit": false], "started again after a crash; Quit (an exit of 0) stays quit")
+        #expect(plist["LimitLoadToSessionType"] as? String == "Aqua", "a person's graphical session alone")
+        #expect(plist["ProcessType"] as? String == "Interactive")
+        #expect(plist["AbandonProcessGroup"] as? Bool == true, "the agents' hosts and the update's watcher outlive it")
+        #expect((plist["EnvironmentVariables"] as? [String: String]) == [AppAgentJob.environmentVariable: "1"], "the app knows launchd started it")
+        #expect(plist["AssociatedBundleIdentifiers"] as? [String] == [bundleID])
+        #expect(plist["StandardErrorPath"] == nil, "nothing in the home folder")
+    }
+
+    /// The plist in applications/visor_mac/LaunchAgents is the one the
+    /// code means: what the bundle carries.
+    @Test func theCheckedInPlistIsAppAgentJobs() throws {
+        let runfiles = try #require(ProcessInfo.processInfo.environment["TEST_SRCDIR"])
+        let path = runfiles + "/_main/applications/visor_mac/LaunchAgents/com.LoganShire.Visor.app.plist"
+        let data = try Data(contentsOf: URL(fileURLWithPath: path))
+        // Both written the same way (an XML plist's keys are sorted), then compared.
+        let read = try PropertyListSerialization.propertyList(from: data, format: nil)
+        func xml(_ plist: Any) throws -> String {
+            String(decoding: try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0), as: UTF8.self)
+        }
+        #expect(try xml(read) == xml(AppAgentJob.bundledPlist(bundleID: bundleID)))
+    }
+
+    @Test func itsWantedUnlessTurnedOff() {
+        #expect(AppAgentJob.wanted(nil), "on by default, as the server agent was")
+        #expect(AppAgentJob.wanted(true))
+        #expect(!AppAgentJob.wanted(false))
+    }
+
+    @Test func oneInstanceAtATimeHandedToLaunchdWhereItCanBe() {
+        #expect(LaunchAgentJob.installProblem("/Applications/Visor.app/Contents/MacOS/Visor") == nil)
+        let elsewhere = LaunchAgentJob.installProblem("/Users/me/build/Visor.app/Contents/MacOS/Visor")
+        #expect(elsewhere != nil)
+        func launch(held: Bool = false, agent: Bool = false, without: Bool = false, wanted: Bool = true,
+                    problem: String? = nil) -> AppAgentJob.Launch {
+            AppAgentJob.launch(lockHeld: held, fromAgent: agent, withoutAgent: without, wanted: wanted, installProblem: problem)
+        }
+        // A second instance ends at once (an exit of 0: KeepAlive leaves it).
+        #expect(launch(held: true) == .second(showFirst: true), "a person's open: the first comes forward")
+        #expect(launch(held: true, without: true) == .second(showFirst: true))
+        #expect(launch(held: true, agent: true) == .second(showFirst: false), "launchd's restart that met a person's open: quiet")
+        #expect(launch(held: true, wanted: false, problem: elsewhere) == .second(showFirst: true), "whatever the copy")
+        // launchd's own, and the watcher's fallback, run where they are.
+        #expect(launch(agent: true) == .run)
+        #expect(launch(agent: true, wanted: false) == .run, "Start at Login just turned off: the watcher unregisters it")
+        #expect(launch(without: true) == .run, "launchd didn't start it: never asked again in a loop")
+        // A person's open: launchd's, so a crash is answered.
+        #expect(launch() == .handToLaunchd)
+        #expect(launch(wanted: false) == .run, "Start at Login off")
+        #expect(launch(problem: elsewhere) == .run, "a build to run here registers nothing")
+    }
+}
+
+@Suite(.serialized) struct InstanceLockTests {
+    private func path() -> String {
+        FileManager.default.temporaryDirectory.appendingPathComponent("visor-instance-\(UUID().uuidString).lock").path
+    }
+
+    @Test func oneHolderAtATime() throws {
+        let path = path()
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        #expect(!InstanceLock.isHeld(path))
+        let first = try #require(InstanceLock.take(path))
+        #expect(InstanceLock.isHeld(path), "asked by another open of it, as another process asks")
+        #expect(InstanceLock.take(path) == nil, "a second can't take it")
+        #expect(InstanceLock.holder(path) == ProcessInfo.processInfo.processIdentifier, "the holder's process id, for the second to bring forward")
+        #expect(InstanceLock.isHeld(path), "asking let nothing go")
+        first.release()
+        #expect(!InstanceLock.isHeld(path), "let go when its holder ends")
+        let second = try #require(InstanceLock.take(path))
+        second.release()
+    }
+
+    @Test func aStaleFileKeepsNobodyOut() throws {
+        let path = path()
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        try "4242\n".write(toFile: path, atomically: true, encoding: .utf8)
+        #expect(!InstanceLock.isHeld(path), "a crashed holder's file: the lock went with its process")
+        let taken = try #require(InstanceLock.take(path))
+        #expect(InstanceLock.holder(path) == ProcessInfo.processInfo.processIdentifier)
+        taken.release()
+    }
+
+    @Test func itsInTheUsersTemporaryFolder() {
+        #expect(InstanceLock.path(bundleID: "com.LoganShire.Visor", temporary: "/var/folders/xy/T") == "/var/folders/xy/T/com.LoganShire.Visor.instance.lock")
+    }
+}

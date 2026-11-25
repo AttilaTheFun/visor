@@ -1,15 +1,19 @@
-// This Mac's server, as Visor.app has it: the server agent (`Visor
-// --server`, ServerAgentJob), with the app its client, while the app's
-// `ServerAsAgent` default is on; or, until the agent is the only way (one
-// release), the server in the app's own process, as it has always been
-// (docs/DEVELOPMENT.md, The server as a background agent).
+// This Mac's server, as Visor.app has it: in the app's own process, the
+// menu bar app's (0.72.1; Logan, 25 Nov 2026: "The background process IS
+// the menu-bar app, so that I can always tell when it's running, and its
+// windows are the clients." docs/DEVELOPMENT.md, The server in the app).
+// The app is started at login, and again after a crash, by its own launchd
+// agent (AppAgentJob, MacAppInstance: Start at Login); Quit Visor stops the
+// server with it; an update relaunches it (AppRelauncher: its watch and
+// rollback). The server agent of the builds before (`Visor --server`) is
+// no longer a place it runs, and the `ServerAsAgent` default isn't read.
 //
-// Off (the default) and no agent installed: the server is made in the app
-// at its launch, exactly as before, and nothing else is looked at. On, or
-// an agent there from when it was: the app makes no server of its own until
-// the hand-over has decided (ServerHandOver): the agent installed, started
-// and answering, and the app is its client; or the agent removed (it leaves
-// the agents' hosts running), and the server made in the app after all.
+// At the launch, before the window: the server made in the app, unless the
+// server agent is still registered (or 0.64's plist is there), or a server
+// already answers at the socket file or on the port: then it's handed back
+// first (ServerHandBack: the agent unregistered and stopped, stepping aside
+// with the agents' hosts left running, its socket and port waited for), and
+// the server made in the app once they're free, picking the hosts up.
 //
 // Either way the app is only ever the server's client: its window, its
 // menu, Settings, the welcome and its updates reach the server at its
@@ -27,6 +31,7 @@ import VisorLaunchAgent
 import VisorProtocol
 import VisorServer
 import VisorServerApple
+import VisorServerPOSIX
 
 @MainActor
 @Observable
@@ -36,19 +41,23 @@ final class LocalServer {
     enum Mode: Equatable {
         /// The server runs in the app.
         case inApp
-        /// The hand-over is being decided: no server in the app yet.
-        case handingOver
-        /// The server agent serves; the app is its client.
-        case agent
+        /// The server agent is being handed back: no server in the app yet.
+        case handingBack
+        /// Another server answers and stays (a server agent this copy of
+        /// the app may not remove): the app is its client alone.
+        case elsewhere
     }
 
     private(set) var mode: Mode = .inApp
     /// The server in the app's process, while it runs there: made and
-    /// started here, and nothing else's to touch. Nil in agent mode.
+    /// started here, and nothing else's to touch.
     @ObservationIgnored private var server: VisorServer?
-    /// What the hand-over said, for the menu: why the server runs in the
-    /// app after all, when it was wanted as an agent.
+    /// What the hand-back says, for the menu and Settings, while it runs or
+    /// when another server stays.
     private(set) var note: String?
+    /// Whether the app's own launchd agent is wanted: Start at Login, which
+    /// also starts Visor again after a crash (AppAgentJob).
+    private(set) var startsAtLogin = AppAgentService.wanted
     /// How the server stands, as it last said (`GET /api/settings`); nil
     /// while it doesn't answer.
     private(set) var controls: ServerControls?
@@ -65,36 +74,59 @@ final class LocalServer {
     /// this user, no password.
     let client = VisorAgentServer(record: OwnServer.record(name: Host.current().localizedName ?? "This Mac"))
 
-    /// Whether the server runs as the agent: the app's default.
-    static var wanted: Bool { UserDefaults.standard.bool(forKey: ServerAgentJob.defaultsKey) }
+    /// The server agent's job, as the hand-back reaches it in launchd.
     static var job: LaunchAgentJob { ServerAgentJob.job(bundleID: MacPlaces.own, logs: MacPlaces.folders.logs.path) }
 
-    /// Whether the server will be made in the app at its launch: the agent
-    /// isn't wanted, nor registered (or 0.64's plist there).
-    static var runsInApp: Bool {
-        VisorFixture.active || (!wanted && !ServerAgentService.isRegisteredOrLegacy(bundleID: MacPlaces.own))
+    /// Whether the server agent may still be there (registered, or 0.64's
+    /// plist): asked without launchd, before anything is settled, so the
+    /// data is left where it is until it's handed back.
+    static var agentMayBeThere: Bool {
+        !VisorFixture.active && ServerAgentService.isRegisteredOrLegacy(bundleID: MacPlaces.own)
     }
+
+    /// Why Start at Login can't be changed from this copy of the app (a
+    /// build to run here, a copy outside /Applications), or nil.
+    static var startsAtLoginProblem: String? { LaunchAgentJob.installProblem(LaunchAgentJob.ownExecutable) }
 
     /// How often the menu's word of the server is asked for again.
     static let refreshInterval: Duration = .seconds(3)
 
     /// At the app's launch, before its window: the server made in the app,
-    /// as before, unless the agent is wanted or there; then the hand-over.
-    func begin() {
-        if Self.runsInApp {
+    /// or, with the server agent there or another server answering, the
+    /// hand-back first.
+    func begin(agentMayBeThere: Bool) {
+        if VisorFixture.active || (!agentMayBeThere && !Self.serverAnswers) {
             server = MacServer.make()
             mode = .inApp
             return
         }
-        mode = .handingOver
-        Task { await handOver() }
+        mode = .handingBack
+        note = "Handing this Mac's server back to Visor…"
+        Task { await handBack() }
     }
 
-    /// Once launched (AppDelegate): the server in the app listens, and the
-    /// app follows it from then on.
+    /// Once launched (AppDelegate): the server in the app listens, with the
+    /// Sessions container's engine and agent-proxy beside it, and the app
+    /// follows it from then on.
     func launched() {
-        server?.start()
+        if let server { Self.run(server) }
         watch()
+    }
+
+    /// Whether a server answers already, at the socket files or on the
+    /// port.
+    private static var serverAnswers: Bool {
+        POSIXUnixSocket.answers(VisorServer.socketPath) || POSIXUnixSocket.answers(VisorServer.legacySocketPath)
+            || LaunchdHandBackSteps.portAnswers(Envelope.defaultPort)
+    }
+
+    /// The server listening: the screenshot fixture's alone, as it was.
+    private static func run(_ server: VisorServer) {
+        if VisorFixture.active {
+            server.start()
+        } else {
+            MacServer.run(server)
+        }
     }
 
     /// The client's store: this Mac's server added to it once it answers.
@@ -112,7 +144,7 @@ final class LocalServer {
 
     /// Asked again now: how it stands and its sessions.
     func refresh() async {
-        guard mode != .handingOver else { return }
+        guard mode != .handingBack else { return }
         do {
             let now = try await client.controls()
             controls = now
@@ -175,75 +207,54 @@ final class LocalServer {
         OwnServer.join(controls, in: store)
     }
 
-    private func handOver() async {
+    /// The server agent handed back (ServerHandBack), then the server made
+    /// in the app; or, if another server stays, the app its client.
+    private func handBack() async {
         let log: @Sendable (String) -> Void = { ServerPlatform.current.log($0) }
-        // What macOS keeps it waiting on, in the menu meanwhile.
-        let steps = LaunchdHandOverSteps(job: Self.job, bundleID: MacPlaces.own, notice: { [weak self] text in
-            Task { @MainActor in self?.note = text }
-        }, log: log)
-        let outcome = await ServerHandOver.run(wanted: Self.wanted, steps: steps, log: log)
+        let steps = LaunchdHandBackSteps(job: Self.job, bundleID: MacPlaces.own,
+                                         sockets: [VisorServer.socketPath, VisorServer.legacySocketPath],
+                                         lock: RelaunchWatchLock.url.path, askToQuit: { await LocalServer.quitOther() }, log: log)
+        let outcome = await ServerHandBack.run(steps: steps, log: log)
+        // The setting that put the server in the agent: read no more.
+        UserDefaults.standard.removeObject(forKey: ServerAgentJob.defaultsKey)
         switch outcome {
-        case .agent(let pid):
-            log("Visor is the client of the server agent (process \(pid)); no server is made in the app")
+        case .inApp(let done):
+            if let done { log("\(done): the server starts in the app") }
             note = nil
-            mode = .agent
-        case .waiting(let why):
-            // Wanted: never a server here, never the agent stopped. Its
-            // socket file is asked every few seconds, as any computer's is.
-            note = why
-            mode = .agent
-        case .inApp(let why):
-            if let why { log(why) }
-            note = why
             let server = MacServer.make()
             self.server = server
             mode = .inApp
-            server.start()
-            MacAgentProxy.settle()
+            Self.run(server)
+        case .elsewhere(let why):
+            note = why
+            mode = .elsewhere
         }
         await refresh()
     }
 
+    /// `/api/quit` asked of the server that answers (the hand-back's last
+    /// resort): what went wrong, or nil.
+    private static func quitOther() async -> String? {
+        do {
+            try await shared.client.quitServer()
+            return nil
+        } catch {
+            return VisorAgentServer.problem(error)
+        }
+    }
+
     // MARK: The server's own controls, as the menu has them
 
-    /// Quit Visor: in the app's process, the server stops with it (its
-    /// agents ended first, then the app: AppDelegate.applicationShouldTerminate
-    /// asks for `/api/quit`); the server agent runs on, and the app quits
-    /// alone.
+    /// Quit Visor: the server stops with it (its agents ended first, then
+    /// the app, which exits 0: AppDelegate.applicationShouldTerminate asks
+    /// for `/api/quit`), and launchd's KeepAlive leaves it stopped.
     func quitApp() {
         NSApplication.shared.terminate(nil)
     }
 
-    /// Stop Server: the server agent stops (`/api/quit`, its agents ended),
-    /// and launchd leaves it stopped until Start Server or the next login.
-    func stopServer() async -> String? {
-        do {
-            try await client.quitServer()
-        } catch {
-            return VisorAgentServer.problem(error)
-        }
-        for _ in 0..<20 {
-            try? await Task.sleep(for: .milliseconds(500))
-            await refresh()
-            if controls == nil { break }
-        }
-        return nil
-    }
-
-    /// Start Server: launchd starts the agent's job again.
-    func startServer() async -> String? {
-        let started = await Launchctl.run(["kickstart", "\(Launchctl.domain)/\(Self.job.label)"])
-        guard started?.status == 0 else { return "launchctl kickstart: \(started?.output ?? "didn't run")" }
-        for _ in 0..<20 {
-            try? await Task.sleep(for: .milliseconds(500))
-            await refresh()
-            if controls != nil { break }
-        }
-        return nil
-    }
-
     /// Restart Server: the server restarts in place, its agents left
-    /// running (`/api/restart`). In the app's process the app relaunches.
+    /// running (`/api/restart`): the app relaunches (AppRelauncher, through
+    /// its launchd agent when it's wanted).
     func restartServer() async -> String? {
         do {
             try await client.restartServer(installing: nil)
@@ -251,6 +262,25 @@ final class LocalServer {
         } catch {
             return VisorAgentServer.problem(error)
         }
+    }
+
+    /// Start at Login turned on or off: the app's agent registered or not.
+    /// Unregistering from a process launchd didn't start ends nothing, so
+    /// it's done at once; otherwise the app restarts (its agents' hosts
+    /// left running), and the relaunch's watcher registers the agent, which
+    /// starts the app, or unregisters it once this process has gone and
+    /// opens the app itself (`Visor app-agent start`). What went wrong, or
+    /// nil.
+    func setStartsAtLogin(_ on: Bool) async -> String? {
+        guard on != startsAtLogin else { return nil }
+        if let problem = Self.startsAtLoginProblem { return "Start at Login is for Visor in /Applications: \(problem)" }
+        UserDefaults.standard.set(on, forKey: AppAgentJob.defaultsKey)
+        startsAtLogin = on
+        if !on, !MacAppInstance.fromAgent {
+            return await AppAgentService.unregister(bundleID: MacPlaces.own)
+        }
+        if on == MacAppInstance.fromAgent { return nil }
+        return await restartServer()
     }
 
     // MARK: Updates
@@ -261,57 +291,15 @@ final class LocalServer {
     }
 
     /// The verified build at `path` installed by the server
-    /// (`/api/restart {path}`). In the app's process the app relaunches into
-    /// it (AppRelauncher, watched and rolled back); the server agent
-    /// restarts into it (ServerAgentRestart, the same), and the app reopens
-    /// from the bundle once the new build has stayed up. What went wrong,
-    /// or nil.
+    /// (`/api/restart {path}`): the app relaunches into it (AppRelauncher,
+    /// watched and rolled back). What went wrong, or nil.
     func install(_ path: String) async -> String? {
-        guard mode == .agent else {
-            do {
-                try await client.restartServer(installing: path)
-                return nil
-            } catch {
-                return VisorAgentServer.problem(error)
-            }
-        }
-        let before = try? await client.controls().version
+        guard mode == .inApp else { return "This Mac's server isn't Visor's own yet: the update waits until it is" }
         do {
             try await client.restartServer(installing: path)
+            return nil
         } catch {
             return VisorAgentServer.problem(error)
         }
-        // The agent's first answer with the new build, then its watch: as
-        // long as AppRelauncher gives a new build of the app.
-        var answered: String?
-        for _ in 0..<(AppRelauncher.firstAnswer / 2) {
-            try? await Task.sleep(for: .seconds(2))
-            if let now = try? await client.controls().version, now != before {
-                answered = now
-                break
-            }
-        }
-        guard let answered else { return "the server agent did not come back with the new build" }
-        for _ in 0..<(AppRelauncher.watch / 2) {
-            try? await Task.sleep(for: .seconds(2))
-            if let now = try? await client.controls().version, now != answered {
-                return "the server agent's new build did not stay up (it's back at \(now))"
-            }
-        }
-        reopen()
-        return nil
-    }
-
-    /// The app ended and opened again from its bundle, by a shell that
-    /// outlives it. The server agent runs on throughout.
-    func reopen() {
-        let bundle = Bundle.main.bundlePath
-        let script = "while kill -0 \(ProcessInfo.processInfo.processIdentifier) 2>/dev/null; do sleep 0.2; done; sleep 0.5; "
-            + "open -a \(ServerAgentWatch.quoted(bundle))"
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/sh")
-        process.arguments = ["-c", script]
-        guard (try? process.run()) != nil else { return }
-        NSApplication.shared.terminate(nil)
     }
 }

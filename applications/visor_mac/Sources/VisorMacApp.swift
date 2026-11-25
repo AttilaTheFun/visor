@@ -1,9 +1,10 @@
 // Visor on the Mac: a menu bar app, the eye
 // in the bar with the server's menu, whose window is Visor's macOS client,
-// and the Mac's Visor server under both (the server agent, or in the app's
-// process), each keeping what it has in places of its own (MacPlaces). The
-// menu, Settings and the window are the server's clients alike, at its
-// socket file (LocalServer).
+// and the Mac's Visor server under both, in the app's own process (0.72.1:
+// LocalServer; started at login and after a crash by the app's launchd
+// agent, MacAppInstance), each keeping what it has in places of its own
+// (MacPlaces). The menu, Settings and the window are the server's clients
+// alike, at its socket file.
 
 import AppKit
 import ShireworksKit
@@ -16,9 +17,10 @@ import VisorServices
 import VisorSocketFile
 import VisorUI
 
-/// Started by VisorMacMain, once it's no agent-proxy and no server agent.
+/// Started by VisorMacMain, once it's no command or agent of its own, and
+/// the only instance.
 struct VisorMacApp: App {
-    /// This Mac's server: in the app, or the server agent (LocalServer).
+    /// This Mac's server, in the app (LocalServer).
     private let local: LocalServer
     @State private var store: VisorStore
     /// The server's life, the client's pushes and the Dock icon.
@@ -41,14 +43,25 @@ struct VisorMacApp: App {
 
     init() {
         // Where Visor's things are, the home folder's moved onto the Visor
-        // volume first if the server will run here (MacPlaces); the
-        // server's own: its keychain items. Then the server, before anything
-        // asks for it: made here, as it always was, unless it runs as the
-        // server agent (LocalServer, MacServer).
-        MacServer.prepare(runsServer: LocalServer.runsInApp, client: true)
+        // volume first (MacPlaces), unless the server agent of the builds
+        // before may still be serving from them; the server's own: its
+        // keychain items, and its log. Then the server, before anything asks
+        // for it: made here, or once the server agent is handed back
+        // (LocalServer, MacServer).
+        let agentMayBeThere = LocalServer.agentMayBeThere
+        let missing = MacServer.prepare(runsServer: !agentMayBeThere, client: true)
+        MacServer.logToFile()
+        // Started by launchd (at login, the Visor volume can come after it)
+        // with the data on a volume that isn't mounted: it ends rather than
+        // serve from an empty folder, an exit of 1, for launchd to start it
+        // again, as the server agent did.
+        if missing, MacAppInstance.fromAgent {
+            ServerPlatform.current.log("Visor ends for now: its data is on the Visor volume, which isn't mounted; launchd starts it again")
+            exit(1)
+        }
         let local = LocalServer.shared
         self.local = local
-        local.begin()
+        local.begin(agentMayBeThere: agentMayBeThere)
         // The client's own: its cache and its keychain items. Then its
         // services, which the store connects through.
         AgentServerConnection.cache = .open(named: "messages", in: MacPlaces.folder("Client"))
@@ -72,11 +85,9 @@ struct VisorMacApp: App {
         VisorOnboardings.current = MacOnboarding(local: local)
         let store = VisorStore()
         _store = State(initialValue: store)
-        // This Mac's server among the computers, without pairing.
+        // This Mac's server among the computers, without pairing. (agent-proxy
+        // runs inside it, folded in as it starts: MacServer.run.)
         if !VisorFixture.active { local.follow(in: store) }
-        // agent-proxy's launchd job, to settings.json's `agentProxy`, for
-        // the server in the app (the server agent folds it in).
-        if !VisorFixture.active, local.mode == .inApp { MacAgentProxy.settle() }
     }
 
     var body: some Scene {

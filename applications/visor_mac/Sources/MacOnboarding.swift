@@ -34,15 +34,14 @@ private struct MacOnboardingView: View {
                         .foregroundStyle(.secondary)
                 }
                 Section {
-                    if local.mode == .handingOver {
-                        Text("This Mac's server is starting in the background.")
+                    if local.mode == .handingBack {
+                        Text("This Mac's server is starting.")
                     } else if let controls = local.controls {
                         if !controls.hasPassword {
                             Text("Choose a password in Settings: this Mac serves its agents once it has one, and shows here. The agents' command-line tools (Claude Code, Codex) are yours to install.")
                             Button("Open Settings…") { AppDelegate.openSettings() }
                         } else {
-                            Text(local.mode == .agent ? "This Mac's server is running in the background. Add it here to start sessions on it."
-                                                      : "This Mac's server is running. Add it here to start sessions on it.")
+                            Text("This Mac's server is running. Add it here to start sessions on it.")
                             Button("Add This Mac") { OwnServer.add(controls, to: store) }
                         }
                     } else {

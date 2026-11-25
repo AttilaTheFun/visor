@@ -1,9 +1,10 @@
 // Visor's application delegate on the Mac: the server's life (started at
-// launch, its agents ended before a quit, as Visor Server did, asked over
-// the server's API), the
-// client's pushes (the token and the notifications),
-// and the Dock icon, which the app shows only while one of its windows is
-// open: it is a menu bar app first.
+// launch, in the app's own process; its agents ended before a quit, as
+// Visor Server did, asked over the server's API, and the app exits 0, which
+// its launchd agent leaves alone), the client's pushes (the token and the
+// notifications), a second instance's word to show the window
+// (MacAppInstance), and the Dock icon, which the app shows only while one
+// of its windows is open: it is a menu bar app first (LSUIElement).
 
 import AppKit
 import SwiftUI
@@ -16,8 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     func applicationDidFinishLaunching(_ notification: Notification) {
         // The server runs from launch, whether or not a window or the menu
         // is ever opened, once it has a password. Without one, Settings
-        // opens over the window when it shows (SceneOpeners). (The server
-        // agent runs apart: LocalServer.)
+        // opens over the window when it shows (SceneOpeners).
         LocalServer.shared.launched()
         UNUserNotificationCenter.current().delegate = self
         // Once launched, when AppKit delivers the token to this delegate:
@@ -30,14 +30,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         // tools/signing) or its container, the library does nothing.
         VisorUpdates.start()
         Self.followWindows()
+        // A second instance (opened while this one runs) ends at once and
+        // asks for this one's window.
+        DistributedNotificationCenter.default().addObserver(forName: MacAppInstance.showWindow, object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated {
+                if let open = Self.openWindow { Self.show(window: VisorMacApp.mainWindow, with: open) } else { NSApp.activate() }
+            }
+        }
     }
 
-    /// The agents go before the app does, while the server runs in the
-    /// app: quitting waits for them. The server is asked to stop as any
-    /// client asks it (`/api/quit`, at its socket file): it ends its agents,
-    /// then ends the app (AppLifecycle, AppTermination), or, relaunching,
-    /// has already left them. The server agent's are its own: the app quits
-    /// alone.
+    /// The agents go before the app does: quitting waits for them. The
+    /// server is asked to stop as any client asks it (`/api/quit`, at its
+    /// socket file): it ends its agents, then ends the app (AppLifecycle,
+    /// AppTermination), which exits 0, or, relaunching, has already left
+    /// them. Before the hand-back has given the app its server, or with
+    /// another server staying, the app quits alone.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard LocalServer.shared.mode == .inApp, !AppTermination.serverEnded else { return .terminateNow }
         AppTermination.pending = true

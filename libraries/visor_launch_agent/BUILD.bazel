@@ -3,13 +3,15 @@ load("//tools/swift:defs.bzl", "STRICT_SWIFT")
 
 package(default_visibility = ["//visibility:public"])
 
-# Visor's LaunchAgents on a Mac (LaunchAgentJob): jobs of this user's
-# launchd that run Visor.app's own executable with an argument of their own,
-# settled the same way: agent-proxy's (`--agent-proxy`, AgentProxyJob) and
-# the server's (`--server`, ServerAgentJob: the server as a background
-# agent, its hand-over from the app, ServerHandOver, and its restart and
-# watch, ServerAgentRestart). launchctl is the Mac's alone; what's decided,
-# and the watcher's script, build and are tested on Linux too
+# Visor's LaunchAgents on a Mac: jobs of this user's launchd that run
+# Visor.app's own executable. The app's own (AppAgentJob, 0.72.1: the app
+# itself, menu bar and server, started at login and again after a crash;
+# one instance at a time, InstanceLock); agent-proxy's (`--agent-proxy`,
+# AgentProxyJob, a LaunchAgentJob); and the server agent's (`--server`,
+# ServerAgentJob, until 0.72.1: its hand-back to the app, ServerHandBack,
+# and, kept a release, its restart and watch, ServerAgentRestart).
+# launchctl and SMAppService are the Mac's alone; what's decided, and the
+# watchers' scripts, build and are tested on Linux too
 # (//tests/visor_launch_agent_tests).
 swift_library(
     name = "visor_launch_agent",

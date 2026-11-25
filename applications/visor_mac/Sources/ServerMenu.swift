@@ -1,9 +1,9 @@
 // This Mac's server's menu, as Visor Server had it (what is serving, the
 // connection codes, the password to copy, the clients and sessions, the
 // admin token and signing keys, Settings), all from the server's API at its
-// socket file (LocalServer), whichever process runs it. The server agent's
-// has Restart Server and Stop Server too, and Quit Visor quits the app
-// alone; in the app's process, Quit Visor stops the server with it.
+// socket file (LocalServer). The server is the app's own process: Quit
+// Visor stops it, and Start at Login (the app's launchd agent, which also
+// starts it again after a crash) is here and in Settings.
 
 import AppKit
 import SwiftUI
@@ -17,19 +17,19 @@ struct ServerMenu: View {
     var body: some View {
         Group {
             if let note = local.note { Text(note) }
-            if local.mode == .handingOver {
-                Text("Starting this Mac's server in the background…")
+            if local.mode == .handingBack {
+                Text("Starting this Mac's server…")
             } else if let controls = local.controls {
                 serving(controls)
             } else {
                 Text("This Mac's server isn't answering")
                 if let unreachable = local.unreachable { Text(unreachable) }
-                if local.mode == .agent {
-                    Button("Start Server") { act { await local.startServer() } }
-                }
             }
             if let problem { Text(problem) }
             Divider()
+            if LocalServer.startsAtLoginProblem == nil {
+                Toggle("Start at Login", isOn: Binding(get: { local.startsAtLogin }, set: { on in act { await local.setStartsAtLogin(on) } }))
+            }
             // Not SettingsLink: it opens the window behind other apps'.
             Button("Settings…") { AppDelegate.openSettings() }
                 .keyboardShortcut(",")
@@ -47,7 +47,6 @@ struct ServerMenu: View {
         } else {
             Text(controls.listening ? "Visor is serving on port \(String(controls.port))" : "Visor is not listening")
         }
-        if local.mode == .agent { Text("In the background (\(LocalServer.job.label)), \(controls.version)") }
         if let error = controls.lastError { Text(error) }
         if let notice = controls.updateNotice { Text(notice) }
         // What a client types: the address set by hand, else the server's
@@ -101,11 +100,6 @@ struct ServerMenu: View {
         Button("Reset Admin Token…") { Task { await ServerTokenAlerts.reset(local) } }
         Button("Rotate Signing Keys") { Task { await ServerTokenAlerts.rotateKeys(local, emergency: false) } }
         Button("Emergency Key Rotation…") { Task { await ServerTokenAlerts.rotateKeys(local, emergency: true) } }
-        if local.mode == .agent {
-            Divider()
-            Button("Restart Server") { act { await local.restartServer() } }
-            Button("Stop Server") { act { await local.stopServer() } }
-        }
     }
 
     /// Something the server is asked: what went wrong, shown in the menu.

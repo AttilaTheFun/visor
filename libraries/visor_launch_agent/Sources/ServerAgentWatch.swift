@@ -1,3 +1,8 @@
+// Unused from 0.72.1, when the server moved into the app and the app's own
+// relaunch (AppRelauncher, AppRelaunchWatch) became the one update path:
+// kept one release, for `Visor --server` (MacServerAgent), which a build
+// before 0.72.1 starts while updating to it. Remove in the release after.
+//
 // The server agent's restart and its watch (ServerAgentRestart): a plain
 // shell, started detached by the server as it goes, which waits for it to
 // end, installs the new bundle over the running one if there is one (that

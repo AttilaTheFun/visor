@@ -204,8 +204,9 @@ The graph is the same everywhere; what a node is differs with the width:
   and `back` from the chat has nothing to go back from.
 - **The Mac only:** the menu bar's Visor menu and this Mac's server's
   Settings window (password, network paths, push, the Sessions
-  Container with its own `container-sign-in`: the server's API at
-  its socket file, whichever process runs it) are outside this graph:
+  Container with its own `container-sign-in`, Where it runs with Start at
+  Login: the server's API at its socket file, the server in the app's own
+  process) are outside this graph:
   neither is part of `VisorRootView`. The window's File menu has
   **Export…** (the session on screen: Export a session) and **Import…**
   (Restore a session, its file picker open): the same nodes the session's

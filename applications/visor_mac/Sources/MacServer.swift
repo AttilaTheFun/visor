@@ -1,11 +1,13 @@
 // The Mac's Visor server started: the one code path the server in the app
-// (VisorMacApp, LocalServer) and the server agent (`Visor --server`,
-// MacServerAgent) share. The same data folder (on the Visor volume once
+// (VisorMacApp, LocalServer: from 0.72.1 the only one) and the server agent
+// (`Visor --server`, MacServerAgent, kept a release for the hand-back)
+// share. The same data folder (on the Visor volume once
 // it's there, else Application Support/Visor: MacPlaces), keychain items
 // (MacPlaces' server service), message cache, ports (7433, and
 // agent_protocol's 7434), socket file and native runner, whichever process
 // runs it.
 
+import Darwin
 import DiskVolumes
 import Foundation
 import MessageCache
@@ -81,6 +83,40 @@ enum MacServer {
         }
         startAgentProtocol(agentProtocol, serving: server)
         return server
+    }
+
+    /// The server listening, with what runs beside it in its process: the
+    /// Sessions container's engine (docs/containers.md: its VM in this
+    /// process, so a crash or an update of the server takes it down, and
+    /// the next start brings its placed sessions back) and agent-proxy,
+    /// folded in (MacAgentProxy.foldIn: the separate launchd job removed).
+    /// The engine is given first, so turning it on has given agent-proxy
+    /// its relay port before agent-proxy is folded in; started again once
+    /// it is, if a session is placed in it.
+    static func run(_ server: VisorServer) {
+        server.start()
+        let container = MacSessionsContainer(settings: server.settings, placed: { await server.placedInContainer })
+        server.sessionsContainer = container
+        Task {
+            await MacAgentProxy.foldIn(server)
+            await container.engine.serverStarted()
+        }
+    }
+
+    /// The server's lines in `Visor-server.log` among Visor's logs too (on
+    /// the Visor volume once it's there), beside the system log: where the
+    /// server agent wrote them, so a hand-back or a crash can be read after.
+    static func logToFile() {
+        let path = MacPlaces.log("Visor-server.log")
+        try? FileManager.default.createDirectory(atPath: (path as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
+        let file = open(path, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0o600)
+        guard file >= 0 else { return }
+        let system = ServerPlatform.current.log
+        ServerPlatform.current.log = { line in
+            system(line)
+            let text = "\(Date().formatted(.iso8601)) \(line)\n"
+            _ = text.withCString { write(file, $0, strlen($0)) }
+        }
     }
 
     /// Whether the server kept has a password (or asks for none): it serves

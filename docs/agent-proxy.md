@@ -221,7 +221,7 @@ settings change:
 2. In settings.json, set `agentProxy.gh` (`{}` takes every default) and
    remove the `gh` upstream from `agentProxy.mcp.upstreams`. Then, with
    Logan's go, restart the server. agent-proxy starts again with the new
-   settings: as its job, settled to them, or inside the server agent. Check
+   settings: inside the server (Visor.app's, or visor-server's). Check
    its log for "the MCP pass-through is on loopback port 7439: /mcp/gh
    (in-process)".
 3. Check that one gh call passes: from a native session, a read such as
@@ -345,7 +345,9 @@ No line, refusal or egress log entry holds the key, a JWT or a token.
 
 ## How it runs
 
-**On a Mac**, it is a launchd LaunchAgent, `<bundle id>.agent-proxy`
+**On a Mac**, from 0.72.1, it runs inside the server, in Visor.app's own
+process (below). Until then, beside the server in the app, it was a
+launchd LaunchAgent, `<bundle id>.agent-proxy`
 (`com.LoganShire.Visor.agent-proxy`), in
 `~/Library/LaunchAgents/com.LoganShire.Visor.agent-proxy.plist`. Its program
 is **Visor.app's own executable with `--agent-proxy`**: the app's signature
@@ -353,7 +355,7 @@ is what lets it read the server's keychain items, and a tool in
 Contents/Helpers can't carry that. Its log is
 `~/Library/Logs/Visor-agent-proxy.log`, moved aside to `.1` past about 8 MB.
 
-At each start, Visor's server settles the job (AgentProxyJob):
+At each start, Visor's server in the app settled the job (AgentProxyJob):
 - With `agentProxy` set, and no job running, or one of another version,
   other settings (a digest in the plist) or another program, the plist is
   written and the job started (again).
@@ -370,10 +372,12 @@ port is free. With nothing configured it ends with 0 and stays ended. Once
 you've changed `agentProxy`, restart Visor; the job is restarted with the new
 settings.
 
-**In the server agent** (`Visor --server`, docs/DEVELOPMENT.md, The server
-as a background agent), agent-proxy runs inside the server, as on Linux:
-at the agent's start the job is stopped and its plist removed, then the
-proxy is started in the agent when `agentProxy` is set.
+**Inside the server** (Visor.app's own process from 0.72.1, and the
+server agent's, `Visor --server`, before it: docs/DEVELOPMENT.md, The server
+in the app), agent-proxy runs as on Linux: at the server's start the job
+is stopped and its plist removed, then the proxy is started in the
+server's process when `agentProxy` is set (MacAgentProxy.foldIn), and
+started again when it changes.
 
 **On Linux**, visor-server runs the same proxy **inside its own process**,
 started once the server is made, when `agentProxy` is set. A change takes a
