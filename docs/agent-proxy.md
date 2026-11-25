@@ -374,9 +374,25 @@ until five minutes before it expires, about an hour; requests that come
 while one is minted wait for that one. GitHub turning a token down (401)
 has the next request mint another.
 
+**Its bot, the container agents' git identity** (0.72.1). The App's bot
+user is who the Sessions container's agents commit as (docs/containers.md,
+git's identity in the container): its name `<slug>[bot]`, its email
+`<id>+<slug>[bot]@users.noreply.github.com`. The slug is the App's, from
+`GET /app` with its JWT; the id is its bot user's, from `GET
+/users/<slug>%5Bbot%5D` (the brackets escaped) with an installation token,
+not anonymously (anonymous reads share the containers' sixty an hour). It
+is found at the start, beside the installation, and kept for the secrets;
+askers that come together share one finding, and one that failed is tried
+again at the next asking. The server, with agent-proxy inside it, asks the
+GitHub interceptor for it (`gitIdentity`, through `AgentProxyHost.Running`)
+as each container agent starts, and sets `GIT_AUTHOR_NAME`,
+`GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_NAME` and `GIT_COMMITTER_EMAIL` from it.
+Without the App, or when it couldn't be found, none is set.
+
 The secrets are read again at most once a minute, like the others, so
 setting or changing them needs no restart. With other secrets, the
 installation and the token kept are forgotten.
+With other secrets, the bot is found again.
 
 **The import**, on a Mac in the desktop session (the secrets are in the
 keychain), from the App's files in `~/Library/Application Support/Agents/github`:
@@ -395,6 +411,14 @@ where it runs inside the server; `Visor-agent-proxy.log` as its own job):
 - at the start, and when the secrets change (at the next request):
   `agent-proxy: github: tokens minted as the GitHub App <id> (installation <n> of <owner>), hourly, for <repositories, comma-separated | all of <owner>'s>`;
 - each mint: `agent-proxy: github: an installation token minted (expires <ISO 8601 time>)`;
+- its bot, once found (at the start, and when the secrets change):
+  `agent-proxy: github: commits as <slug>[bot] <id>+<slug>[bot]@users.noreply.github.com`;
+- why the container agents have no git identity, once until it changes:
+  `agent-proxy: github: no git identity for container agents: <why>`, where
+  `<why>` is `no GitHub App (github-app/key and github-app/id)`, `GitHub
+  answered <status> for the App (GET /app): <message>`, `GitHub answered
+  <status> for the App's bot user (GET /users/<slug>[bot]): <message>`, or
+  what kept a token from being minted;
 - what went wrong, once until it changes:
   `agent-proxy: github: the App's key isn't a PEM`,
   `… no installation of the App for <owner>`,

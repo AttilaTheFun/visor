@@ -4,8 +4,12 @@
 // minted for the gate's repositories with its permissions, kept until five
 // minutes before it expires, one mint for requests that come together, the
 // App before the auth token only when its key and id are both kept, each
-// failure said, and no key, JWT or token in a log line or a refusal. GitHub
-// is a stand-in, and the App's key is made here, never a real one.
+// failure said, and no key, JWT or token in a log line or a refusal. And
+// the App's bot, the container agents' git identity (0.72.1): its slug from
+// `GET /app` with the JWT, its user's id from `GET /users/<slug>%5Bbot%5D`
+// with an installation token, found once for the secrets, and why there's
+// none said once. GitHub is a stand-in, and the App's key is made here,
+// never a real one.
 
 import Foundation
 import Testing
@@ -25,8 +29,9 @@ private final class TestClock: Sendable {
 }
 
 /// GitHub's API, as the App calls it, played: the App's installations
-/// listed a page at a time, and each installation's token minted (or either
-/// refused); every call kept.
+/// listed a page at a time, each installation's token minted (or either
+/// refused), the App read and its bot user read with a token it minted;
+/// every call kept.
 private final class StandInGitHub: GitHubAppCalling {
     struct Call: Sendable {
         let method: String
@@ -44,6 +49,14 @@ private final class StandInGitHub: GitHubAppCalling {
     private let now: @Sendable () -> Date
     private let heard = Locked<[Call]>([])
     private let count = Locked(0)
+    private let readsHeard = Locked<[(path: String, token: String)]>([])
+    /// The App's slug and its bot user's id, as `GET /app` and `GET
+    /// /users/<slug>%5Bbot%5D` give them.
+    let slug = Locked("logan-shire-agent")
+    let botID = 987
+    /// How `GET /app` and the bot user's read are refused, while they are.
+    let appRefusal = Locked<(status: Int, message: String)?>(nil)
+    let userRefusal = Locked<(status: Int, message: String)?>(nil)
 
     init(installations: [(id: Int, login: String)], listing: (status: Int, message: String)? = nil,
          minting: (status: Int, message: String)? = nil, lifetime: TimeInterval = 3600, delay: Duration = .zero,
@@ -60,6 +73,8 @@ private final class StandInGitHub: GitHubAppCalling {
     var lines: [String] { calls.map(\.line) }
     /// How many tokens were minted.
     var minted: Int { count.withLock { $0 } }
+    /// The reads with an installation's token: each path, and the token.
+    var reads: [(path: String, token: String)] { readsHeard.withLock { $0 } }
 
     func call(_ method: String, _ path: String, jwt: String, body: Data?) async throws -> (status: Int, body: Data) {
         heard.withLock { $0.append(Call(method: method, path: path, jwt: jwt, body: body)) }
@@ -81,7 +96,21 @@ private final class StandInGitHub: GitHubAppCalling {
             let expires = ISO8601DateFormatter().string(from: now().addingTimeInterval(lifetime))
             return (201, Self.json(["token": "ghs_minted\(number)", "expires_at": expires]))
         }
+        if method == "GET", path == "/app" {
+            if let refused = appRefusal.withLock({ $0 }) { return (refused.status, Self.json(["message": refused.message])) }
+            return (200, Self.json(["id": 123456, "slug": slug.withLock { $0 }, "name": "Logan Shire Agent"]))
+        }
         return (404, Self.json(["message": "Not Found"]))
+    }
+
+    func read(_ path: String, token: String) async throws -> (status: Int, body: Data) {
+        readsHeard.withLock { $0.append((path, token)) }
+        // Only a token minted here: never anonymous, never the JWT.
+        guard token.hasPrefix("ghs_minted") else { return (401, Self.json(["message": "Bad credentials"])) }
+        if let refused = userRefusal.withLock({ $0 }) { return (refused.status, Self.json(["message": refused.message])) }
+        let slug = self.slug.withLock { $0 }
+        guard path == "/users/\(slug)%5Bbot%5D" else { return (404, Self.json(["message": "Not Found"])) }
+        return (200, Self.json(["login": "\(slug)[bot]", "id": botID, "type": "Bot"]))
     }
 
     static func json(_ object: Any) -> Data { (try? JSONSerialization.data(withJSONObject: object)) ?? Data() }
@@ -314,6 +343,7 @@ private func unbase64URL(_ text: String) -> Data? {
             let app = try secrets(key: pem)
             said += ["\(app)", String(reflecting: app)]
             await tokens.prepare(app)
+            #expect(await tokens.identity(app) != nil, "the bot found at the start")
             minted.append(try await tokens.token(app))
             clock.advance(3600)
             minted.append(try await tokens.token(app))
@@ -329,6 +359,8 @@ private func unbase64URL(_ text: String) -> Data? {
             .map(String.init).filter { !$0.hasPrefix("-----") }
         let jwts = github.calls.map(\.jwt)
         #expect(!keyLines.isEmpty && !jwts.isEmpty && minted.count == 4)
+        #expect(lines.all.contains { $0.hasPrefix("github: commits as ") }, "\(lines.all)")
+        minted += github.reads.map(\.token)
         for line in said {
             #expect(!line.contains("ghs_"), "\(line)")
             for token in minted { #expect(!line.contains(token)) }
@@ -342,25 +374,154 @@ private func unbase64URL(_ text: String) -> Data? {
 
     /// The interceptor as the host makes it: the App before the auth token,
     /// and the App's line said at the start, before any request (its
-    /// installation named, so no GitHub is asked); a key that isn't one said
-    /// as well.
-    @Test func theInterceptorSaysTheAppAtTheStart() async throws {
+    /// installation named, so no installation is looked for), its bot's
+    /// too, and the bot the git identity it gives; a key that isn't one
+    /// said as well, and no identity with it, nor with the auth token alone.
+    @Test func theInterceptorSaysTheAppAndItsBotAtTheStart() async throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("agent-proxy-app-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: folder) }
         let pem = testKey.pemRepresentation
-        for (key, said) in [(pem, "github: tokens minted as the GitHub App 123456 (installation 42 of AttilaTheFun), hourly, for all of AttilaTheFun's"),
-                            ("not a key", "github: the App's key isn't a PEM")] {
+        let bot = "github: commits as logan-shire-agent[bot] 987+logan-shire-agent[bot]@users.noreply.github.com"
+        for (key, said) in [(pem, ["github: tokens minted as the GitHub App 123456 (installation 42 of AttilaTheFun), hourly, for all of AttilaTheFun's",
+                                   bot]),
+                            ("not a key", ["github: the App's key isn't a PEM",
+                                           "github: no git identity for container agents: the App's key isn't a PEM"])] {
             let lines = Lines()
+            let github = StandInGitHub(installations: [])
             let interceptor = GitHubInterceptor.make(secrets: MemoryProxySecrets(), caCertificate: folder.appendingPathComponent("ca.pem").path,
                                                      gateRules: nil, token: { "github_pat_x" },
                                                      app: { GitHubAppSecrets(key: key, id: "123456", installation: "42") },
-                                                     egress: nil, log: { lines.add($0) })
+                                                     appAPI: github, egress: nil, log: { lines.add($0) })
             defer { interceptor?.stop() }
             #expect(interceptor != nil)
             #expect(lines.all.contains { $0.hasSuffix("with the GitHub App's installation tokens") }, "\(lines.all)")
-            for _ in 0..<100 where !lines.all.contains(said) { try await Task.sleep(for: .milliseconds(50)) }
-            #expect(lines.all.contains(said), "\(lines.all)")
+            for _ in 0..<100 where !said.allSatisfy({ lines.all.contains($0) }) { try await Task.sleep(for: .milliseconds(50)) }
+            for line in said { #expect(lines.all.contains(line), "\(lines.all)") }
+            let identity = await interceptor?.gitIdentity()
+            if key == pem {
+                #expect(identity == GitHubAppIdentity(slug: "logan-shire-agent", userID: 987))
+                #expect(github.lines.filter { $0 == "GET /app" }.count == 1 && github.reads.count == 1, "found at the start, and kept")
+                #expect(lines.all.filter { $0 == bot }.count == 1, "said once")
+            } else {
+                #expect(identity == nil)
+                #expect(github.calls.isEmpty && github.reads.isEmpty, "nothing asked of GitHub without a key")
+            }
         }
+        // The auth token alone: no App, no identity, said once.
+        let lines = Lines()
+        let interceptor = GitHubInterceptor.make(secrets: MemoryProxySecrets(), caCertificate: folder.appendingPathComponent("ca.pem").path,
+                                                 gateRules: nil, token: { "github_pat_x" }, app: { nil }, appAPI: StandInGitHub(installations: []),
+                                                 egress: nil, log: { lines.add($0) })
+        defer { interceptor?.stop() }
+        #expect(await interceptor?.gitIdentity() == nil)
+        #expect(await interceptor?.gitIdentity() == nil)
+        #expect(lines.all.filter { $0.hasPrefix("github: no git identity") }
+                == ["github: no git identity for container agents: no GitHub App (github-app/key and github-app/id)"], "\(lines.all)")
+    }
+
+    @Test func theBotIdentityIsTheAppsSlugAndItsUsersId() {
+        let bot = GitHubAppIdentity(slug: "logan-shire-agent", userID: 987)
+        #expect(bot.name == "logan-shire-agent[bot]")
+        #expect(bot.email == "987+logan-shire-agent[bot]@users.noreply.github.com")
+        #expect(GitHubAppIdentity.userPath(slug: "logan-shire-agent") == "/users/logan-shire-agent%5Bbot%5D", "its brackets escaped")
+        #expect(URL(string: "https://api.github.com" + GitHubAppIdentity.userPath(slug: "logan-shire-agent"))?.absoluteString
+                == "https://api.github.com/users/logan-shire-agent%5Bbot%5D", "kept as it is in the URL")
+        for slug in ["logan-shire-agent", "app1", "A-b-9"] { #expect(GitHubAppIdentity.isSlug(slug), "\(slug)") }
+        for slug in ["", "a b", "a/b", "a[bot]", "a%5B", "é", "a\n", String(repeating: "a", count: 101)] {
+            #expect(!GitHubAppIdentity.isSlug(slug), "\(slug)")
+        }
+    }
+
+    @Test func theBotIsFoundOnceForTheSecretsWithTheJWTAndAnInstallationToken() async throws {
+        let lines = Lines()
+        // Its mint held back, so the askers come together.
+        let github = StandInGitHub(installations: [(id: 42, login: "AttilaTheFun")], delay: .milliseconds(300))
+        let tokens = GitHubAppTokens(rules: .standard, api: github, log: { lines.add($0) })
+        let kept = try secrets()
+        let found = await withTaskGroup(of: GitHubAppIdentity?.self) { group in
+            for _ in 0..<20 { group.addTask { await tokens.identity(kept) } }
+            var all: [GitHubAppIdentity?] = []
+            for await identity in group { all.append(identity) }
+            return all
+        }
+        let bot = GitHubAppIdentity(slug: "logan-shire-agent", userID: 987)
+        #expect(found.count == 20 && found.allSatisfy { $0 == bot })
+        #expect(await tokens.identity(kept) == bot)
+        #expect(github.lines.filter { $0 == "GET /app" }.count == 1, "the App read once")
+        #expect(github.reads.map(\.path) == ["/users/logan-shire-agent%5Bbot%5D"], "its bot user read once, [bot] escaped")
+        #expect(github.reads.first?.token == "ghs_minted1", "with the installation's token")
+        // GET /app is the App's: a JWT of its id, signed with its key.
+        let app = try #require(github.calls.first { $0.line == "GET /app" })
+        let parts = app.jwt.split(separator: ".").map(String.init)
+        try #require(parts.count == 3)
+        let signature = _RSA.Signing.RSASignature(rawRepresentation: try #require(unbase64URL(parts[2])))
+        #expect(testKey.publicKey.isValidSignature(signature, for: Data((parts[0] + "." + parts[1]).utf8), padding: .insecurePKCS1v1_5))
+        let said = "github: commits as logan-shire-agent[bot] 987+logan-shire-agent[bot]@users.noreply.github.com"
+        #expect(lines.all.filter { $0 == said }.count == 1, "\(lines.all)")
+        // The token used for pushes, and the identity's, one mint.
+        #expect(try await tokens.token(kept) == "ghs_minted1" && github.minted == 1)
+
+        // Other secrets: found again, and said again.
+        github.slug.withLock { $0 = "other-app" }
+        let other = try secrets(installation: "43")
+        #expect(await tokens.identity(other) == GitHubAppIdentity(slug: "other-app", userID: 987))
+        #expect(await tokens.identity(other) == GitHubAppIdentity(slug: "other-app", userID: 987))
+        #expect(github.lines.filter { $0 == "GET /app" }.count == 2)
+        #expect(github.reads.map(\.path) == ["/users/logan-shire-agent%5Bbot%5D", "/users/other-app%5Bbot%5D"])
+        #expect(lines.all.last == "github: commits as other-app[bot] 987+other-app[bot]@users.noreply.github.com", "\(lines.all)")
+    }
+
+    @Test func noIdentityIsGivenWhenItCantBeFoundSayingWhyOnce() async throws {
+        let lines = Lines()
+        let github = StandInGitHub(installations: [(id: 42, login: "AttilaTheFun")])
+        let tokens = GitHubAppTokens(rules: .standard, api: github, log: { lines.add($0) })
+        let kept = try secrets()
+        func said() -> [String] { lines.all.filter { $0.hasPrefix("github: no git identity") } }
+
+        // Without the App.
+        #expect(await tokens.identity(nil) == nil)
+        #expect(await tokens.identity(nil) == nil)
+        #expect(said() == ["github: no git identity for container agents: no GitHub App (github-app/key and github-app/id)"])
+        #expect(github.calls.isEmpty && github.reads.isEmpty)
+
+        // GitHub refuses the App: not kept, so asked again, and said once.
+        github.appRefusal.withLock { $0 = (401, "A JSON web token could not be decoded") }
+        #expect(await tokens.identity(kept) == nil)
+        #expect(await tokens.identity(kept) == nil)
+        #expect(github.lines.filter { $0 == "GET /app" }.count == 2, "looked for again at the next asking")
+        #expect(said().last == "github: no git identity for container agents: GitHub answered 401 for the App (GET /app): "
+                + "A JSON web token could not be decoded")
+        #expect(said().count == 2, "\(said())")
+
+        // A slug that isn't one.
+        github.appRefusal.withLock { $0 = nil }
+        github.slug.withLock { $0 = "not/a slug" }
+        #expect(await tokens.identity(kept) == nil)
+        #expect(said().last == "github: no git identity for container agents: GitHub answered 200 for the App (GET /app), with no slug in it")
+        #expect(github.reads.isEmpty)
+
+        // Its bot user not found.
+        github.slug.withLock { $0 = "logan-shire-agent" }
+        github.userRefusal.withLock { $0 = (404, "Not Found") }
+        #expect(await tokens.identity(kept) == nil)
+        #expect(said().last == "github: no git identity for container agents: GitHub answered 404 for the App's bot user "
+                + "(GET /users/logan-shire-agent[bot]): Not Found")
+
+        // GitHub answers again: found, and kept.
+        github.userRefusal.withLock { $0 = nil }
+        let bot = GitHubAppIdentity(slug: "logan-shire-agent", userID: 987)
+        #expect(await tokens.identity(kept) == bot)
+        #expect(await tokens.identity(kept) == bot)
+        #expect(github.reads.count == 2)
+        #expect(lines.all.last == "github: commits as logan-shire-agent[bot] 987+logan-shire-agent[bot]@users.noreply.github.com")
+
+        // A token that can't be minted: none either.
+        let refusing = StandInGitHub(installations: [(id: 42, login: "AttilaTheFun")], minting: (403, "Resource not accessible by integration"))
+        let unminted = GitHubAppTokens(rules: .standard, api: refusing, log: { lines.add($0) })
+        #expect(await unminted.identity(kept) == nil)
+        #expect(said().last == "github: no git identity for container agents: GitHub answered 403 minting a token: "
+                + "Resource not accessible by integration")
+        #expect(refusing.reads.isEmpty)
     }
 }

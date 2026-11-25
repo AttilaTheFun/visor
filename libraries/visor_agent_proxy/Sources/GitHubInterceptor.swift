@@ -10,7 +10,8 @@
 // it is added on the way out, and masked should GitHub's answer echo it.
 // Each request is a line of the egress log (route `github`): its method, its
 // path's class, the gate's decision and how it went; never a body, a header
-// or a token.
+// or a token. The container agents' git identity is asked of it too
+// (gitIdentity): the GitHub App's bot, while the App's are the tokens.
 
 import Foundation
 import NIOCore
@@ -62,6 +63,13 @@ public final class GitHubInterceptor: GitHubIntercepting, Sendable {
 
     public func stop() {
         group.shutdownGracefully { _ in }
+    }
+
+    /// The git identity the container's agents commit as: the GitHub App's
+    /// bot, found once for its secrets (GitHubAppTokens); nil without the
+    /// App, or when it couldn't be found (said in the log, once).
+    public func gitIdentity() async -> GitHubAppIdentity? {
+        await tokens.identity()
     }
 
     /// GitHub's three hosts, on port 443.

@@ -22,6 +22,15 @@ extension GitHubInterceptor {
     public static func make(secrets: any AgentProxySecrets, caCertificate: String, gateRules: String?,
                             token: @escaping @Sendable () -> String?, app: @escaping @Sendable () -> GitHubAppSecrets? = { nil },
                             egress: EgressLog?, log: @escaping @Sendable (String) -> Void) -> GitHubInterceptor? {
+        make(secrets: secrets, caCertificate: caCertificate, gateRules: gateRules, token: token, app: app, appAPI: GitHubAppAPI(),
+             egress: egress, log: log)
+    }
+
+    /// The same, the App's calls answered by `appAPI`: GitHub's, or a
+    /// test's stand-in.
+    static func make(secrets: any AgentProxySecrets, caCertificate: String, gateRules: String?,
+                     token: @escaping @Sendable () -> String?, app: @escaping @Sendable () -> GitHubAppSecrets?,
+                     appAPI: any GitHubAppCalling, egress: EgressLog?, log: @escaping @Sendable (String) -> Void) -> GitHubInterceptor? {
         let rules: GateRules
         do {
             rules = try gateRules.map(GateRules.load) ?? .standard
@@ -43,7 +52,7 @@ extension GitHubInterceptor {
             log("github: the authority's certificate couldn't be written to \(caCertificate): \(error)")
         }
         do {
-            let appTokens = GitHubAppTokens(rules: rules, log: log)
+            let appTokens = GitHubAppTokens(rules: rules, api: appAPI, log: log)
             let tokens = PreferredGitHubToken(app: appTokens, appSecrets: app, configured: ConfiguredGitHubToken(current: token))
             let interceptor = try GitHubInterceptor(gate: GitHubGate(rules: rules), ca: ca, tokens: tokens, egress: egress, log: log)
             let appSecrets = app()
@@ -52,7 +61,7 @@ extension GitHubInterceptor {
                 + (appSecrets != nil ? ", with the GitHub App's installation tokens"
                     : token()?.isEmpty == false ? ", with the auth token"
                     : "; no auth token yet (agent-proxy secret-set github-token, or github-app/key and github-app/id): what needs one is refused"))
-            // The App's line, or what's wrong with its secrets, said now rather than at the first request.
+            // The App's lines (its bot's too), or what's wrong with its secrets, said now rather than at the first request.
             if let appSecrets { Task { await appTokens.prepare(appSecrets) } }
             return interceptor
         } catch {

@@ -59,12 +59,13 @@ extension VisorServer {
     /// GitHub gate takes off (and sends its own token in its place, or none
     /// for a read when none is configured), and agent-proxy's authorities
     /// for Node's TLS (the engine's ContainerEngine.authoritiesInGuest; the
-    /// system's trust has them too).
-    nonisolated static func containerClaudeEnvironment(sessions: String) -> [String: String] {
+    /// system's trust has them too). With `git`, git's author and committer
+    /// (VisorServer+ContainerGitIdentity): the agents' alone.
+    nonisolated static func containerClaudeEnvironment(sessions: String, git: ContainerGitIdentity? = nil) -> [String: String] {
         ["CLAUDE_CONFIG_DIR": sessions + "/.claude",
          "CLAUDE_CODE_OAUTH_TOKEN": ClaudeCredential.placeholder,
          "GH_TOKEN": containerGitHubPlaceholder,
-         "NODE_EXTRA_CA_CERTS": containerAuthoritiesInGuest]
+         "NODE_EXTRA_CA_CERTS": containerAuthoritiesInGuest].merging(git?.environment ?? [:]) { kept, _ in kept }
     }
 
     /// gh's token in the container: a placeholder, never a credential, so

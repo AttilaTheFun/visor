@@ -117,6 +117,13 @@ private final class FakeContainer: SessionsContainer {
     }
 }
 
+/// How many times the git identity was asked for.
+private final class Asked: Sendable {
+    private let count = Mutex(0)
+    var times: Int { count.withLock { $0 } }
+    func add() { count.withLock { $0 += 1 } }
+}
+
 /// A wrapper's connection to the driver: what it is sent, and how its call
 /// ended.
 private final class Wrapper: Sendable {
@@ -380,6 +387,56 @@ extension ServerTests {
     }
 
     /// Check 1: its MCP is Visor's own tools, none of the passed-on.
+    /// Its git identity (0.72.1, from Logan's container test: `git commit`
+    /// there had none): the GitHub App's bot, as the agent-proxy in this
+    /// process gives it, git's author and committer alike; none where
+    /// agent-proxy has none (no App, or GitHub didn't answer), or nothing
+    /// asks it. The server's own `claude -p` there isn't given one.
+    @Test func itsAgentCommitsAsTheGitHubAppsBotWhereAgentProxyHasOne() async throws {
+        let variables = ["GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL"]
+        let bot = ContainerGitIdentity(name: "logan-shire-agent[bot]", email: "987+logan-shire-agent[bot]@users.noreply.github.com")
+        #expect(bot.environment == ["GIT_AUTHOR_NAME": bot.name, "GIT_AUTHOR_EMAIL": bot.email,
+                                    "GIT_COMMITTER_NAME": bot.name, "GIT_COMMITTER_EMAIL": bot.email])
+
+        // Nothing to ask: none, as before.
+        let (unasked, first, _) = try await placed("git-unasked")
+        for name in variables { #expect(unasked.agent.environment[name] == nil, "\(name)") }
+        first.finish()
+
+        // agent-proxy has none.
+        let asked = Asked()
+        server.containerGitIdentity = {
+            asked.add()
+            return nil
+        }
+        let (without, second, _) = try await placed("git-none")
+        for name in variables { #expect(without.agent.environment[name] == nil, "\(name)") }
+        #expect(asked.times == 1, "asked as its agent started")
+        second.finish()
+
+        // The App's bot.
+        server.containerGitIdentity = {
+            asked.add()
+            return bot
+        }
+        let (given, third, _) = try await placed("git-bot")
+        let environment = given.agent.environment
+        #expect(environment["GIT_AUTHOR_NAME"] == "logan-shire-agent[bot]")
+        #expect(environment["GIT_AUTHOR_EMAIL"] == "987+logan-shire-agent[bot]@users.noreply.github.com")
+        #expect(environment["GIT_COMMITTER_NAME"] == "logan-shire-agent[bot]")
+        #expect(environment["GIT_COMMITTER_EMAIL"] == "987+logan-shire-agent[bot]@users.noreply.github.com")
+        // Beside the placeholders, which it changes nothing of.
+        #expect(environment["GH_TOKEN"] == "visor-agent-proxy" && environment["CLAUDE_CODE_OAUTH_TOKEN"] == "visor-agent-proxy")
+        #expect(environment["NODE_EXTRA_CA_CERTS"] == "/opt/visor/trust/agent-proxy-ca.pem")
+        #expect(environment["CLAUDE_CONFIG_DIR"] == sessions.path + "/.claude")
+        #expect(asked.times == 2)
+        // The server's own `claude -p` in the container: none.
+        let own = try #require(server.containerClaudeEnvironment())
+        for name in variables { #expect(own[name] == nil, "\(name)") }
+        third.finish()
+        server.containerGitIdentity = nil
+    }
+
     @Test func itsMCPIsVisorsOwnTools() async throws {
         server.settings.mcpEndpoints = [MCPEndpoint(name: "gh", url: "http://127.0.0.1:7470/mcp")]
         let (_, wrapper, record) = try await placed("mcp")

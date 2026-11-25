@@ -442,6 +442,34 @@ environment), so none goes in.
   create`, a comment) are refused, saying where the token is set. GitHub's
   GraphQL API takes no anonymous request, so gh's commands that use it (`gh
   pr view`, `gh repo view`, among others) need the token.
+- **git's identity in the container** (0.72.1; Logan's container test on
+  0.71.1 found `git commit` failing there: "unable to auto-detect email
+  address (got root@visor-sessions.(none))"): with the GitHub App's secrets
+  kept (`github-app/key` and `github-app/id`, docs/agent-proxy.md), each
+  agent started in the container has `GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL`,
+  `GIT_COMMITTER_NAME` and `GIT_COMMITTER_EMAIL` set to the App's bot,
+  `<slug>[bot]` and `<id>+<slug>[bot]@users.noreply.github.com` (for
+  logan-shire-agent, `logan-shire-agent[bot]`), so its commits are the
+  App's on GitHub, as its pushes are. agent-proxy finds it (`GET /app` for
+  the slug, `GET /users/<slug>%5Bbot%5D` for the id) once for the App's
+  secrets, at its start, and the server asks it as each agent starts
+  (waiting ten seconds at most). Without the App (the auth token alone), or
+  when GitHub didn't answer, none is set, as before, and agent-proxy's log
+  says why, once: `agent-proxy: github: no git identity for container
+  agents: <why>`; such an agent sets its own (`git config user.name` and
+  `user.email`) to commit. The server's own `claude -p` there isn't given
+  one; sessions on this Mac keep its user's own git config.
+- **A shallow clone breaks a bare `gh pr create`:** `git clone --depth 1`
+  implies `--single-branch`, so `remote.origin.fetch` covers the default
+  branch alone, and after `git push -u` there is no
+  `refs/remotes/origin/<branch>`: a bare `gh pr create` then says "you must
+  first push the current branch". Clone with `--no-single-branch` (it keeps
+  the depth), or `git config remote.origin.fetch
+  '+refs/heads/*:refs/remotes/origin/*'`, or give `gh pr create --head
+  <branch>`. (Found in Logan's container test on 0.71.1.)
+- **`--author @me` finds nothing:** with the App's installation token there
+  is no user to be `@me`. Name the App: `gh pr list --author
+  app/logan-shire-agent` (`app/<slug>`). (Found in the same test.)
 
 ## MCP in the container (0.72.1)
 

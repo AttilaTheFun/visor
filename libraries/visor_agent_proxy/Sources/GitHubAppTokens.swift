@@ -16,9 +16,18 @@
 // request. The secrets changed (the host reads them at most once a minute),
 // everything found and minted for the old ones is forgotten.
 //
+// The App's bot is the container agents' git identity (0.72.1:
+// GitHubAppIdentity): its slug from `GET /app`, with the JWT, and its bot
+// user's id from `GET /users/<slug>%5Bbot%5D`, with an installation token.
+// Found at the start and kept for the secrets, as the installation is;
+// asked together, found once. One that couldn't be found is looked for
+// again at the next asking.
+//
 // Said in the log: the App, its installation and what it reaches, at the
-// start and when the secrets change; each mint, with when it expires; each
-// failure, once until it changes. Never the key, the JWT or a token.
+// start and when the secrets change; its bot's name and address, once
+// found; each mint, with when it expires; each failure, once until it
+// changes, and why there's no git identity, once until that changes. Never
+// the key, the JWT or a token.
 
 import Foundation
 import _CryptoExtras
@@ -47,6 +56,11 @@ actor GitHubAppTokens {
     private var installation: Int?
     private var held: (token: String, expires: Date)?
     private var minting: Task<String, any Error>?
+    /// The App's bot, once found for these secrets, and its finding.
+    private var bot: GitHubAppIdentity?
+    private var findingBot: Task<GitHubAppIdentity, any Error>?
+    /// Why there's no git identity, as last said.
+    private var lastNoIdentity: String?
     /// The App's line said for these secrets.
     private var announced = false
     /// The last failure said, so a broken key isn't said at each request.
@@ -78,6 +92,35 @@ actor GitHubAppTokens {
         adopt(secrets)
         // What's wrong is said in the log.
         _ = try? await installationID(secrets, key: signingKey(secrets), generation: generation)
+        // The bot's line, or why there's none, said now too.
+        _ = await identity(secrets)
+    }
+
+    /// The App's bot, as the container agents' git identity: the one kept
+    /// for these secrets, else the one being found, else found now. Nil
+    /// without the App (`secrets` nil: its key or its id isn't kept) or
+    /// when it couldn't be found, each said once.
+    func identity(_ secrets: GitHubAppSecrets?) async -> GitHubAppIdentity? {
+        guard let secrets else {
+            noIdentity("no GitHub App (github-app/key and github-app/id)")
+            return nil
+        }
+        adopt(secrets)
+        if let bot { return bot }
+        let task: Task<GitHubAppIdentity, any Error>
+        if let findingBot {
+            task = findingBot
+        } else {
+            let generation = self.generation
+            task = Task { try await self.findBot(secrets, generation: generation) }
+            findingBot = task
+        }
+        do {
+            return try await task.value
+        } catch {
+            noIdentity((error as? Failure)?.why ?? "\(error)")
+            return nil
+        }
     }
 
     /// GitHub turned the token down: the next request mints another.
@@ -95,8 +138,59 @@ actor GitHubAppTokens {
         installation = nil
         held = nil
         minting = nil
+        bot = nil
+        findingBot = nil
+        lastNoIdentity = nil
         announced = false
         lastFailure = nil
+    }
+
+    /// Why the container agents have no git identity, said unless it was
+    /// the last said.
+    private func noIdentity(_ why: String) {
+        guard why != lastNoIdentity else { return }
+        lastNoIdentity = why
+        log("github: no git identity for container agents: \(why)")
+    }
+
+    /// The App's slug (as the App, with its JWT), then its bot user's id
+    /// (with an installation token): kept for these secrets, and said.
+    /// What goes wrong in GitHub's answers is said by `identity`, once.
+    private func findBot(_ secrets: GitHubAppSecrets, generation: Int) async throws -> GitHubAppIdentity {
+        defer { if self.generation == generation { findingBot = nil } }
+        let key = try signingKey(secrets)
+        let app = try await call("GET", "/app", secrets: secrets, key: key, body: nil)
+        guard (200..<300).contains(app.status) else {
+            throw Failure(why: "GitHub answered \(app.status) for the App (GET /app): \(Self.message(app.body))")
+        }
+        struct App: Decodable { let slug: String }
+        guard let slug = (try? JSONDecoder().decode(App.self, from: app.body))?.slug, GitHubAppIdentity.isSlug(slug) else {
+            throw Failure(why: "GitHub answered \(app.status) for the App (GET /app), with no slug in it")
+        }
+        let token = try await self.token(secrets)
+        let path = GitHubAppIdentity.userPath(slug: slug)
+        let user: (status: Int, body: Data)
+        do {
+            user = try await api.read(path, token: token)
+        } catch {
+            throw Failure(why: "GitHub didn't answer (GET /users/\(slug)[bot]): \(error.localizedDescription)")
+        }
+        guard (200..<300).contains(user.status) else {
+            // GitHub turned the token down: the next request mints another.
+            if user.status == 401, self.generation == generation { held = nil }
+            throw Failure(why: "GitHub answered \(user.status) for the App's bot user (GET /users/\(slug)[bot]): \(Self.message(user.body))")
+        }
+        struct User: Decodable { let id: Int }
+        guard let id = (try? JSONDecoder().decode(User.self, from: user.body))?.id else {
+            throw Failure(why: "GitHub answered \(user.status) for the App's bot user (GET /users/\(slug)[bot]), with no id in it")
+        }
+        let found = GitHubAppIdentity(slug: slug, userID: id)
+        // Secrets changed meanwhile: this one is the asker's, and kept for none.
+        guard self.generation == generation else { return found }
+        bot = found
+        lastNoIdentity = nil
+        log("github: commits as \(found.name) \(found.email)")
+        return found
     }
 
     private func mint(_ secrets: GitHubAppSecrets, generation: Int) async throws -> String {
