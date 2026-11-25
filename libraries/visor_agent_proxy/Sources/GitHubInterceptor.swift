@@ -158,13 +158,21 @@ public final class GitHubInterceptor: GitHubIntercepting, Sendable {
             repository = named
         case .check(let check):
             let named = Self.repository(of: check) ?? ""
+            // A close is of the App's bot's own: unknown (not the App's
+            // token, or its bot not found), refused before GitHub is asked.
+            var bot: GitHubAppIdentity?
+            if check.needsBot {
+                guard let found = await tokens.identity() else { return .refuse(GateChecker.noBot) }
+                bot = found
+            }
             let token: String
             do {
                 token = try await tokens.token(session: caller.session, repository: named)
             } catch {
                 return .fail("\(error)")
             }
-            switch await GateChecker(rules: gate.rules, github: reader(token)).run(check) {
+            // Read with the token the write goes on with.
+            switch await GateChecker(rules: gate.rules, github: reader(token), bot: bot).run(check) {
             case .refuse(let reason): return .refuse(reason)
             case .fail(let reason): return .fail(reason)
             case .pass(let given): rewrite = given
@@ -190,9 +198,9 @@ public final class GitHubInterceptor: GitHubIntercepting, Sendable {
     static func repository(of check: GateCheck) -> String? {
         switch check {
         case .merge(let repository, _, _, _), .updateBranch(let repository, _), .rerun(let repository, _, _), .cancel(let repository, _),
-             .dispatch(let repository, _, _), .releaseEdit(let repository, _), .push(let repository, _):
+             .dispatch(let repository, _, _), .releaseEdit(let repository, _), .push(let repository, _), .close(let repository, _):
             return repository
-        case .graphQLMerge, .graphQLUpdateBranch, .graphQLNodes:
+        case .graphQLMerge, .graphQLUpdateBranch, .graphQLNodes, .graphQLClose:
             return nil
         }
     }

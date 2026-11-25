@@ -394,6 +394,32 @@ setting or changing them needs no restart. With other secrets, the
 installation and the token kept are forgotten.
 With other secrets, the bot is found again.
 
+**Closing its own** (0.72.1). Logan's decision, 25 Nov 2026: "agents may
+close pull requests and issues they opened themselves", that is, those
+whose author is the App's bot (`<slug>[bot]`, logan-shire-agent[bot]).
+Before, the gate refused every close ("closing and reopening are Logan's").
+Now a close is one of the checks that read before they write (GateChecker,
+`GateCheck.close` and `graphQLClose`), read with the token the close goes on
+with:
+- REST: `PATCH /repos/{o}/{r}/issues/{n}` or `…/pulls/{n}` with `state:
+  "closed"` (and, for an issue, `state_reason` `completed` or
+  `not_planned`; the edit's other fields as an edit's) reads `GET
+  /repos/{o}/{r}/issues/{n}` and passes only if its `user.login` is the
+  bot's name;
+- GraphQL: `closeIssue` (`issueId`, `stateReason` COMPLETED or NOT_PLANNED)
+  and `closePullRequest` (`pullRequestId`), each a mutation of its own (gh
+  issue close and gh pr close send them so), read the node: an Issue or a
+  PullRequest as named, in an allowed repository, its `author` a Bot whose
+  login is the slug (GraphQL names a bot without `[bot]`).
+
+Anyone else's is refused: `… #<n> of <owner/repo> is <login>'s: an agent
+closes only what it opened itself (<slug>[bot]'s)`. With no App (the auth
+token, or none) or its bot not found, the bot is unknown and every close is
+refused before GitHub is asked: `… with no GitHub App (github-app/key and
+github-app/id) or its bot not found, closing is Logan's`. Still Logan's
+alone: reopening (`state: "open"`, `reopenIssue`, `reopenPullRequest`), an
+agent's own included, merging, publishing a release and deleting a ref.
+
 **The import**, on a Mac in the desktop session (the secrets are in the
 keychain), from the App's files in `~/Library/Application Support/Agents/github`:
 

@@ -467,6 +467,12 @@ environment), so none goes in.
   the depth), or `git config remote.origin.fetch
   '+refs/heads/*:refs/remotes/origin/*'`, or give `gh pr create --head
   <branch>`. (Found in Logan's container test on 0.71.1.)
+- **Closing its own** (0.72.1, Logan's decision of 25 Nov 2026: "agents
+  may close pull requests and issues they opened themselves"): with the
+  App, `gh pr close` and `gh issue close` (or a REST `PATCH` with `state:
+  "closed"`) go through for what its bot opened, and are refused for
+  anyone else's; reopening stays Logan's (docs/agent-proxy.md, The GitHub
+  App, Closing its own).
 - **`--author @me` finds nothing:** with the App's installation token there
   is no user to be `@me`. Name the App: `gh pr list --author
   app/logan-shire-agent` (`app/<slug>`). (Found in the same test.)
