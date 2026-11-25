@@ -2,9 +2,11 @@
 // each time), Visor's Linux programs staged under the link rule (the
 // relay-client link check, before the boot), the root filesystem cloned
 // from the template when there's none of this image, agent-proxy's
-// authorities staged (ContainerEngine+Trust), the relay and the driver link
-// listening, the boot, the authorities trusted, and then `relay-client
-// check` run in it (the egress check).
+// authorities staged (ContainerEngine+Trust), agent-proxy's MCP
+// pass-through's servers put in its Claude's own file (ContainerClaudeMCP,
+// before anything in it runs), the relay and the driver link listening, the
+// boot, the authorities trusted, and then `relay-client check` run in it
+// (the egress check).
 
 import Foundation
 import VisorProtocol
@@ -60,6 +62,7 @@ extension ContainerEngine {
 
         let rootfs = try prepareRootfs(layout, template: assets.template, image: image)
         let trusted = stageAuthorities(layout)
+        configuration.claudeMCP?.write(log: context.log)
         try FileManager.default.createDirectory(at: layout.logs, withIntermediateDirectories: true)
         let relay = HostRelay(socketPath: context.relaySocket.path, port: port, token: context.relayToken, log: context.log)
         try relay.start()

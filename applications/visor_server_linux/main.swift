@@ -37,6 +37,8 @@ import VisorRelayClient
 let programName = CommandLine.arguments.first.map { URL(fileURLWithPath: $0).lastPathComponent }
 if programName == "visor-agent-host" {
     if CommandLine.arguments.dropFirst().first == "mcp" { exit(await MCPMain.run(ProcessInfo.processInfo.environment)) }
+    // The Sessions container's Claude's headersHelper for agent-proxy's MCP pass-through.
+    if CommandLine.arguments.dropFirst().first == "mcp-headers" { exit(MCPHeadersMain.run(ProcessInfo.processInfo.environment)) }
     exit(await AgentHost.main(CommandLine.arguments))
 }
 #if canImport(VisorRelayClient)

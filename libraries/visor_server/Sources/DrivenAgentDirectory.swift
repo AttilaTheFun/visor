@@ -27,6 +27,8 @@ package protocol DrivenAgentDirectory: AnyObject, Sendable {
     /// How long before its token ends an agent's stream is sent a fresh one.
     var tokenRefreshLead: TimeInterval { get }
     /// Whether `agent` runs in a container: its session gets Visor's own
-    /// MCP tools alone, never the servers this computer passes on.
+    /// MCP tools alone from the driver, never the servers this computer
+    /// passes on (a Sessions container's agent reaches those from
+    /// agent-proxy's pass-through, with a token of its own).
     func runsInContainer(_ agent: String) -> Bool
 }

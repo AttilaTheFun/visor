@@ -1,6 +1,7 @@
 // The native sessions' MCP proxy (NativeMCPProxy, moved from MultiPass's MCPProxy and its tests): a call with the
 // sessions' token goes on to its endpoint with the secret headers agent-proxy keeps; without the token, or for no
-// endpoint, it's refused; a withheld tool is neither listed nor called. The endpoint is a FakeEndpoint (TestServers).
+// endpoint, it's refused; a withheld tool is neither listed nor called; a Sessions container agent's own token goes on
+// as its session's, and no other. The endpoint is a FakeEndpoint (TestServers).
 
 import CAgentProxyPOSIX
 import Foundation
@@ -8,12 +9,14 @@ import Foundation
 import XCTest
 
 final class NativeMCPProxyTests: XCTestCase {
-    /// A proxy on a free loopback port, serving `endpoints`, admitting `one-token`, each endpoint's `API_KEY` its secret.
-    private func proxy(_ endpoints: [NativeMCPProxy.Endpoint], maxConnections: Int = NativeMCPProxy.defaultMaxConnections) throws -> NativeMCPProxy {
+    /// A proxy on a free loopback port, serving `endpoints`, admitting `one-token` (and a container agent's own token as
+    /// `agentSession` says), each endpoint's `API_KEY` its secret.
+    private func proxy(_ endpoints: [NativeMCPProxy.Endpoint], maxConnections: Int = NativeMCPProxy.defaultMaxConnections,
+                       agentSession: (@Sendable (String) async -> String?)? = nil) throws -> NativeMCPProxy {
         for _ in 0..<20 {
             if let proxy = NativeMCPProxy(port: UInt16.random(in: 20000...45000), endpoints: { endpoints }, admits: { $0 == "one-token" },
                                           secret: { name, header in header == "API_KEY" ? "\(name)-secret" : nil },
-                                          maxConnections: maxConnections) {
+                                          agentSession: agentSession, maxConnections: maxConnections) {
                 proxy.start()
                 return proxy
             }
@@ -64,6 +67,46 @@ final class NativeMCPProxyTests: XCTestCase {
         XCTAssertEqual(try ask(proxy.port, "/mcp/gh", token: "two-token").status, "401")
         XCTAssertEqual(try ask(proxy.port, "/mcp/other", token: "one-token").status, "404")
         XCTAssertEqual(endpoint.requests.withLock { $0.count }, 1)
+    }
+
+    /// A Sessions container agent's call (0.72.1): not the sessions' token, its agent's own, which the server says is
+    /// its session's. It goes on as that session's whatever CLIENT_ID it sent (an endpoint's `$SESSION_ID` filled with
+    /// it, a session header agent-proxy can't fill left out, never the caller's word), and the token stops here. Any
+    /// other token (another's, an expired or a forged one: the server says it's no one's) is refused before anything is
+    /// passed on; only a JWT's shape is asked about, and the sessions' token never is.
+    func testAContainerAgentsOwnTokenGoesOnAsItsSession() throws {
+        let endpoint = try XCTUnwrap(FakeEndpoint())
+        defer { endpoint.stop() }
+        let asked = Lines()
+        let proxy = try proxy([NativeMCPProxy.Endpoint(name: "oss", url: "http://127.0.0.1:\(endpoint.port)/mcp",
+                                                       headers: ["CLIENT_ID": "$SESSION_ID", "X-Title": "$SESSION_TITLE", "X-Fleet": "mini"],
+                                                       secretHeaders: ["API_KEY"])],
+                              agentSession: { token in
+                                  asked.add(token)
+                                  return token == "agent.own.token" ? "s-container" : nil
+                              })
+        defer { proxy.stop() }
+        let answered = try ask(proxy.port, "/mcp/oss", token: "agent.own.token", body: #"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#,
+                               extra: ["CLIENT_ID: s-other", "client-id: s-other", "X-Title: the-callers-own", "API_KEY: the-callers-own"])
+        XCTAssertEqual(answered.status, "200")
+        let seen = try XCTUnwrap(endpoint.requests.withLock { $0.first })
+        XCTAssertTrue(seen.contains("CLIENT_ID: s-container\r\n"), seen)
+        XCTAssertEqual(seen.components(separatedBy: "CLIENT_ID").count, 2, "once: \(seen)")
+        XCTAssertFalse(seen.contains("s-other"), "the caller's CLIENT_ID never goes on: \(seen)")
+        XCTAssertFalse(seen.contains("the-callers-own"), "nor its word for a session's header, nor its secret: \(seen)")
+        XCTAssertTrue(seen.contains("API_KEY: oss-secret\r\n") && seen.contains("X-Fleet: mini\r\n"), seen)
+        XCTAssertFalse(seen.contains("agent.own.token"), "the agent's token stops at the proxy")
+        for token in ["expired.or.forged", "not-a-jwt", ""] {
+            XCTAssertEqual(try ask(proxy.port, "/mcp/oss", token: token).status, "401", token)
+        }
+        XCTAssertEqual(try ask(proxy.port, "/mcp/oss", token: nil).status, "401")
+        XCTAssertEqual(endpoint.requests.withLock { $0.count }, 1, "nothing refused is passed on")
+        XCTAssertEqual(asked.all, ["agent.own.token", "expired.or.forged"], "only a JWT's shape is asked about")
+        // A native session's call, through Visor's server, as before: never asked about.
+        XCTAssertEqual(try ask(proxy.port, "/mcp/oss", token: "one-token", extra: ["CLIENT_ID: s1"]).status, "200")
+        XCTAssertEqual(asked.all.count, 2)
+        let native = try XCTUnwrap(endpoint.requests.withLock { $0.last })
+        XCTAssertTrue(native.contains("CLIENT_ID: s1\r\n"), native)
     }
 
     /// An endpoint kept as MultiPass's runner.json kept it (CLIENT_ID: $SESSION_ID) leaves CLIENT_ID to the session, so

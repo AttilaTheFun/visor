@@ -443,6 +443,75 @@ environment), so none goes in.
   GraphQL API takes no anonymous request, so gh's commands that use it (`gh
   pr view`, `gh repo view`, among others) need the token.
 
+## MCP in the container (0.72.1)
+
+A native session's agent gets, beside Visor's own tools, the MCP servers this
+computer passes on (gh, oss, and nimbus once it's configured): Visor's server
+calls agent-proxy's MCP pass-through on loopback (7439) for it, showing the
+sessions' token (`mcp/token`). A container's agent reaches the same servers,
+from the pass-through itself, through the relay, and never holds `mcp/token`
+or any other credential that outlives its agent:
+
+- **The reach:** agent-proxy's own dial-in, `mcp.agent.internal:80`, joined
+  to the pass-through's loopback port (7439, or `agentProxy.mcp.port`), made
+  wherever agent-proxy runs the pass-through beside the relay
+  (docs/agent-proxy.md). It reaches the pass-through alone: no other port of
+  that name, and nothing else on loopback. A server is at
+  `http://mcp.agent.internal/mcp/<name>` in the container (relay-client's
+  redirect makes the connection a CONNECT through the relay).
+- **The servers:** exactly what the pass-through serves, from agent-proxy's
+  settings: each `agentProxy.mcp.upstreams` entry by its name, and `gh`
+  where gh_mcp is answered in-process (`agentProxy.gh`). They go where every
+  Claude in the container reads them, its user MCP servers: `mcpServers` in
+  its Claude folder's `.claude.json` (`<Sessions>/.claude/.claude.json`),
+  where Shireworks' `shireworks` entry was. agent_protocol's wrapper starts
+  its Claude with `--mcp-config` naming Visor's server (`visor`) alone, and
+  a job can't add to that, so this is the place. The engine writes them at
+  each boot, before anything runs in the guest (so no Claude there writes
+  the file meanwhile), and only when they change it (ContainerClaudeMCP).
+  Each entry is `{"type": "http", "url": "http://mcp.agent.internal/mcp/<name>",
+  "headersHelper": "/opt/visor/bin/visor-agent-host mcp-headers"}`: no header
+  of its own, no token. An entry with that helper is Visor's: set by its
+  name over whatever was there, and taken out once the pass-through no longer
+  serves it; every other entry, and the rest of the file, is left as it was.
+  A change to agent-proxy's settings takes a restart of the server, as
+  agent-proxy's does, and so a new boot.
+- **The auth:** the agent's own token. Claude runs the headersHelper as it
+  connects to each server, and again when one answers 401.
+  `visor-agent-host mcp-headers` asks the agent's wrapper on its MCP socket
+  (`AGENT_MCP_SOCKET`, the one `agent-wrapper mcp` uses) with one JSON-RPC
+  request, `visor/passThroughHeaders`. The wrapper relays it to Visor's
+  driver as it does any of its harness's MCP, over the stream its own token
+  opened, and the driver (DrivenMCP) answers for that agent:
+  `{"headers": {"X-Visor-Proxy": "<token>"}}`, a fresh JWT of the container
+  runner's (`visor.runner-agent`, naming the session and the agent, an hour's,
+  scope `mcp` alone, so it can't open the driver's Connect). The helper
+  prints that object, and nothing is kept: no file, no variable, no command
+  line has the token. The pass-through takes `X-Visor-Proxy` as before: the
+  sessions' token, or else a JWT-shaped token it asks the server about (in
+  the same process: the server agent runs both). That token is taken while
+  it's this server's, unexpired, allowed MCP, and names an agent the
+  container runner runs now (not let go) and that agent's live session
+  (ContainerRunner.passThroughSession). Its call then goes on as that
+  session's: any `CLIENT_ID` it sent is replaced by its session's id, an
+  upstream's `$SESSION_ID` headers are filled with it, and one naming
+  anything else of the session (`$SESSION_TITLE`, `$SESSION_REPOSITORY`) is
+  left out. So gh_mcp knows the caller by its token, not its word. An
+  expired, forged or other session's token, a native session's, or one of an
+  agent that has ended, is refused (401). The wrapper's own token (its
+  job's, MCP among the rest) is taken too; the harness is given its own, for
+  MCP alone.
+- **What doesn't change:** a native session's MCP. It is still Visor's
+  `visor` server alone, its passed-on servers through it (`gh__pr_create`),
+  with the sessions' token Visor's server holds. A container's agent's own
+  Visor tools are still Visor's alone from the driver. The server's own
+  `claude -p` in the container reads the same file, but has no wrapper to
+  ask, so the pass-through's servers don't connect for it; it doesn't need
+  them.
+- Only the server agent (`Visor --server`, where the container runs) gives
+  agent-proxy the server to ask. agent-proxy as a launchd job, or in
+  visor-server on Linux, takes the sessions' token alone, as before.
+
 ## Placing sessions (the container runner)
 
 A session is **on this Mac** or **in this Mac's Sessions container**; another
@@ -453,7 +522,9 @@ claimed, deprecated), from a 0.64 server. The runner is the server's
 agent in the container itself, so nothing claims a job, and the dispatcher's
 queue isn't used. The driven-session code a runner's agent had is the same:
 its process is the wrapper's stream (DrivenProcess: rows, mail as `@@from`
-turns, approvals, interrupts), its MCP is Visor's own tools alone, and a
+turns, approvals, interrupts), its MCP from the driver is Visor's own tools
+alone (the servers passed on come from agent-proxy's pass-through: MCP in
+the container, above), and a
 move back is a hand-back (agent_protocol 0.5.0's `ReturnConversation`, the
 intake's containment and caps).
 
@@ -578,7 +649,10 @@ as a defence beside it. Visor adopts it once #17 lands in a release.
   it's turned on (never 7499); and the container runner
   (ContainerRunnerTests, over gRPC as the wrappers reach the driver, with a
   container that runs no VM), the pilot's seven checks among them: its MCP
-  Visor's own tools; mail both ways; approvals answered from Visor; an
+  Visor's own tools (and its harness given a token of its agent's own for
+  agent-proxy's pass-through, for MCP alone, never Connect, which the
+  pass-through takes as its session's while its agent runs, and an expired,
+  forged, other session's or let-go agent's never); mail both ways; approvals answered from Visor; an
   interrupt; a server's start starting its agent again on its latest
   conversation; the move and its token's enforcement (its own token in, no
   other, no job); and Move Back with its conversation handed back. And its
@@ -593,7 +667,16 @@ as a defence beside it. Visor adopts it once #17 lands in a release.
   credential replacing the placeholder and `x-api-key`, the beta merged,
   the 401 with none, the token never echoed or logged.
   `//tests/visor_container_tests`: the authorities staged, shared and
-  trusted.
+  trusted; and the pass-through's servers put in its Claude's `.claude.json`
+  at its boot (each at its URL with Visor's headersHelper, no credential,
+  Visor's no longer served taken out, the rest kept, written only on a
+  change, a file that isn't JSON left alone). `//tests/visor_agent_proxy_tests`
+  (AgentProxyHostTests, NativeMCPProxyTests): the pass-through's own dial-in,
+  reaching it alone, a container's call through the relay let in with its
+  agent's token as its session's and refused without one, and a native
+  session's call as before; MCPHeadersTests and MCPConfigTests in
+  `//tests/visor_server_tests`: the headersHelper's one request and its
+  answer, and a native session's Claude config unchanged.
 - `//tests/feature_map_tests` (the client headless through Isomer's
   driver): Migrate… into the container and back (FeatureMapTests.Sessions),
   New Session in the container (FeatureMapTests.NewSession): chosen,

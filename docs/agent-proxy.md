@@ -19,6 +19,11 @@ settings.json has `agentProxy`.
   `mcpEndpoints` point here (`http://127.0.0.1:7439/mcp/gh`, with the
   `X-Visor-Proxy` header a secret of the endpoint's). Upstreams are plain
   `http://` addresses.
+- **The Sessions container's agents' MCP** (from 0.72.1), at the same
+  pass-through: through the relay, by agent-proxy's own dial-in
+  `mcp.agent.internal:80`, each call showing its agent's own token in
+  `X-Visor-Proxy`, never the sessions' token. It is below, under The
+  container's agents and the pass-through.
 - **gh_mcp, in-process** (from 0.66) at the pass-through's `/mcp/gh`, when
   `agentProxy.gh` is set and no upstream is named `gh`. It is below, under
   gh_mcp in agent-proxy.
@@ -52,7 +57,9 @@ settings.json has `agentProxy`.
     one it's answered 401 (docs/containers.md, "Claude's credential");
   - `POST /dns-query`: DNS over HTTPS, split by `dns`;
   - a CONNECT to `<name>.agent.internal:<port>`: a dial-in to a port on
-    this computer (`dialIns`);
+    this computer (`dialIns`), or agent-proxy's own, `mcp.agent.internal:80`,
+    to the MCP pass-through's port, wherever the pass-through runs (from
+    0.72.1);
   - `/mcp/<name>`: refused with 404 for now. The container runner (step 4)
     gives it something to answer.
 
@@ -157,7 +164,10 @@ sessions' token (`X-Visor-Proxy`) to reach `/mcp/gh`, and its `CLIENT_ID`
 (the session's own id, since #482) names the session.
 
 **How far that is trusted.** `CLIENT_ID` is the caller's word, and the
-sessions' token is one token shared by every native session. So anything
+sessions' token is one token shared by every native session (a Sessions
+container's agent's call is the exception: its CLIENT_ID is its token's
+session, set by the pass-through; see The container's agents and the
+pass-through). So anything
 holding the token can name any session, act as the app `sessionAgents` gives
 that session, and be logged as it. `CLIENT_ID` and `sessionAgents` are
 trusted only as far as the token is: they choose among the apps the token
@@ -237,6 +247,47 @@ Sessions' `mcpEndpoints` don't change: they still point at
 read once the upstream is gone (`agent-proxy secret-remove mcp/gh/api_key`).
 The MacBook's own gh_mcp goes when its sessions move to the Mini.
 
+## The container's agents and the pass-through (0.72.1)
+
+A native session reaches the pass-through through Visor's server, which
+shows the sessions' token. The Sessions container's agents reach it
+themselves (docs/containers.md, "MCP in the container"), and the token never
+goes into the container:
+
+- **The dial-in.** With the pass-through and the relay listener both
+  running, the relay has a dial-in of agent-proxy's own:
+  `mcp.agent.internal:80`, joined to the pass-through's loopback port (7439,
+  or `mcp.port`; the one it started with). It isn't the settings': a
+  `dialIns` entry named `mcp` is passed over, and the log says so. Like any
+  dial-in it is that name and port alone: `mcp.agent.internal` on another
+  port is refused, and the pass-through's port is never reached by loopback
+  (the egress proxy refuses this computer's addresses). The relay listener's
+  line at the start lists it (`, mcp.agent.internal:80 to loopback port
+  7439`).
+- **The token.** A call shows `X-Visor-Proxy` as before. The sessions'
+  token lets it in as it always has. Any other token shaped as a JWT is
+  asked about (`agentSession`), on the call's own thread, for at most 10
+  seconds: the server agent, which runs agent-proxy and the container in
+  one process, answers with the session it acts as. That's a token of the
+  server's (`visor.runner-agent`), unexpired, allowed MCP, naming an agent
+  its container runner runs now (not let go), and that agent's session,
+  live. Anything else (expired, forged, another server's, another session's,
+  a native session's, an ended agent's) is refused with 401, before
+  anything goes on. The agent's harness gets such a token from its own
+  wrapper's stream, for MCP alone, an hour's, and asks again as it needs one
+  (`visor-agent-host mcp-headers`, its Claude's headersHelper).
+- **As its session.** A call let in by an agent's token goes on as that
+  token's session: whatever `CLIENT_ID` it sent is replaced with its
+  session's id, so gh_mcp knows it by its token, not its word (for these
+  calls, the "later improvement" under gh_mcp, above, is made). An
+  upstream's plain header of `$SESSION_ID` is filled with it, and one naming
+  anything else of the session (`$SESSION_TITLE`, `$SESSION_REPOSITORY`) is
+  left out; the caller's own of those names never goes on. The token stops
+  at the pass-through, as the sessions' token does.
+- **Where.** Only the server agent (`Visor --server`) gives agent-proxy a
+  server to ask. As a launchd job, or in visor-server on Linux, nothing
+  runs a container, and the pass-through takes the sessions' token alone.
+
 ## The secrets
 
 They are the server's own secrets: the keychain on a Mac (under the server's
@@ -251,7 +302,7 @@ new one needs no restart.
 | `github-app/key` | the GitHub App's private key, a PEM (PKCS #1, `BEGIN RSA PRIVATE KEY`, as GitHub issues it, or PKCS #8). With `github-app/id`, the gate attaches the App's installation tokens instead of `github-token` | you |
 | `github-app/id` | the GitHub App's id | you |
 | `github-app/installation` | the App's installation's id. Optional: without it, the installation of the gate's owner | you |
-| `mcp/token` | the sessions' token, shown in `X-Visor-Proxy` | you (on the Mini, Shireworks' `agent-proxy/mcp/token`, imported) |
+| `mcp/token` | the sessions' token, shown in `X-Visor-Proxy` by Visor's server for its native sessions; never in a container (its agents show their own) | you (on the Mini, Shireworks' `agent-proxy/mcp/token`, imported) |
 | `mcp/<upstream>/<header>` | an upstream's secret header (the header lower-cased) | you |
 | `claude/oauth-token` | the Claude credential (a `claude setup-token` token) the Anthropic interceptor attaches for container sessions. Optional: without it, every request to api.anthropic.com is refused | you, in Settings › Sessions Container (Sign In to Claude…), or the import |
 | `relay-token` | the relay's token | agent-proxy, the first time |

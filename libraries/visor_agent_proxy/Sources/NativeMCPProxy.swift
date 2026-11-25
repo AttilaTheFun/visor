@@ -7,6 +7,11 @@
 // token and their secret headers Visor's secrets.
 // From 0.66 a name may also be answered in-process (InProcessMCP: gh_mcp, folded in at `/mcp/gh`), where no upstream
 // of that name is configured: an upstream wins, so moving gh_mcp from its own listener (7470) in is a settings change.
+// From 0.72.1 the Sessions container's agents reach it too, through the relay's dial-in `mcp.agent.internal:80`
+// (DialIn.passThrough), with no sessions' token of theirs: a call shows its agent's own token (`agentSession`, Visor's
+// container runner: a JWT for `visor.runner-agent`, minted for MCP alone, naming an agent running now), and goes on as
+// that token's session (CLIENT_ID, and an upstream's `$SESSION_ID` headers, are agent-proxy's to set, never the
+// caller's word).
 
 import CAgentProxyPOSIX
 import Foundation
@@ -58,13 +63,20 @@ public final class NativeMCPProxy: Sendable {
     private let inProcess: [String: any InProcessMCP]
     /// The tools each of those keeps from the sessions, as an upstream's `withheldTools`.
     private let inProcessWithheld: [String: Set<String>]
+    /// The session a container agent's own token acts as, while its agent runs (nil for any other token). None: only
+    /// the sessions' token is taken.
+    private let agentSession: (@Sendable (String) async -> String?)?
+    /// How long a call waits to hear whether a token is a container agent's.
+    static let agentSessionWithin: DispatchTimeInterval = .seconds(10)
 
     public static let defaultMaxConnections = 64
 
-    /// Listening on loopback `port` alone: a call without the sessions' token is refused. Nil when the port can't be had.
+    /// Listening on loopback `port` alone: a call without the sessions' token, or a container agent's own (`agentSession`
+    /// names its session), is refused. Nil when the port can't be had.
     public init?(port: UInt16, endpoints: @escaping @Sendable () -> [Endpoint], admits: @escaping @Sendable (String) -> Bool,
                  secret: @escaping @Sendable (_ endpoint: String, _ header: String) -> String?,
                  inProcess: [String: any InProcessMCP] = [:], inProcessWithheld: [String: [String]] = [:],
+                 agentSession: (@Sendable (String) async -> String?)? = nil,
                  maxConnections: Int = NativeMCPProxy.defaultMaxConnections) {
         agent_proxy_ignore_broken_pipes()
         let listener = agent_proxy_listen(port, 0)
@@ -76,6 +88,7 @@ public final class NativeMCPProxy: Sendable {
         self.secret = secret
         self.inProcess = inProcess
         self.inProcessWithheld = inProcessWithheld.mapValues(Set.init)
+        self.agentSession = agentSession
         self.maxConnections = maxConnections
     }
 
@@ -178,11 +191,22 @@ public final class NativeMCPProxy: Sendable {
     /// the hop, the token and any named as the endpoint's plain or secret ones (the caller's own never sits beside
     /// agent-proxy's), then the endpoint's plain ones (Visor's settings name them), then its secret ones. A plain one
     /// whose value names the session (`$SESSION_ID`, as MultiPass's runner.json kept CLIENT_ID) is the session's to
-    /// send, filled in by Visor's server: it neither stands in for the session's nor goes on as it's written.
-    func forwarded(_ request: Request, to endpoint: Endpoint, host: String) -> [(name: String, value: String)] {
-        let plain = endpoint.headers.filter { !$0.value.contains("$SESSION_") }
+    /// send, filled in by Visor's server: it neither stands in for the session's nor goes on as it's written. For a
+    /// container agent's call (`session`, its token's), those are agent-proxy's to fill: `$SESSION_ID` its session, and
+    /// one naming anything else of the session (its title, its repository) left out, the caller's own never sent on.
+    func forwarded(_ request: Request, to endpoint: Endpoint, host: String, session: String? = nil) -> [(name: String, value: String)] {
+        var plain = endpoint.headers.filter { !$0.value.contains("$SESSION_") }
+        var sessions: [String] = []
+        if let session {
+            let named = endpoint.headers.filter { $0.value.contains("$SESSION_") }
+            sessions = named.keys.map { $0.lowercased() }
+            for (name, value) in named {
+                let filled = value.replacingOccurrences(of: "$SESSION_ID", with: session)
+                if !filled.contains("$SESSION_") { plain[name] = filled }
+            }
+        }
         let dropped = Set(["host", "connection", "content-length", "transfer-encoding", "keep-alive", Self.tokenHeader.lowercased()]
-            + endpoint.secretHeaders.map { $0.lowercased() } + plain.keys.map { $0.lowercased() })
+            + endpoint.secretHeaders.map { $0.lowercased() } + plain.keys.map { $0.lowercased() } + sessions)
         var headers = request.headers.filter { !dropped.contains($0.name.lowercased()) }
         headers.append(("Host", host))
         for (name, value) in plain.sorted(by: { $0.key < $1.key }) where !value.contains(where: \.isNewline) {
@@ -197,20 +221,60 @@ public final class NativeMCPProxy: Sendable {
     }
 
     private func answer(_ client: Int32) {
-        guard let request = Self.read(client) else { return }
-        guard let token = request.header(Self.tokenHeader), admits(token) else {
+        guard var request = Self.read(client) else { return }
+        guard let token = request.header(Self.tokenHeader) else {
             return Self.reply(client, "401 Unauthorized", "No sessions' token for this proxy.")
+        }
+        // The sessions' token (a native session's call, through Visor's server), else a container agent's own.
+        var session: String?
+        if !admits(token) {
+            guard let agents = agentsSession(of: token) else {
+                return Self.reply(client, "401 Unauthorized", "No sessions' token for this proxy.")
+            }
+            session = agents
+            request = Self.asSession(request, agents)
         }
         // Bodies are read by Content-Length alone: a chunked one would go on cut short.
         guard request.header("transfer-encoding") == nil else {
             return Self.reply(client, "411 Length Required", "Send the body with a Content-Length.")
         }
-        answerMCP(client, request)
+        answerMCP(client, request, session: session)
+    }
+
+    /// The session `token` acts as, when it's a container agent's own (`agentSession` says, on a task of its own while
+    /// this call's thread waits, at most `agentSessionWithin`); nil for any other, or with nothing to ask.
+    private func agentsSession(of token: String) -> String? {
+        guard let agentSession, Self.isJWTShaped(token) else { return nil }
+        let found = Locked<String?>(nil)
+        let done = DispatchSemaphore(value: 0)
+        Task {
+            let session = await agentSession(token)
+            found.withLock { $0 = session }
+            done.signal()
+        }
+        guard done.wait(timeout: .now() + Self.agentSessionWithin) == .success else { return nil }
+        return found.withLock { $0 }
+    }
+
+    /// Whether `token` is shaped as a JWT (three parts, none empty): only such a token is asked about.
+    static func isJWTShaped(_ token: String) -> Bool {
+        let parts = token.split(separator: ".", omittingEmptySubsequences: false)
+        return parts.count == 3 && parts.allSatisfy { !$0.isEmpty }
+    }
+
+    /// A container agent's call, as its token's `session`'s: whatever CLIENT_ID it sent (in any case, or as CLIENT-ID)
+    /// taken off, and its session's own put in its place, so gh_mcp, and an upstream, know it by its token alone.
+    static func asSession(_ request: Request, _ session: String) -> Request {
+        var request = request
+        request.headers.removeAll { $0.name.lowercased().replacingOccurrences(of: "_", with: "-") == "client-id" }
+        request.headers.append((name: "CLIENT_ID", value: session))
+        return request
     }
 
     /// A call to `/mcp/<name>`: passed on to that MCP server with its secret headers, a withheld tool refused; or, with
-    /// no upstream of that name, answered by the one served here of that name.
-    func answerMCP(_ client: Int32, _ request: Request) {
+    /// no upstream of that name, answered by the one served here of that name. `session`: a container agent's call, as
+    /// its token's session.
+    func answerMCP(_ client: Int32, _ request: Request, session: String? = nil) {
         var request = request
         let name = request.path.hasPrefix("/mcp/") ? String(request.path.dropFirst(5).prefix { $0 != "?" && $0 != "/" }) : ""
         guard let endpoint = endpoints().first(where: { $0.name == name }) else {
@@ -248,7 +312,7 @@ public final class NativeMCPProxy: Sendable {
         defer { close(upstream) }
         let path = (url.percentEncodedPath.isEmpty ? "/" : url.percentEncodedPath) + (url.percentEncodedQuery.map { "?" + $0 } ?? "")
         var head = "\(request.method) \(path) HTTP/1.1\r\n"
-        for header in forwarded(request, to: endpoint, host: "\(host):\(port)") {
+        for header in forwarded(request, to: endpoint, host: "\(host):\(port)", session: session) {
             // No line break in a header: it would be another header, or another request.
             guard !(header.name + header.value).contains(where: { $0 == "\r" || $0 == "\n" }) else {
                 return Self.reply(client, "400 Bad Request", "A header with a line break.")

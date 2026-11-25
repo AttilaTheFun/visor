@@ -95,6 +95,10 @@ void visor_shutdown(int socket);
 /// and can still answer.
 void visor_shutdown_write(int socket);
 
+/// Reads on a socket given up (failing, EAGAIN) once nothing has come for
+/// `seconds`; 0 waits for ever.
+void visor_set_receive_timeout(int socket, int seconds);
+
 /// Writing to a pipe or socket whose reader has gone fails the write
 /// (EPIPE) rather than ending the process.
 void visor_ignore_broken_pipes(void);
