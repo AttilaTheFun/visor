@@ -22,7 +22,9 @@
 // Its secrets are the server's (the keychain on a Mac, the secrets file
 // elsewhere), each `agent-proxy/<name>` (`secretKey`), never in these
 // settings: `github-token` (the GitHub credential the gate attaches; none:
-// no GitHub through the proxy), `mcp/token` (the sessions' token) and
+// no GitHub through the proxy), `claude/oauth-token` (the Claude credential
+// the Anthropic interceptor attaches, a `claude setup-token` token; none: no
+// Claude for containers' agents), `mcp/token` (the sessions' token) and
 // `mcp/<upstream>/<header>` (an upstream's secret header), imported with
 // `agent-proxy secret-set <name>` from standard input; and the relay's token
 // and the GitHub authority, which agent-proxy makes itself.
@@ -243,6 +245,10 @@ public struct AgentProxySettings: Codable, Equatable, Sendable {
     public static let secretPrefix = "agent-proxy/"
     /// The GitHub credential the gate attaches for containers' sessions.
     public static let githubTokenName = "github-token"
+    /// The Claude credential the Anthropic interceptor attaches for
+    /// containers' agents: a `claude setup-token` token, set from Settings ›
+    /// Sessions Container (docs/containers.md, "Claude's credential").
+    public static let claudeTokenName = "claude/oauth-token"
     /// The native sessions' token, which a call shows in `X-Visor-Proxy`.
     public static let mcpTokenName = "mcp/token"
     /// The relay's token, which each relayed stream's header carries:
@@ -258,12 +264,13 @@ public struct AgentProxySettings: Codable, Equatable, Sendable {
 
     /// `name` as the import takes it: given with or without
     /// `agent-proxy/`, and an upstream's header lower-cased. Nil when it is
-    /// none of the secrets one sets: `github-token`, `mcp/token`, or
+    /// none of the secrets one sets: `github-token`, `claude/oauth-token`,
+    /// `mcp/token`, or
     /// `mcp/<upstream>/<header>` (letters, digits, `-`, `_` and `.`, at most
     /// 64 each).
     public static func importableName(_ given: String) -> String? {
         let name = given.hasPrefix(secretPrefix) ? String(given.dropFirst(secretPrefix.count)) : given
-        if name == githubTokenName || name == mcpTokenName { return name }
+        if name == githubTokenName || name == claudeTokenName || name == mcpTokenName { return name }
         let parts = name.split(separator: "/", omittingEmptySubsequences: false)
         guard parts.count == 3, parts[0] == "mcp" else { return nil }
         let valid = parts.dropFirst().allSatisfy { part in

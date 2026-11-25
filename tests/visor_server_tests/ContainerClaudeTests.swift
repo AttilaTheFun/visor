@@ -71,7 +71,10 @@ extension ServerTests {
         let ran = container.ran.withLock { $0 }
         #expect(ran.count == 1)
         #expect(ran.first?.arguments == ["claude", "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose"])
-        #expect(ran.first?.environment == ["CLAUDE_CONFIG_DIR": "/Volumes/Sessions/.claude"])
+        // Its Claude folder on Sessions, and the credential agent-proxy's:
+        // a placeholder, and the proxy's authorities trusted.
+        #expect(ran.first?.environment == ["CLAUDE_CONFIG_DIR": "/Volumes/Sessions/.claude", "CLAUDE_CODE_OAUTH_TOKEN": "visor-agent-proxy",
+                                           "NODE_EXTRA_CA_CERTS": "/opt/visor/trust/agent-proxy-ca.pem"])
         #expect(ran.first.map { String(decoding: $0.input ?? Data(), as: UTF8.self) }?.contains(#""subtype":"initialize""#) == true)
         #expect(ran.first?.answered(Self.models) == true, "it's ended once it has answered")
         #expect(ran.first?.answered("noise") == false)

@@ -31,6 +31,11 @@ settings.json has `agentProxy`.
     authority shows a leaf for the host, each request is decided by the gate
     (gate.json, or the standard rules), and it goes on with the **auth
     token**;
+  - a CONNECT to api.anthropic.com: the Anthropic interceptor. Its own
+    authority (constrained to that name) shows a leaf, and each request
+    goes on with the **Claude credential** in place of the agent's
+    placeholder, `oauth-2025-04-20` merged into `anthropic-beta`; without
+    one it's answered 401 (docs/containers.md, "Claude's credential");
   - `POST /dns-query`: DNS over HTTPS, split by `dns`;
   - a CONNECT to `<name>.agent.internal:<port>`: a dial-in to a port on
     this computer (`dialIns`);
@@ -230,8 +235,10 @@ new one needs no restart.
 | `github-token` | the auth token: the GitHub credential the gate attaches for container sessions. Optional: without it, nothing that needs a token reaches GitHub through the proxy | you |
 | `mcp/token` | the sessions' token, shown in `X-Visor-Proxy` | you (on the Mini, Shireworks' `agent-proxy/mcp/token`, imported) |
 | `mcp/<upstream>/<header>` | an upstream's secret header (the header lower-cased) | you |
+| `claude/oauth-token` | the Claude credential (a `claude setup-token` token) the Anthropic interceptor attaches for container sessions. Optional: without it, every request to api.anthropic.com is refused | you, in Settings › Sessions Container (Sign In to Claude…), or the import |
 | `relay-token` | the relay's token | agent-proxy, the first time |
 | `ca.pem`, `ca-key.pem` | the GitHub authority, made new (a private key never moves) | agent-proxy, the first time |
+| `anthropic-ca.pem`, `anthropic-ca-key.pem` | the Anthropic authority (api.anthropic.com alone) | agent-proxy, the first time |
 
 **The import**, with the value on standard input. It refuses a terminal, and
 the value is never an argument:

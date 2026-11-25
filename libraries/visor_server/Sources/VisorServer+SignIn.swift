@@ -2,7 +2,8 @@
 // the user is, for when its sign-in expired (it said "Please run /login").
 // The page to sign in at is the session's state until the sign-in ends;
 // the code that page shows comes back as `signIn`. Signed in, the agent is
-// made again on the new sign-in.
+// made again on the new sign-in. A session placed in the Sessions container
+// is told where its sign-in is instead: Settings › Sessions Container.
 
 import Foundation
 import VisorAgent
@@ -27,6 +28,9 @@ extension VisorServer {
         record.signIn?.cancel()
         record.signIn = nil
         if arguments == ["cancel"] { return broadcast(record.ephemeralEnvelope, session: record) }
+        // Placed in the container, its Claude is agent-proxy's to sign in
+        // (VisorServer+ContainerCredential), never this computer's.
+        if isInContainer(record) { return tell(record, Self.containerSignIn) }
         guard let claude = ToolPath.resolve("claude") else {
             return tell(record, "Claude Code is not installed on this computer.")
         }

@@ -9,7 +9,8 @@
 // tailnet's private ranges only where `agentProxy.egressAllow` lists them.
 // A dial-in is the way to this Mac's servers. GitHub's three hosts,
 // on port 443, are opened by phase 2's interceptor where there is one
-// (GitHubIntercepting); every other host, and GitHub's until then, is a
+// (GitHubIntercepting), and api.anthropic.com by the Anthropic one
+// (Interceptors holds both); every other host, and theirs without one, is a
 // plain tunnel, its bytes passed through untouched.
 //
 // Plain HTTP: an absolute-form request (`GET http://host/path HTTP/1.1`),
@@ -78,7 +79,8 @@ public final class EgressProxy: Sendable {
 
     /// `destination`, as it went for `caller`, in the egress log.
     func record(_ caller: Caller, _ destination: Destination, _ outcome: EgressLog.Outcome) {
-        let route: EgressLog.Route = GitHubHosts.contains(destination.host) ? .github : .egress
+        let route: EgressLog.Route = GitHubHosts.contains(destination.host) ? .github
+            : destination.host.lowercased() == AnthropicInterceptor.host ? .anthropic : .egress
         egress?.record(EgressLog.Entry(host: destination.host.lowercased(), port: Int(destination.port), lease: caller.lease,
                                        agentClaimed: caller.agent, route: route, outcome: outcome))
     }

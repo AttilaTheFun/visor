@@ -35,10 +35,15 @@ public struct ContainerStatus: Equatable, Sendable {
     /// than starting it again. Nil while it runs, and after a stop it
     /// takes up again by itself (a crash, an idle stop, a restart).
     public var held: String?
+    /// Whether agent-proxy keeps a Claude credential for the container's
+    /// agents (`agent-proxy/claude/oauth-token`, set from Settings ›
+    /// Sessions Container): its presence alone, never the credential. Nil
+    /// from a server that doesn't say (before 0.69).
+    public var claudeCredential: Bool?
 
     public init(state: ContainerState, enabled: Bool = false, canRun: Bool = false, cpus: Int? = nil, memoryGiB: Int? = nil,
                 idleMinutes: Int? = nil, image: String? = nil, since: Double? = nil, processes: Int = 0, relayPort: Int? = nil,
-                egress: String? = nil, errors: [String] = [], held: String? = nil) {
+                egress: String? = nil, errors: [String] = [], held: String? = nil, claudeCredential: Bool? = nil) {
         self.state = state
         self.enabled = enabled
         self.canRun = canRun
@@ -52,6 +57,7 @@ public struct ContainerStatus: Equatable, Sendable {
         self.egress = egress
         self.errors = errors
         self.held = held
+        self.claudeCredential = claudeCredential
     }
 
     /// Whether a session may be started in it now, or would start it: on

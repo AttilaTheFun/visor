@@ -326,6 +326,11 @@ extension ServerTests {
         #expect(agent.sources.isEmpty && agent.sourcesDirectory == nil, "nothing to clone")
         #expect(agent.skipPermissions && record.info.skipPermissions, "the container is its sandbox")
         #expect(agent.environment["CLAUDE_CONFIG_DIR"] == sessions.path + "/.claude", "its Claude folder on Sessions")
+        // Its credential agent-proxy's: a placeholder here, never a token,
+        // and the proxy's authorities trusted by Claude Code's TLS.
+        #expect(agent.environment["CLAUDE_CODE_OAUTH_TOKEN"] == "visor-agent-proxy")
+        #expect(agent.environment["NODE_EXTRA_CA_CERTS"] == "/opt/visor/trust/agent-proxy-ca.pem")
+        #expect(!agent.environment.values.contains { $0.hasPrefix("sk-ant-") }, "no credential in its environment")
         #expect(agent.harness == "echo", "the driver's harness")
         guard case .success(let claims) = server.agentTokens.verify(agent.token, as: .runnerAgent, agent: agent.agent, scope: .job) else {
             Issue.record("its token isn't a runner agent's")
@@ -627,6 +632,18 @@ extension ServerTests {
         let started = try #require(container.all.first)
         #expect(started.agent.workingDirectory == sessions.path + "/Claude/" + started.agent.agent)
         #expect(record.move?.cwd == outside.path, "where its conversation is here")
+    }
+
+    /// `/login` in a session placed in the container signs in nothing here:
+    /// its Claude is agent-proxy's, set in Settings › Sessions Container.
+    @Test func loginInTheContainerPointsAtSettings() async throws {
+        let (_, wrapper, record) = try await placed("login")
+        server.deliver("/login", to: record)
+        #expect(record.notice == VisorServer.containerSignIn)
+        #expect(record.signIn == nil, "no `claude auth login` on this computer")
+        try? await Task.sleep(for: .milliseconds(200))
+        #expect(!wrapper.sent.contains("/login"), "nothing for its agent")
+        wrapper.finish()
     }
 }
 }

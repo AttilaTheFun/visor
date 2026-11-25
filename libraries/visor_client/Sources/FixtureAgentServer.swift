@@ -150,11 +150,25 @@ final class FixtureAgentServer: AgentServer {
 
     /// The fixture's computer has a Sessions container, on, that takes
     /// sessions (so Migrate… and New Session offer it); on
-    /// `new-session-no-container`, one turned off, which takes none.
+    /// `new-session-no-container`, one turned off, which takes none. Its
+    /// agents' Claude credential set here or not.
     func sessionsContainer() async -> ContainerStatus? {
         VisorFixture.screen == "new-session-no-container"
-            ? ContainerStatus(state: .off, enabled: false, canRun: true, cpus: 8, memoryGiB: 16, idleMinutes: 30)
-            : ContainerStatus(state: .stopped, enabled: true, canRun: true, cpus: 8, memoryGiB: 16, idleMinutes: 30)
+            ? ContainerStatus(state: .off, enabled: false, canRun: true, cpus: 8, memoryGiB: 16, idleMinutes: 30,
+                              claudeCredential: claudeCredential)
+            : ContainerStatus(state: .stopped, enabled: true, canRun: true, cpus: 8, memoryGiB: 16, idleMinutes: 30,
+                              claudeCredential: claudeCredential)
+    }
+
+    /// Whether the container's Claude credential is kept: none at first.
+    private var claudeCredential = false
+
+    /// Kept (or removed), as a server keeps it: refused, in the server's
+    /// words, when it isn't a setup-token's; never kept or shown here.
+    func setContainerClaudeCredential(_ token: String?) async throws -> ContainerStatus {
+        if let token, let problem = ClaudeCredential.problem(token) { throw AgentServerError.message(problem) }
+        claudeCredential = token != nil
+        return await sessionsContainer() ?? ContainerStatus(state: .off)
     }
 
     /// The sessions New Session started in the container here.

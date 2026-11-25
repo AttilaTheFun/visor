@@ -1513,6 +1513,14 @@ public final class AgentServerConnection: Identifiable {
         container = await server.sessionsContainer()
     }
 
+    /// The Claude credential of the container's agents kept by the
+    /// computer's agent-proxy (nil: Sign Out); the server's refusal thrown
+    /// in its words, for the sheet to show. Never read back: the container's
+    /// status says only whether there is one.
+    public func setContainerClaudeCredential(_ token: String?) async throws {
+        container = try await server.setContainerClaudeCredential(token)
+    }
+
     /// The conversation went on elsewhere: keep to the branch shown (the
     /// next message carries it on and makes it the newest again), or
     /// continue the newest branch instead.

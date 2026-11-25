@@ -67,6 +67,7 @@ flowchart TD
     SubPage["Fork, Branch,<br/>Side Questions, Subagent"]
     Settings["Settings"]
     Computer["Computer settings"]
+    ClaudeSignIn["Sign In to Claude<br/>(the Sessions container's credential)"]
 
     Launch -->|"no computer yet"| Onboarding
     Launch -->|"account not signed in"| SignIn
@@ -131,6 +132,9 @@ flowchart TD
 
     Settings -->|"tap settings-computer-‹name›"| Computer
     Settings -->|"tap settings-add-computer"| AddComputer
+    Computer -->|"tap container-sign-in"| ClaudeSignIn
+    ClaudeSignIn -->|"type container-claude-token ‹token›, tap container-claude-save"| Computer
+    ClaudeSignIn -->|"tap container-claude-save, refused: container-claude-error"| ClaudeSignIn
     Settings -->|"tap settings-done or settings-back"| Sessions
 ```
 
@@ -170,7 +174,8 @@ that opens it directly (see "Driving it" below).
 | Attachment preview | a sheet with "Done"; on the iPhone it is Quick Look, whose button is "close" | "Done" ("close" on the iPhone), "Share" | none (the `chat` fixture's two attachments are both labelled "Open the attachment": tap them by `attachment-‹file›`) |
 | Fork, Branch, Side Questions, Subagent | its title: "Fork of …", "Branch of …", "Side Questions", or the subagent's description | the chat's | none |
 | Settings | `settings-appearance` listed | `settings-computer-‹name›`, `settings-add-computer`, `settings-notify-waiting`, `-failed`, `-goal`, `-turn`, `settings-appearance`, `account-sign-out`, `settings-done` (a sheet) or `settings-back` (a pane) | `settings` (Mac's proof) |
-| Computer settings | `share-log` or "Network paths" listed | `use-ssh`, `relay-toggle`, `back-up-sessions`, `show-qr`, `qr-code`, `copy-http-code`, `copy-https-code`, `copy-ssh-code`, `share-log`, `copy-ssh-key`, `show-key-qr`, `forget-device` (reached over SSH) | none |
+| Computer settings | `share-log` or "Network paths" listed | `use-ssh`, `relay-toggle`, `back-up-sessions`, `show-qr`, `qr-code`, `copy-http-code`, `copy-https-code`, `copy-ssh-code`, `share-log`, `copy-ssh-key`, `show-key-qr`, `forget-device` (reached over SSH); its Sessions container's `container-claude-state` ("Claude sign-in": "Set" or "Not set", the credential's presence alone), `container-sign-in` ("Sign In to Claude…"), `container-claude-sign-out` (while set) | none |
+| Sign In to Claude | a sheet; `container-claude-token` and `container-claude-save` listed | `container-claude-token` (a secure field: the token `claude setup-token` printed), `container-claude-save` ("Save"), `container-claude-cancel` ("Cancel"), `container-claude-error` (the computer's refusal: one that isn't `sk-ant-oat…`; the sheet stays open) | none: `sessions`, tap `settings`, `settings-computer-Snapshot Mac`, then `container-sign-in`. The fixture's computer keeps no credential at first; one that begins `sk-ant-oat` is kept (the state "Set", never the token), anything else refused |
 
 The fixture's canned data: one computer, "Snapshot Mac", with the sessions
 `fixture-chat` ("Offline sync", Claude, a goal and a pending Bash
@@ -198,7 +203,8 @@ The graph is the same everywhere; what a node is differs with the width:
   suite's emulator) is regular width too: the list sits beside the chat,
   and `back` from the chat has nothing to go back from.
 - **The Mac only:** the menu bar's Visor menu and this Mac's server's
-  Settings window (password, network paths, push: the server's API at
+  Settings window (password, network paths, push, the Sessions
+  Container with its own `container-sign-in`: the server's API at
   its socket file, whichever process runs it) are outside this graph:
   neither is part of `VisorRootView`. The window's File menu has
   **Export…** (the session on screen: Export a session) and **Import…**

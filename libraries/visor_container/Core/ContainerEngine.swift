@@ -42,6 +42,12 @@ public actor ContainerEngine {
     public static let agentWrapper = toolsInGuest + "/agent-wrapper"
     /// The driver link's socket in the guest.
     public static let driverInGuest = "/run/visor/driver.sock"
+    /// agent-proxy's authorities' certificates in the guest (read-only), one
+    /// file of them all (ContainerEngine+Trust), as Node's
+    /// NODE_EXTRA_CA_CERTS takes them (VisorServer's
+    /// containerAuthoritiesInGuest names it).
+    public static let trustInGuest = "/opt/visor/trust"
+    public static let authoritiesInGuest = trustInGuest + "/agent-proxy-ca.pem"
     /// The guest's loopback port relay-client forwards to it: the driver's
     /// port on the Mac, so the URL is the same in and out.
     public static let driverPortInGuest: UInt16 = 7434

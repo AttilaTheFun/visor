@@ -24,8 +24,12 @@
 //   (TLV 0xE2): made here the first time, kept;
 // - `github-token`, the GitHub credential the gate attaches; none: what
 //   needs one is refused;
-// - `ca.pem` and `ca-key.pem`, the GitHub authority: made here the first
-//   time, its certificate written for the containers to trust;
+// - `claude/oauth-token`, the Claude credential the Anthropic interceptor
+//   attaches (Settings › Sessions Container); none: each request to
+//   api.anthropic.com is refused, saying where to sign in;
+// - `ca.pem` and `ca-key.pem`, the GitHub authority, and `anthropic-ca.pem`
+//   and `anthropic-ca-key.pem`, Anthropic's: each made here the first time,
+//   its certificate written for the containers to trust;
 // - `mcp/token`, the sessions' token (`X-Visor-Proxy`); none: every call
 //   refused;
 // - `mcp/<upstream>/<header>`, an upstream's secret header.
@@ -76,6 +80,8 @@ public enum AgentProxyHost {
         /// What it last started with, for a settings.json that can't be read.
         public var keptFile: URL { folder.appendingPathComponent("last-good.json") }
         public var caCertificate: String { folder.appendingPathComponent("ca.pem").path }
+        /// The Anthropic authority's certificate, beside GitHub's.
+        public var anthropicCertificate: String { folder.appendingPathComponent("anthropic-ca.pem").path }
         public var gateRules: String { folder.appendingPathComponent("gate.json").path }
     }
 
@@ -85,13 +91,16 @@ public enum AgentProxyHost {
         public let relay: RelayListener?
         public let nativeMCP: NativeMCPProxy?
         let interceptor: GitHubInterceptor?
+        let anthropic: AnthropicInterceptor?
         /// Whether each listener configured is listening.
         public let complete: Bool
 
-        init(relay: RelayListener?, nativeMCP: NativeMCPProxy?, interceptor: GitHubInterceptor?, complete: Bool) {
+        init(relay: RelayListener?, nativeMCP: NativeMCPProxy?, interceptor: GitHubInterceptor?, anthropic: AnthropicInterceptor?,
+             complete: Bool) {
             self.relay = relay
             self.nativeMCP = nativeMCP
             self.interceptor = interceptor
+            self.anthropic = anthropic
             self.complete = complete
         }
 
@@ -99,6 +108,7 @@ public enum AgentProxyHost {
             relay?.stop()
             nativeMCP?.stop()
             interceptor?.stop()
+            anthropic?.stop()
         }
     }
 
@@ -116,9 +126,10 @@ public enum AgentProxyHost {
         let store = ProxySecretStore(secrets: secrets)
         var relay: RelayListener?
         var interceptor: GitHubInterceptor?
+        var anthropic: AnthropicInterceptor?
         var failed = false
         if let port = settings.relayPort {
-            (relay, interceptor) = startRelay(settings, port: port, places: places, secrets: secrets, store: store, log: log)
+            (relay, interceptor, anthropic) = startRelay(settings, port: port, places: places, secrets: secrets, store: store, log: log)
             failed = relay == nil
         }
         var nativeMCP: NativeMCPProxy?
@@ -129,18 +140,19 @@ public enum AgentProxyHost {
         let serving = [relay == nil ? nil : "the relay listener", nativeMCP == nil ? nil : "the MCP pass-through"].compactMap { $0 }
         log((version.isEmpty ? "" : "\(version), ") + "pid \(getpid()): agent-proxy serves " + (serving.isEmpty ? "nothing" : serving.joined(separator: " and "))
             + (failed ? ", not all it was asked for" : ""))
-        return Running(relay: relay, nativeMCP: nativeMCP, interceptor: interceptor, complete: !failed)
+        return Running(relay: relay, nativeMCP: nativeMCP, interceptor: interceptor, anthropic: anthropic, complete: !failed)
     }
 
-    /// The relay listener, its egress proxy, GitHub's interception and DNS.
+    /// The relay listener, its egress proxy, GitHub's and Anthropic's
+    /// interception and DNS.
     private static func startRelay(_ settings: AgentProxySettings, port: Int, places: Places, secrets: any SecretStore,
                                    store: ProxySecretStore, log: @escaping @Sendable (String) -> Void)
-        -> (RelayListener?, GitHubInterceptor?) {
+        -> (RelayListener?, GitHubInterceptor?, AnthropicInterceptor?) {
         let maxConnections = settings.maxConnections ?? RelayListener.defaultMaxConnections
         let maxConnectionsPerLease = settings.maxConnectionsPerLease ?? RelayListener.defaultMaxConnectionsPerLease
         if let problem = RelayListener.capsProblem(maxConnections: maxConnections, maxConnectionsPerLease: maxConnectionsPerLease) {
             log("agentProxy: \(problem): no relay listener")
-            return (nil, nil)
+            return (nil, nil, nil)
         }
         // Made first, then read: a KeptSecret keeps what it read for a
         // minute, so one asked before the token was made would refuse every
@@ -163,7 +175,13 @@ public enum AgentProxyHost {
         let gateRules = settings.gateRules ?? (FileManager.default.fileExists(atPath: places.gateRules) ? places.gateRules : nil)
         let interceptor = GitHubInterceptor.make(secrets: store, caCertificate: settings.caCertificate ?? places.caCertificate,
                                                  gateRules: gateRules, token: { githubToken.value }, egress: egress, log: log)
-        let proxy = EgressProxy(policy: policy, interceptor: interceptor, egress: egress, log: log)
+        let claudeToken = KeptSecret(AgentProxySettings.claudeTokenName, in: secrets)
+        let anthropic = AnthropicInterceptor.make(secrets: store, caCertificate: places.anthropicCertificate, token: { claudeToken.value },
+                                                  egress: egress, log: log)
+        var interceptors: [any GitHubIntercepting] = []
+        if let interceptor { interceptors.append(interceptor) }
+        if let anthropic { interceptors.append(anthropic) }
+        let proxy = EgressProxy(policy: policy, interceptor: interceptors.isEmpty ? nil : Interceptors(interceptors), egress: egress, log: log)
         var dns = DNSSettings(hosts: [])
         if let split = settings.dns {
             if let suffixes = split.tailnetSuffixes { dns.tailnetSuffixes = suffixes }
@@ -178,7 +196,8 @@ public enum AgentProxyHost {
                                         maxConnections: maxConnections, maxConnectionsPerLease: maxConnectionsPerLease, log: log) else {
             log("loopback port \(port) can't be had for the relay listener (another listener on it?)")
             interceptor?.stop()
-            return (nil, nil)
+            anthropic?.stop()
+            return (nil, nil, nil)
         }
         relay.start()
         let listed = policy.ranges + policy.destinations.sorted().map { destination in
@@ -188,7 +207,7 @@ public enum AgentProxyHost {
             + (listed.isEmpty ? ", egress to the internet alone" : ", egress to the internet and \(listed.joined(separator: ", "))")
             + initial.map { ", \($0.host):\($0.port) to loopback port \($0.hostPort)" }.joined()
             + (githubToken.isSet ? "" : "; no auth token for GitHub (agent-proxy secret-set github-token): what needs one is refused"))
-        return (relay, interceptor)
+        return (relay, interceptor, anthropic)
     }
 
     /// The native sessions' MCP pass-through, with gh_mcp answered in it

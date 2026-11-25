@@ -23,10 +23,12 @@ extension VisorServer {
     var claudeRunsInContainer: Bool { sessionsContainer != nil && settings.container?.enabled == true }
 
     /// The environment of `claude` in the container: its Claude folder on
-    /// Sessions; nil when it shares no Sessions volume.
+    /// Sessions, and the credential's placeholder and agent-proxy's
+    /// authorities (VisorServer+ContainerCredential); nil when it shares no
+    /// Sessions volume.
     func containerClaudeEnvironment() -> [String: String]? {
         guard let sessions = sessionsContainer?.sharedFolders.first else { return nil }
-        return ["CLAUDE_CONFIG_DIR": sessions + "/.claude"]
+        return Self.containerClaudeEnvironment(sessions: sessions)
     }
 
     /// The models asked of Claude Code: in the container while it's on (and
