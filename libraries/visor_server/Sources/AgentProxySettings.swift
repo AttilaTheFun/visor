@@ -22,9 +22,12 @@
 // Its secrets are the server's (the keychain on a Mac, the secrets file
 // elsewhere), each `agent-proxy/<name>` (`secretKey`), never in these
 // settings: `github-token` (the GitHub credential the gate attaches; none:
-// no GitHub through the proxy), `claude/oauth-token` (the Claude credential
-// the Anthropic interceptor attaches, a `claude setup-token` token; none: no
-// Claude for containers' agents), `mcp/token` (the sessions' token) and
+// no GitHub through the proxy), `github-app/key`, `github-app/id` and
+// `github-app/installation` (the GitHub App whose installation tokens the
+// gate attaches instead, when its key and id are set: from 0.71.1),
+// `claude/oauth-token` (the Claude credential the Anthropic interceptor
+// attaches, a `claude setup-token` token; none: no Claude for containers'
+// agents), `mcp/token` (the sessions' token) and
 // `mcp/<upstream>/<header>` (an upstream's secret header), imported with
 // `agent-proxy secret-set <name>` from standard input; and the relay's token
 // and the GitHub authority, which agent-proxy makes itself.
@@ -249,6 +252,14 @@ public struct AgentProxySettings: Codable, Equatable, Sendable {
     /// containers' agents: a `claude setup-token` token, set from Settings ›
     /// Sessions Container (docs/containers.md, "Claude's credential").
     public static let claudeTokenName = "claude/oauth-token"
+    /// The GitHub App's private key, a PEM (PKCS #1 or #8): with its id, the
+    /// gate attaches the App's installation tokens in place of `github-token`.
+    public static let githubAppKeyName = "github-app/key"
+    /// The GitHub App's id.
+    public static let githubAppIDName = "github-app/id"
+    /// The App's installation's id, optional: without it, the installation is
+    /// the one of the gate's owner.
+    public static let githubAppInstallationName = "github-app/installation"
     /// The native sessions' token, which a call shows in `X-Visor-Proxy`.
     public static let mcpTokenName = "mcp/token"
     /// The relay's token, which each relayed stream's header carries:
@@ -265,12 +276,12 @@ public struct AgentProxySettings: Codable, Equatable, Sendable {
     /// `name` as the import takes it: given with or without
     /// `agent-proxy/`, and an upstream's header lower-cased. Nil when it is
     /// none of the secrets one sets: `github-token`, `claude/oauth-token`,
-    /// `mcp/token`, or
+    /// `github-app/key`, `github-app/id`, `github-app/installation`, `mcp/token`, or
     /// `mcp/<upstream>/<header>` (letters, digits, `-`, `_` and `.`, at most
     /// 64 each).
     public static func importableName(_ given: String) -> String? {
         let name = given.hasPrefix(secretPrefix) ? String(given.dropFirst(secretPrefix.count)) : given
-        if name == githubTokenName || name == claudeTokenName || name == mcpTokenName { return name }
+        if [githubTokenName, claudeTokenName, githubAppKeyName, githubAppIDName, githubAppInstallationName, mcpTokenName].contains(name) { return name }
         let parts = name.split(separator: "/", omittingEmptySubsequences: false)
         guard parts.count == 3, parts[0] == "mcp" else { return nil }
         let valid = parts.dropFirst().allSatisfy { part in
