@@ -13,7 +13,7 @@ package(default_visibility = ["//visibility:public"])
 exports_files(["LaunchAgents/com.LoganShire.Visor.server.plist"])
 
 # The Info.plist, for the test that holds ShakeKit on in every build
-# (tests/visor_macos_tests).
+# (tests/visor_plists_tests).
 exports_files(["Info.plist"])
 
 BUNDLE_ID = "com.LoganShire.Visor"
@@ -37,7 +37,7 @@ update_infoplist(name = "update_plist")
 
 # And the Visor family's app group, `group.com.LoganShire.Visor`, beside
 # Applications' (tools/app_groups: the sockets in its container, 0.66
-# behind a setting, and the sandboxed release's, docs/sandboxed.md), and the
+# behind a setting, docs/sandboxed.md), and the
 # app's own keychain access group (`<team>.com.LoganShire.Visor`, the
 # data-protection keychain's: Sources/MacSecrets.swift), which the Developer
 # ID profile grants too (its `<team>.*`, and both groups since 22 Nov 2026).
@@ -59,10 +59,10 @@ app_group_entitlements(
 shared_sign_in_infoplist(name = "shared_sign_in_plist")
 
 # Visor on the Mac: a menu bar app whose
-# window is Visor's macOS client, with the Mac's Visor server under it. It
-# took over from Visor Server (applications/visor_menubar) and the Mac
-# client (applications/visor_macos) in 0.46, and keeps what it has in places
-# of its own (Sources/MacPlaces.swift). The same executable is the server
+# window is Visor's client, with the Mac's Visor server under it. It took
+# over from Visor Server (applications/visor_menubar) and the Mac's own
+# client app in 0.46, and keeps what it has in places of its own
+# (Sources/MacPlaces.swift). The same executable is the server
 # agent with `--server` (Sources/MacServerAgent.swift: the server headless,
 # a launchd job, while the app's `ServerAsAgent` default is on) and
 # agent-proxy with `--agent-proxy`. The app is its server's client alone,

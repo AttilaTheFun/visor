@@ -29,7 +29,7 @@ package enum AgentChildren {
     package static var placedSocketFolder: URL?
 
     /// What starts the hosts: the server's own process (as it always was)
-    /// unless the binary gives another (Visor Agent Utility's, later).
+    /// unless the binary gives another.
     package static var spawner: any AgentHostSpawner = ProcessAgentHostSpawner()
 
     /// Where the hosts' sockets are: VISOR_RUNTIME_DIR's `hosts`, else

@@ -2,9 +2,8 @@
 // into CI's builds to publish alone (tools/shared_sign_in): with all of
 // it, or none. A builder without it (this test's, anyone's but CI's) gets
 // an empty fragment and no shared keychain group: ShakeKit, whose only
-// sign-in that is (shake_kit 0.3), then reports nothing. Visor.app and
-// Visor for iOS alone: Visor Client, which retires, has no ShakeKit
-// (EntitlementsTests holds its entitlements to its list).
+// sign-in that is (shake_kit 0.3), then reports nothing. Visor, on the
+// Mac and on iOS.
 
 import Foundation
 import Testing

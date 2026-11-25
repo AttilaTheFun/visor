@@ -1,12 +1,11 @@
 // What the server asks for when it starts an agent's host
 // (visor-agent-host): the session, its folder and harness, the agent's
 // command, its environment, its credential and the socket the host is to
-// listen at. Today the server spawns the host itself
-// (visor_agent's ProcessAgentHostSpawner, as it always has); from Visor's
-// sandboxed release (docs/DEVELOPMENT.md, "Sandboxed Visor") Visor Agent
-// Utility, outside the sandbox, spawns it for the server instead, sent
-// this value as JSON over a socket in the app group's container. After the
-// spawn, everything is the host's wire (AgentHostFrame) as before.
+// listen at. The server spawns the host itself (visor_agent's
+// ProcessAgentHostSpawner, as it always has, native sessions included:
+// docs/sandboxed.md); the value is JSON, so another spawner could be sent
+// it over a socket. After the spawn, everything is the host's wire
+// (AgentHostFrame) as before.
 //
 // The JSON, version 1:
 //

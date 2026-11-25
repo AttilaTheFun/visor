@@ -1,4 +1,4 @@
-// The Mac client on the screenshot fixture, as its window shows it, saved
+// Visor's window on the Mac on the screenshot fixture, as it shows, saved
 // as a picture: the screen named on the command line opened, a moment for
 // the thread to settle, the window captured (`screencapture`), and out.
 // The window is the app's own content in a window made here (an executable

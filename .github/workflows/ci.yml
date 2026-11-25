@@ -286,7 +286,7 @@ jobs:
       - run: |
           VISOR_CI_PACKAGE=.ci/proof-apps tools/ci/container_build.sh \
             --config=drive --macos_cpus=arm64 --ios_multi_cpus=sim_arm64 \
-            //applications/visor_ios //applications/visor_mac //applications/visor_macos
+            //applications/visor_ios //applications/visor_mac
       - uses: actions/upload-artifact@v4
         with:
           name: apps-ios
@@ -296,9 +296,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: apps-mac
-          path: |
-            .ci/proof-apps/visor_mac.zip
-            .ci/proof-apps/visor_macos.zip
+          path: .ci/proof-apps/visor_mac.zip
           if-no-files-found: error
           retention-days: 1
 
@@ -405,9 +403,6 @@ jobs:
           name: apps-mac
           path: ${{ runner.temp }}/apps
       - run: tools/ci/proof_mac.sh "$RUNNER_TEMP/apps" "$RUNNER_TEMP/part"
-      # Visor Client (applications/visor_macos), ad hoc: opens sandboxed,
-      # its container made (docs/visor-client.md).
-      - run: tools/ci/mac_app_opens.sh --ad-hoc --sandboxed "$RUNNER_TEMP/apps/visor_macos.zip"
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
@@ -631,7 +626,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tools/ci/version_from_tags.sh applications/visor_ios/Info.plist applications/visor_ios/Widget/Info.plist applications/visor_mac/Info.plist applications/visor_disk_utility/Info.plist applications/visor_macos/Info.plist
+          tools/ci/version_from_tags.sh applications/visor_ios/Info.plist applications/visor_ios/Widget/Info.plist applications/visor_mac/Info.plist applications/visor_disk_utility/Info.plist
           version="$(sed -n '/CFBundleShortVersionString/{n;s/.*<string>\(.*\)<\/string>.*/\1/p;}' applications/visor_ios/Info.plist)"
           case "$version" in
             "" | *.0) echo "::error::no build version was stamped (the plist says \"$version\")"; exit 1 ;;
@@ -700,17 +695,10 @@ jobs:
         run: >-
           tools/ci/container_build.sh --config=alpha --config=ci_device --compilation_mode=opt
           --config=apple_cross_mac //applications/visor_ios //applications/visor_mac //applications/visor_disk_utility
-          //applications/visor_macos
       # The signing keeps the entitlements its signature carries: built
       # unsigned, it would lose the microphone.
       - name: Visor.app signed ad hoc with its entitlements
         run: tools/ci/mac_app_signed.sh .ci/packages/visor_mac.zip com.apple.security.device.audio-input com.apple.developer.aps-environment keychain-access-groups
-      # Visor Client, sandboxed (docs/visor-client.md), likewise.
-      - name: Visor Client signed ad hoc with its entitlements
-        run: >-
-          tools/ci/mac_app_signed.sh .ci/packages/visor_macos.zip com.apple.security.app-sandbox
-          com.apple.security.network.client com.apple.security.device.audio-input
-          com.apple.security.files.user-selected.read-only com.apple.developer.aps-environment keychain-access-groups
       - uses: actions/upload-artifact@v4
         with:
           name: alpha-apple
@@ -718,7 +706,6 @@ jobs:
             .ci/packages/*.ipa
             .ci/packages/visor_mac.zip
             .ci/packages/visor_disk_utility.zip
-            .ci/packages/visor_macos.zip
           if-no-files-found: error
           retention-days: 1
 
@@ -788,7 +775,7 @@ jobs:
         run: >-
           tools/ci/sign_builds.sh --variant Alpha --out "$RUNNER_TEMP/assets"
           --ipa-kind development --android-pin "$VISOR_ANDROID_PIN"
-          .ci/packages/*.ipa .ci/packages/visor_mac.zip .ci/packages/visor_disk_utility.zip .ci/packages/visor_macos.zip
+          .ci/packages/*.ipa .ci/packages/visor_mac.zip .ci/packages/visor_disk_utility.zip
           .ci/android/*.apk
       - uses: actions/upload-artifact@v4
         with:
@@ -822,8 +809,6 @@ jobs:
       - run: bazel run //tools/ci/launch_check -- "$RUNNER_TEMP"/assets/Visor-[0-9]*-macos.zip
       # Visor Disk Utility: signed, notarized, accepted by Gatekeeper, and opens.
       - run: tools/ci/mac_app_opens.sh "$RUNNER_TEMP"/assets/Visor-Disk-Utility-*-macos.zip
-      # Visor Client: the same, and sandboxed, its container made.
-      - run: tools/ci/mac_app_opens.sh --sandboxed "$RUNNER_TEMP"/assets/Visor-Client-*-macos.zip
 
   # The draft release (tools/ci/propose_release.sh) and its assets
   # (tools/ci/attach_release.sh), what Applications lists
@@ -958,7 +943,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: |
-          tools/ci/version_from_tags.sh applications/visor_ios/Info.plist applications/visor_ios/Widget/Info.plist applications/visor_mac/Info.plist applications/visor_disk_utility/Info.plist applications/visor_macos/Info.plist
+          tools/ci/version_from_tags.sh applications/visor_ios/Info.plist applications/visor_ios/Widget/Info.plist applications/visor_mac/Info.plist applications/visor_disk_utility/Info.plist
           version="$(sed -n '/CFBundleShortVersionString/{n;s/.*<string>\(.*\)<\/string>.*/\1/p;}' applications/visor_ios/Info.plist)"
           [ "v$version" = "$TAG" ] || { echo "::error::the version stamped, $version, isn't $TAG's"; exit 1; }
       - uses: ./.github/actions/bazel_cache
@@ -1011,15 +996,8 @@ jobs:
         run: >-
           tools/ci/container_build.sh --config=prod --config=ci_device --compilation_mode=opt
           --config=apple_cross_mac //applications/visor_ios //applications/visor_mac //applications/visor_disk_utility
-          //applications/visor_macos
       - name: Visor.app signed ad hoc with its entitlements
         run: tools/ci/mac_app_signed.sh .ci/packages/visor_mac.zip com.apple.security.device.audio-input com.apple.developer.aps-environment keychain-access-groups
-      # Visor Client, sandboxed (docs/visor-client.md), likewise.
-      - name: Visor Client signed ad hoc with its entitlements
-        run: >-
-          tools/ci/mac_app_signed.sh .ci/packages/visor_macos.zip com.apple.security.app-sandbox
-          com.apple.security.network.client com.apple.security.device.audio-input
-          com.apple.security.files.user-selected.read-only com.apple.developer.aps-environment keychain-access-groups
       - uses: actions/upload-artifact@v4
         with:
           name: release-apple
@@ -1027,7 +1005,6 @@ jobs:
             .ci/packages/*.ipa
             .ci/packages/visor_mac.zip
             .ci/packages/visor_disk_utility.zip
-            .ci/packages/visor_macos.zip
           if-no-files-found: error
           retention-days: 1
 
@@ -1197,11 +1174,6 @@ jobs:
           for app in "$RUNNER_TEMP"/assets/Visor-Disk-Utility-*-macos.zip; do
             [ -e "$app" ] || { echo "No Visor Disk Utility signed in this run: checked by the run that signed it"; exit 0; }
             tools/ci/mac_app_opens.sh "$app"
-          done
-      - run: |
-          for app in "$RUNNER_TEMP"/assets/Visor-Client-*-macos.zip; do
-            [ -e "$app" ] || { echo "No Visor Client signed in this run: checked by the run that signed it"; exit 0; }
-            tools/ci/mac_app_opens.sh --sandboxed "$app"
           done
 
   # Red when Visor for Android wasn't built and signed for this release,

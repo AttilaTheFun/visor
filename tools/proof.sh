@@ -6,7 +6,7 @@
 #   tools/proof.sh                 -> .proof/ (or $PROOF_DIR)
 #     ios-portrait/, ios-landscape/  the fixture's screens (screens/fixture-*.png) and the UI cases, each
 #                                    recorded (tests.xcresult), on the iPhone 17 simulator with iOS 27
-#     mac-screenshots/               the Mac client's screens, only with PROOF_MAC=1: they draw a window
+#     mac-screenshots/               Visor's Mac screens (tools/mac_screenshots), only with PROOF_MAC=1: they draw a window
 #                                    and make it key, so only on a test VM, never on a Mac someone uses
 #
 # Exits 1 when a case failed (the proof is kept all the same: it shows

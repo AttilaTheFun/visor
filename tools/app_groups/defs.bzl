@@ -1,7 +1,7 @@
 """The app groups a Developer ID build of the Visor family asks for: the
-Visor family's own, `group.com.LoganShire.Visor` (Visor.app, Visor Agent
-Utility, Visor Disk Utility: presence, messaging, the sockets in its
-container; docs/sandboxed.md), and the group shared with Shireworks
+Visor family's own, `group.com.LoganShire.Visor` (Visor.app and Visor
+Disk Utility: presence, messaging, the sockets in its container;
+docs/sandboxed.md), and the group shared with Shireworks
 (UpdateKit's installed versions, the shared sign-in's lock), which is the
 builder's own, UPDATE_APP_GROUP (tools/signing: CI's VISOR_UPDATE_APP_GROUP,
 `group.com.LoganShire.Shireworks` from 23 Nov 2026, in place of

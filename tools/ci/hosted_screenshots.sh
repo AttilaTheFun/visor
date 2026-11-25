@@ -1,7 +1,7 @@
 #!/bin/bash
 # The site's pictures (site/), on one of GitHub's own Macs (`xcode-27`, a
 # desktop session whose shell may picture the screen, as proof_mac.sh's):
-# the Mac client on the screenshot fixture (tools/mac_screenshots, in an app
+# Visor's window on the Mac on the screenshot fixture (tools/mac_screenshots, in an app
 # of its own opened as apps are, so it comes to the front with its window
 # key, then pictured by its own `screencapture` of its window), and the
 # phone app on an iPhone 17 simulator of iOS 27.2 (the probe's
