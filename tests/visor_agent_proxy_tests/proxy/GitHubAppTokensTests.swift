@@ -98,7 +98,7 @@ private final class StandInGitHub: GitHubAppCalling {
         }
         if method == "GET", path == "/app" {
             if let refused = appRefusal.withLock({ $0 }) { return (refused.status, Self.json(["message": refused.message])) }
-            return (200, Self.json(["id": 123456, "slug": slug.withLock { $0 }, "name": "Logan Shire Agent"]))
+            return (200, Self.json(["id": 123456, "slug": slug.withLock { $0 }, "name": "Logan Shire Agent"] as [String: Any]))
         }
         return (404, Self.json(["message": "Not Found"]))
     }
@@ -110,7 +110,7 @@ private final class StandInGitHub: GitHubAppCalling {
         if let refused = userRefusal.withLock({ $0 }) { return (refused.status, Self.json(["message": refused.message])) }
         let slug = self.slug.withLock { $0 }
         guard path == "/users/\(slug)%5Bbot%5D" else { return (404, Self.json(["message": "Not Found"])) }
-        return (200, Self.json(["login": "\(slug)[bot]", "id": botID, "type": "Bot"]))
+        return (200, Self.json(["login": "\(slug)[bot]", "id": botID, "type": "Bot"] as [String: Any]))
     }
 
     static func json(_ object: Any) -> Data { (try? JSONSerialization.data(withJSONObject: object)) ?? Data() }
