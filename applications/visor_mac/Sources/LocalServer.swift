@@ -95,9 +95,10 @@ final class LocalServer {
     /// or, with the server agent there or another server answering, the
     /// hand-back first.
     func begin(agentMayBeThere: Bool) {
-        if let problem = MacAppInstance.lockProblem {
-            // Failing closed: not known to be the only Visor, it serves nothing.
-            note = "Visor runs no server of its own: \(problem). Quit Visor and open it again."
+        if let problem = MacAppInstance.noServer {
+            // Not known to be the only Visor, or not the one in
+            // /Applications: it serves nothing.
+            note = "Visor runs no server of its own: \(problem)."
             mode = .elsewhere
             return
         }

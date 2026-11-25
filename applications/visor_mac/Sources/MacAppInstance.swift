@@ -33,6 +33,11 @@
 //   unregistered then), for the watcher to open the app itself.
 //   `Visor app-agent unregister`: unregistered.
 //
+// - A copy outside /Applications (a build to run here, a copy in
+//   Downloads) is a client alone, with no server and no lock, unless a
+//   test's or a developer's setting says it may serve
+//   (AppAgentJob.clientOnly; NCH's check of #537).
+//
 // The screenshot fixture's runs (`-visor.fixture`) are left as they were.
 
 import AppKit
@@ -53,9 +58,10 @@ enum MacAppInstance {
     /// before the variable is taken out of the environment.
     private(set) static var fromAgent = false
 
-    /// Why the instance lock couldn't be had at all, if it couldn't: then
-    /// this copy runs no server (LocalServer), failing closed.
-    private(set) static var lockProblem: String?
+    /// Why this copy runs no server of its own (LocalServer), if it runs
+    /// none: the instance lock couldn't be had at all (failing closed), or
+    /// it isn't the copy in /Applications (AppAgentJob.clientOnly).
+    private(set) static var noServer: String?
 
     /// Whether Visor's window shows at this launch: a person's open, or
     /// one handed to launchd, does; launchd's own, at login or after a
@@ -104,9 +110,10 @@ enum MacAppInstance {
             try? FileManager.default.removeItem(atPath: marker)
         }
         let path = lockPath
+        let installProblem = LaunchAgentJob.installProblem(LaunchAgentJob.ownExecutable)
         let launch = AppAgentJob.launch(lockHeld: heldByAnother(path), fromAgent: fromAgent,
                                         withoutAgent: withoutAgent, wanted: AppAgentService.wanted,
-                                        installProblem: LaunchAgentJob.installProblem(LaunchAgentJob.ownExecutable))
+                                        installProblem: installProblem)
         switch launch {
         case .second(let showFirst):
             if showFirst { show(holder: InstanceLock.holder(path)) }
@@ -129,6 +136,15 @@ enum MacAppInstance {
         case .run:
             break
         }
+        // A copy outside /Applications serves nothing of this Mac's, and
+        // takes no lock: the copy in /Applications may open meanwhile.
+        let servesAnyway = ProcessInfo.processInfo.environment[AppAgentJob.servesOutsideVariable] == "1"
+            || UserDefaults.standard.bool(forKey: AppAgentJob.servesOutsideKey)
+        if let reason = AppAgentJob.clientOnly(installProblem: installProblem, servesAnyway: servesAnyway) {
+            noServer = reason
+            NSLog("Visor: %@", reason)
+            return
+        }
         var taken: InstanceLock?
         do {
             taken = try InstanceLock.take(path)
@@ -140,7 +156,7 @@ enum MacAppInstance {
             // Failing closed: with no lock, this copy can't know it's the
             // only one, so it runs as a client alone (LocalServer).
             let problem = "\(error)"
-            lockProblem = problem
+            noServer = problem
             NSLog("Visor: %@: Visor runs as a client alone, with no server of its own, so two servers never run on this Mac's data", problem)
             return
         }

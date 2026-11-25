@@ -27,15 +27,20 @@ import VisorServer
 /// until it is), which starts it. This process exits 0 first, which
 /// launchd's KeepAlive leaves alone: the watcher, not launchd, brings it
 /// back, and the two never race. Not wanted, or launchd not starting it,
-/// and it is opened as before (`open -a`, its `--without-agent` telling it
-/// not to hand itself to launchd again). Either way the app comes back with
+/// and it is opened in the background (`open -g -a`, its `--without-agent`
+/// telling it not to hand itself to launchd again, nor to bring another
+/// copy forward). The app's process is its instance lock's holder, so a
+/// copy that loses the race (launchd's coming up after the fallback's
+/// open) and exits 0 is never taken for a crash. Either way the app comes back with
 /// its window if one was open as it went, and in the menu bar alone if none
 /// was (the agent's `presentMarker`, written just before each start).
 public struct AppRelauncher: ServerLifecycle {
     /// How long a new build has to stay up before it is trusted.
     public static let watch = 120
-    /// How long a new build has to answer the first time while it runs.
-    public static let firstAnswer = 600
+    /// How long a new build has to answer the first time once its process
+    /// is up, and how long its process has to appear at all.
+    public static let firstAnswer = 120
+    public static let appearWithin = 600
 
     /// Where the relauncher's shell writes: Visor's logs' folder
     /// (VisorFolders.logs, on the Visor volume once it's there).
@@ -52,11 +57,17 @@ public struct AppRelauncher: ServerLifecycle {
         /// written when one was open as the app went (an update then gives
         /// back the window it found).
         public var presentMarker: String?
+        /// The app's instance lock, whose first line is its holder's pid:
+        /// the app that runs, however it was started (launchd runs it by a
+        /// path relative to the bundle, which no search by its absolute
+        /// path finds).
+        public var instanceLock: String?
 
-        public init(label: String, command: [String], presentMarker: String? = nil) {
+        public init(label: String, command: [String], presentMarker: String? = nil, instanceLock: String? = nil) {
             self.label = label
             self.command = command
             self.presentMarker = presentMarker
+            self.instanceLock = instanceLock
         }
     }
 
@@ -125,7 +136,9 @@ public struct AppRelauncher: ServerLifecycle {
         // With an agent, the open is the fallback once launchd didn't start
         // the app: it says so (`--without-agent`), and the app runs where it
         // is rather than ask launchd again.
-        let open = "open -a \(Self.quoted(destination)) --args --resume-sessions \(Self.quoted(sessions))"
+        // In the background (`-g`): the window, mid-update, is the present
+        // marker's to ask for alone.
+        let open = "open \(agent == nil ? "" : "-g ")-a \(Self.quoted(destination)) --args --resume-sessions \(Self.quoted(sessions))"
             + (agent == nil ? "" : " \(Self.withoutAgent)")
         // A build that came as a download (a Taildrop, a browser) carries
         // the quarantine through its bundle, and its first open waits on
@@ -145,6 +158,7 @@ public struct AppRelauncher: ServerLifecycle {
                                      answers: serving ? AppRelaunchWatch.portAnswers() : AppRelaunchWatch.socketAnswers(VisorServer.socketPath),
                                      answersWhere: serving ? "on port \(Envelope.defaultPort)" : "at its socket file",
                                      note: VisorServer.rollbackNoteURL.path, newVersion: newVersion, oldVersion: Self.version(of: Bundle.main),
+                                     firstAnswer: Self.firstAnswer, appearWithin: Self.appearWithin,
                                      lock: RelaunchWatchLock.url.path, present: windowOpen ? agent?.presentMarker : nil)
         let script = watch.script()
         let process = Process()
@@ -170,25 +184,39 @@ public struct AppRelauncher: ServerLifecycle {
     func start(executable: String, open: String) -> String {
         guard let agent else { return open }
         let command = ([executable] + agent.command).map(Self.quoted).joined(separator: " ")
-        return "\(command) || { echo \"$(date): launchd didn't start it: opened instead\"; \(open); }"
+        // Its copy may come up after `app-agent start` has given up: then
+        // it runs, and no second is opened.
+        return "\(command) || if [ -n \"$(\(holder))\" ]; then echo \"$(date): launchd's copy came up after all\"; "
+            + "else echo \"$(date): launchd didn't start it: opened instead\"; \(open); fi"
     }
 
     /// Shell: the app stopped: its agent out of launchd first (so KeepAlive
-    /// starts nothing while the bundle is put back), then whatever runs
-    /// from the bundle as the app.
+    /// starts nothing while the bundle is put back; what launchctl said is
+    /// logged), then the app's process (the instance lock's holder: TERM,
+    /// then KILL), and anything else running from the bundle as the app.
+    /// One that can't be stopped is said to run still, never passed over.
     func stop(executable: String) -> String {
-        let bootout = agent.map { "launchctl bootout gui/$(id -u)/\($0.label) 2>/dev/null; " } ?? ""
-        return "\(bootout)for q in $(\(appProcesses(executable))); do kill $q 2>/dev/null; done; sleep 2; "
-            + "for q in $(\(appProcesses(executable))); do kill -9 $q 2>/dev/null; done"
+        let others = "for q in $(\(appProcesses(executable))); do kill $q 2>/dev/null; done"
+        guard let agent else { return "\(others); sleep 2; for q in $(\(appProcesses(executable))); do kill -9 $q 2>/dev/null; done" }
+        return """
+        out=$(launchctl bootout gui/$(id -u)/\(agent.label) 2>&1); st=$?; echo "$(date): launchctl bootout \(agent.label): status $st${out:+: $out}"
+        q=$(\(holder)); if [ -n "$q" ]; then kill $q 2>/dev/null; n=0; while kill -0 $q 2>/dev/null && [ $n -lt 50 ]; do sleep 0.2; n=$((n+1)); done; kill -0 $q 2>/dev/null && kill -9 $q 2>/dev/null; sleep 0.5; kill -0 $q 2>/dev/null && echo "$(date): the app (process $q) couldn't be stopped: it still runs"; fi
+        \(others)
+        """
     }
 
-    /// Shell: the app's process id: the agent's job's, as launchd says,
-    /// else the first process of the bundle's that is the app.
+    /// Shell: the app's process id: the instance lock's holder, while it
+    /// runs; without an agent (an app with no lock), the first process of
+    /// the bundle's that is the app.
     func pid(executable: String) -> String {
-        let own = "\(appProcesses(executable)) | head -1"
-        guard let agent else { return own }
-        let job = "launchctl print gui/$(id -u)/\(agent.label) 2>/dev/null | awk '$1==\"pid\" && $2==\"=\" {print $3; exit}'"
-        return "j=$(\(job)); if [ -n \"$j\" ]; then echo \"$j\"; else \(own); fi"
+        guard agent?.instanceLock != nil else { return "\(appProcesses(executable)) | head -1" }
+        return holder
+    }
+
+    /// Shell: the instance lock's holder, while it runs, else nothing.
+    var holder: String {
+        guard let lock = agent?.instanceLock else { return "true" }
+        return "h=$(head -1 \(Self.quoted(lock)) 2>/dev/null | tr -dc 0-9); [ -n \"$h\" ] && kill -0 $h 2>/dev/null && echo $h"
     }
 
     /// Shell: the processes running `executable` as the app: by itself or

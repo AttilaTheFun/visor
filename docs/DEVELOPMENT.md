@@ -627,7 +627,16 @@ longer a place it runs, and the `ServerAsAgent` default isn't read.
   launchd doesn't start it within a few seconds (Login Items waiting for
   the person, a refusal), Visor runs where it is and says why in the system
   log. Launches by launchd, and the update watcher's fallback open
-  (`--without-agent`), run where they are.
+  (`--without-agent`), run where they are; as second instances they're
+  quiet, the window mid-update being the present marker's alone. A copy
+  outside /Applications (a build to run here, one in Downloads) is a
+  client alone, with no server and no lock, unless
+  `ServesOutsideApplications` (a default) or
+  `VISOR_SERVE_OUTSIDE_APPLICATIONS=1` (CI's launch check) says it may
+  serve. With the agent wanted, the app opts out of macOS's relaunch at
+  login (`disableRelaunchOnLogin`: launchd's is the one start), and its
+  window is never restored from the launch before (`restorationBehavior
+  (.disabled)`), so a login keeps to the menu bar.
 - **The window at launch** (Logan, 25 Nov 2026; AppAgentJob.showsWindow):
   launchd's own launches, at login and after a crash (and so the start of
   an update's new build), keep to the menu bar (the window scene's
@@ -669,17 +678,26 @@ longer a place it runs, and the `ServerAsAgent` default isn't read.
   the watcher starting it, means launchd and the watcher never race: KeepAlive
   never answers an exit of 0. With Start at Login off it unregisters the
   agent and ends 1, and the watcher opens the app itself (`open -a …
-  --without-agent`), as it does if launchd doesn't start it. It watches the
-  app's process (the agent's job's, else the bundle's) up to ten minutes
-  for its first answer, on 7433 from that process (lsof's listener), or at
-  its socket file while it has no password to listen with, then two
-  minutes up; `served` starts at 0 whatever the app was doing (until
+  --without-agent`, in the background: `open -g`), as it does if launchd
+  doesn't start it and its copy hasn't come up meanwhile. The app that goes
+  has a minute to end, then TERM, then KILL ten seconds on (each logged).
+  The watch follows the app's process by the instance lock's holder (the
+  lock file's pid): launchd runs the app by a path relative to the bundle,
+  and a second copy that loses the race and exits 0 is never a crash (NCH's
+  check of #537). Up to ten minutes for a process to appear at all (the
+  system's first checks of a new build), then two minutes for its first
+  answer, on 7433 from that process (lsof's listener), or at its socket
+  file while it has no password to listen with, then two minutes up: a
+  build that runs and never serves is undone about five minutes after its
+  start began. `served` starts at 0 whatever the app was doing (until
   0.72.1 it started at 1 for an app that didn't listen on its port, so
   "never answered" couldn't be said). If the process goes (launchd's
   restart after a crash is another process) or never answers, it's stopped
-  (`launchctl bootout` of the agent first, so KeepAlive starts nothing
-  while the bundle is put back), the previous bundle is put back,
-  `relaunch-rollback.txt` says why, and it's started again the same way.
+  (`launchctl bootout` of the agent first, what launchctl said logged, so
+  KeepAlive starts nothing while the bundle is put back; then the lock's
+  holder, TERM then KILL, and one that can't be stopped is said to run
+  still), the previous bundle is put back, `relaunch-rollback.txt` says
+  why, and it's started again the same way.
   Every session that was running is carried on (launchd starts the app
   with no `--resume-sessions` list).
 - **The hand-back** (ServerHandBack, LaunchdHandBackSteps, at the app's

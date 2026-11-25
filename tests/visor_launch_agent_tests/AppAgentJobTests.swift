@@ -60,7 +60,8 @@ import VisorServer
         }
         // A second instance ends at once (an exit of 0: KeepAlive leaves it).
         #expect(launch(held: true) == .second(showFirst: true), "a person's open: the first comes forward")
-        #expect(launch(held: true, without: true) == .second(showFirst: true))
+        #expect(launch(held: true, without: true) == .second(showFirst: false),
+                "the watcher's open that lost to launchd's copy, mid-update: the window is the present marker's alone")
         #expect(launch(held: true, agent: true) == .second(showFirst: false), "launchd's restart that met a person's open: quiet")
         #expect(launch(held: true, wanted: false, problem: elsewhere) == .second(showFirst: true), "whatever the copy")
         // launchd's own, and the watcher's fallback, run where they are.
@@ -71,6 +72,17 @@ import VisorServer
         #expect(launch() == .handToLaunchd)
         #expect(launch(wanted: false) == .run, "Start at Login off")
         #expect(launch(problem: elsewhere) == .run, "a build to run here registers nothing")
+    }
+
+    /// NCH's check of #537: a copy outside /Applications served this Mac's
+    /// data whenever nothing held the lock. It's a client alone, unless a
+    /// test's or a developer's setting says it may serve.
+    @Test func aCopyOutsideApplicationsIsAClientAlone() throws {
+        #expect(AppAgentJob.clientOnly(installProblem: nil, servesAnyway: false) == nil, "the copy in /Applications serves")
+        let elsewhere = try #require(LaunchAgentJob.installProblem("/Users/me/Downloads/Visor.app/Contents/MacOS/Visor"))
+        let reason = try #require(AppAgentJob.clientOnly(installProblem: elsewhere, servesAnyway: false))
+        #expect(reason.contains("client alone") && reason.contains(AppAgentJob.servesOutsideKey))
+        #expect(AppAgentJob.clientOnly(installProblem: elsewhere, servesAnyway: true) == nil, "CI's launch check, a build to run here")
     }
 }
 

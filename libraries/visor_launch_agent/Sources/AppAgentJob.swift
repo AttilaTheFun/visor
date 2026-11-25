@@ -69,6 +69,23 @@ public enum AppAgentJob {
         ]
     }
 
+    /// Why a copy of the app runs as a client alone, with no server of its
+    /// own, or nil when it may serve (NCH's check of #537): one outside
+    /// /Applications (a build to run here, a copy in Downloads) would
+    /// otherwise serve this Mac's own data whenever nothing holds the lock.
+    /// `servesAnyway`: a test's or a developer's setting says it may
+    /// (`ServesOutsideApplications`, VISOR_SERVE_OUTSIDE_APPLICATIONS=1).
+    public static func clientOnly(installProblem: String?, servesAnyway: Bool) -> String? {
+        guard let installProblem, !servesAnyway else { return nil }
+        return "this copy of Visor isn't the one in /Applications (\(installProblem)), so it's a client alone, with no server of "
+            + "its own on this Mac's data (for a build to run here: defaults write com.LoganShire.Visor \(servesOutsideKey) -bool true)"
+    }
+
+    /// The app's default, and the variable, that let a copy outside
+    /// /Applications serve (a build to run here; CI's launch check).
+    public static let servesOutsideKey = "ServesOutsideApplications"
+    public static let servesOutsideVariable = "VISOR_SERVE_OUTSIDE_APPLICATIONS"
+
     /// What a launch of the app does, before anything else.
     public enum Launch: Equatable, Sendable {
         /// Another instance holds the lock: this one ends at once, with an
@@ -90,7 +107,8 @@ public enum AppAgentJob {
     /// | lock held by another | started by           | agent wanted, app in /Applications | launch        |
     /// |----------------------|----------------------|------------------------------------|---------------|
     /// | yes                  | launchd              | any                                | second, quiet |
-    /// | yes                  | a person, a relaunch | any                                | second, shown |
+    /// | yes                  | a person             | any                                | second, shown |
+    /// | yes                  | a watcher's open     | any                                | second, quiet |
     /// | no                   | launchd              | any                                | run           |
     /// | no                   | a watcher's open     | any                                | run           |
     /// | no                   | a person             | yes                                | handToLaunchd |
@@ -100,8 +118,12 @@ public enum AppAgentJob {
     /// fallback once launchd didn't start the app, so it runs where it is.
     /// A relaunch's open from a build before 0.72.1 is a person's: the app
     /// it opens hands itself to launchd, registering the agent.
+    ///
+    /// A second instance started by launchd or by a watcher's open is
+    /// quiet (NCH's check of #537): mid-update, the window is the present
+    /// marker's to ask for alone, never a copy that lost the race.
     public static func launch(lockHeld: Bool, fromAgent: Bool, withoutAgent: Bool, wanted: Bool, installProblem: String?) -> Launch {
-        if lockHeld { return .second(showFirst: !fromAgent) }
+        if lockHeld { return .second(showFirst: !(fromAgent || withoutAgent)) }
         if fromAgent || withoutAgent { return .run }
         guard wanted, installProblem == nil else { return .run }
         return .handToLaunchd

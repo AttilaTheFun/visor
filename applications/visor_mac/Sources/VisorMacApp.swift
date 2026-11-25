@@ -49,7 +49,7 @@ struct VisorMacApp: App {
         // for it: made here, or once the server agent is handed back
         // (LocalServer, MacServer).
         let agentMayBeThere = LocalServer.agentMayBeThere
-        let missing = MacServer.prepare(runsServer: !agentMayBeThere && MacAppInstance.lockProblem == nil, client: true)
+        let missing = MacServer.prepare(runsServer: !agentMayBeThere && MacAppInstance.noServer == nil, client: true)
         MacServer.logToFile()
         // Started by launchd (at login, the Visor volume can come after it)
         // with the data on a volume that isn't mounted: it ends rather than
@@ -122,6 +122,10 @@ struct VisorMacApp: App {
         // asked. launchd's, at login and after a crash, keeps to the menu
         // bar (MacAppInstance.showsWindow).
         .defaultLaunchBehavior(MacAppInstance.showsWindow ? .presented : .suppressed)
+        // Never restored from the launch before: whether it shows is the
+        // launch's to say (above), not what was open when Visor last went,
+        // so launchd's launch at login keeps to the menu bar.
+        .restorationBehavior(.disabled)
         // The sidebar, and a thread about as wide as the transcript grows.
         .defaultSize(width: 1200, height: 820)
         .commands {

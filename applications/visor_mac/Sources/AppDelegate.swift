@@ -10,6 +10,7 @@ import AppKit
 import SwiftUI
 import UserNotifications
 import VisorClient
+import VisorLaunchAgent
 import VisorServices
 
 @MainActor
@@ -30,6 +31,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         // tools/signing) or its container, the library does nothing.
         VisorUpdates.start()
         Self.followWindows()
+        // At login launchd starts Visor (its agent): macOS's own relaunch of
+        // the apps that were open at logout ("Reopen windows when logging
+        // back in") would be a second open, taken for a person's, which
+        // brings the window up (NCH's check of #537). Not with the agent
+        // wanted: launchd's is the one start at login.
+        if AppAgentService.wanted, LocalServer.startsAtLoginProblem == nil { NSApp.disableRelaunchOnLogin() }
         // A second instance (opened while this one runs) ends at once and
         // asks for this one's window.
         DistributedNotificationCenter.default().addObserver(forName: MacAppInstance.showWindow, object: nil, queue: .main) { _ in

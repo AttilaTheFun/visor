@@ -1,7 +1,9 @@
 // The app's relaunch watch (AppRelaunchWatch, AppRelauncher's: from 0.72.1
 // Visor.app's one update path), run for real as ServerAgentWatchTests run
 // the server agent's: throwaway bundles whose "executable" is a shell
-// script standing in for the app, and launchd played by a pid file. A new
+// script standing in for the app, which writes its pid to a stand-in
+// instance lock (the app's process is the lock's holder, as Visor.app's
+// is), and launchd played by a pid file. A new
 // build that crashes, or runs and never answers, is undone: the previous
 // bundle back, the rollback note written, the previous build started again.
 // One that stays up is kept, and what it replaced removed. The watch waits
@@ -32,6 +34,8 @@ import VisorServer
         var present: String { root + "/com.LoganShire.Visor.present" }
         /// What the marker said as each start ran: "none", or its time.
         var seen: String { root + "/seen" }
+        /// The stand-in instance lock: its holder's pid.
+        var holder: String { root + "/instance.lock" }
 
         init() throws {
             root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-app-watch-" + UUID().uuidString).path
@@ -49,9 +53,12 @@ import VisorServer
 
         /// An app whose server answers, one that crashes, and one that runs
         /// and never answers (no password, a server that never started).
-        var serves: String { "touch '\(answering)'; exec sleep 60" }
+        /// Each takes the stand-in lock as it starts, as Visor.app does, but
+        /// the one that crashes before it's up.
+        var serves: String { "echo $$ > '\(holder)'; touch '\(answering)'; exec sleep 60" }
         var crashes: String { "rm -f '\(answering)'; exit 1" }
-        var neverAnswers: String { "rm -f '\(answering)'; exec sleep 60" }
+        var crashesOnceUp: String { "echo $$ > '\(holder)'; touch '\(answering)'; sleep 2; exit 1" }
+        var neverAnswers: String { "echo $$ > '\(holder)'; rm -f '\(answering)'; exec sleep 60" }
 
         /// The bundle the app was installed with: the new one, or the one
         /// before it.
@@ -66,18 +73,20 @@ import VisorServer
         /// The watch, launchd played: the app is the destination's
         /// executable, run in the background, its pid in a file; each start
         /// counted.
-        func watch(update: Bool, beforeUndo: String = "", windowOpen: Bool = false) -> AppRelaunchWatch {
+        func watch(update: Bool, beforeUndo: String = "", windowOpen: Bool = false, alsoStart: String = "",
+                   appPID: Int32 = Scene.gonePID(), endWithin: Int = 60) -> AppRelaunchWatch {
             let start = "echo x >> '\(started)'; { cat '\(present)' 2>/dev/null || echo none; } >> '\(seen)'; rm -f '\(present)'; "
-                + "( '\(destination)/Contents/MacOS/Visor' >/dev/null 2>&1 & echo $! > '\(pidFile)' )"
-            return AppRelaunchWatch(appPID: Self.gonePID(), destination: destination, backup: update ? backup : nil,
+                + "( '\(destination)/Contents/MacOS/Visor' >/dev/null 2>&1 & echo $! > '\(pidFile)' )" + alsoStart
+            return AppRelaunchWatch(appPID: appPID, destination: destination, backup: update ? backup : nil,
                                     install: update ? install(backup: backup) : "", start: start,
                                     stop: "\(beforeUndo)kill $(cat '\(pidFile)' 2>/dev/null) 2>/dev/null; rm -f '\(pidFile)'; sleep 0.2",
                                     // A zombie (a container's first process may reap nothing) is gone.
-                                    pid: "q=$(cat '\(pidFile)' 2>/dev/null); [ -n \"$q\" ] && kill -0 $q 2>/dev/null "
+                                    // The lock's holder, while it runs.
+                                    pid: "q=$(head -1 '\(holder)' 2>/dev/null | tr -dc 0-9); [ -n \"$q\" ] && kill -0 $q 2>/dev/null "
                                         + "&& ! grep -q '^State:.*Z' /proc/$q/status 2>/dev/null && echo $q",
                                     answers: "[ -f '\(answering)' ]", answersWhere: "at its socket file", note: note,
-                                    newVersion: "0.72.2", oldVersion: "0.72.1", seconds: 4, firstAnswer: 4, settle: 1, lock: lock,
-                                    present: windowOpen ? present : nil)
+                                    newVersion: "0.72.2", oldVersion: "0.72.1", seconds: 4, firstAnswer: 4, appearWithin: 4,
+                                    endWithin: endWithin, killAfter: 1, settle: 1, lock: lock, present: windowOpen ? present : nil)
         }
 
         /// A process that has ended: the app the watcher waits for.
@@ -122,11 +131,13 @@ import VisorServer
             return read(output) ?? ""
         }
 
-        /// A watch's script, to read.
-        static func scriptSample() -> String {
+        /// A watch with its defaults, and its script, to read.
+        static func sampleWatch() -> AppRelaunchWatch {
             AppRelaunchWatch(appPID: 1, destination: "/Applications/Visor.app", backup: nil, install: "", start: "start", stop: "stop",
-                             pid: "echo 2", answers: "true", answersWhere: "on port 7433", note: "/n", newVersion: "1", oldVersion: "1").script()
+                             pid: "echo 2", answers: "true", answersWhere: "on port 7433", note: "/n", newVersion: "1", oldVersion: "1")
         }
+
+        static func scriptSample() -> String { sampleWatch().script() }
 
         func cleanUp() {
             if let pid = read(pidFile).flatMap({ Int32($0.trimmingCharacters(in: .whitespacesAndNewlines)) }) { kill(pid, SIGKILL) }
@@ -140,10 +151,20 @@ import VisorServer
         try scene.app(at: scene.source, name: "new", body: newBody)
     }
 
-    @Test func aNewBuildThatCrashesIsRolledBack() throws {
+    @Test func aNewBuildThatNeverComesUpIsRolledBack() throws {
         let scene = try Scene()
         defer { scene.cleanUp() }
         try update(scene, newBody: scene.crashes)
+        let output = try scene.run(scene.watch(update: true))
+        #expect(output.contains("rolled back to 0.72.1: it never came up"), "\(output)")
+        #expect(scene.read(scene.destination + "/name") == "old", "the previous build is back")
+        #expect(scene.running, "and it was started again")
+    }
+
+    @Test func aNewBuildThatCrashesOnceUpIsRolledBack() throws {
+        let scene = try Scene()
+        defer { scene.cleanUp() }
+        try update(scene, newBody: scene.crashesOnceUp)
         let output = try scene.run(scene.watch(update: true))
         #expect(output.contains("rolled back to 0.72.1: it quit or crashed"), "\(output)")
         #expect(scene.read(scene.destination + "/name") == "old", "the previous build is back")
@@ -215,6 +236,53 @@ import VisorServer
         #expect(output.contains("was left as it is"), "\(output)")
         #expect(scene.read(scene.destination + "/name") == "later", "the later update's bundle is untouched")
         #expect(scene.read(scene.backup + "/name") == "old", "and this watch's copy kept")
+    }
+
+    /// NCH's check of #537: launchd's copy coming up just after the
+    /// fallback's open, and exiting 0 as a second instance, changed the
+    /// process the watch looked at, and a healthy build was undone. The app
+    /// is the lock's holder: a second copy that exits is never a crash.
+    @Test func aSecondCopyThatExitsIsNoCrash() throws {
+        let scene = try Scene()
+        defer { scene.cleanUp() }
+        try update(scene, newBody: scene.serves)
+        // Another copy, which never takes the lock and goes after a moment.
+        let second = "; ( sh -c 'sleep 3; exit 0' >/dev/null 2>&1 & )"
+        let output = try scene.run(scene.watch(update: true, alsoStart: second))
+        #expect(output.contains("0.72.2 stayed up"), "\(output)")
+        #expect(!output.contains("rolled back"))
+        #expect(scene.read(scene.destination + "/name") == "new")
+    }
+
+    /// NCH's check of #537: an app whose quit never ends (a modal, a
+    /// terminate not answered) left no server and the watch's lock held. It
+    /// has `endWithin` seconds, then TERM, then KILL.
+    @Test func anAppThatDoesntEndIsStopped() throws {
+        let scene = try Scene()
+        defer { scene.cleanUp() }
+        try scene.app(at: scene.destination, name: "same", body: scene.serves)
+        let stuck = Process()
+        stuck.executableURL = URL(fileURLWithPath: "/bin/sleep")
+        stuck.arguments = ["300"]
+        try stuck.run()
+        let output = try scene.run(scene.watch(update: false, appPID: stuck.processIdentifier, endWithin: 1))
+        #expect(output.contains("the app (process \(stuck.processIdentifier)) didn't end within 1 s: sent TERM"), "\(output)")
+        #expect(output.contains("stayed up"), "and the app was started once it had gone")
+        stuck.waitUntilExit()
+        #expect(stuck.terminationReason == .uncaughtSignal, "ended by the watcher's TERM")
+    }
+
+    /// NCH's check of #537: a build that runs and never answers left the
+    /// Mac with no server for about twelve minutes before it was undone.
+    /// Two minutes once its process is up; ten only while none has appeared.
+    @Test func aRunningBuildHasTwoMinutesToAnswer() {
+        let watch = Scene.sampleWatch()
+        #expect(watch.firstAnswer == 120)
+        #expect(watch.appearWithin == 600)
+        #expect(watch.endWithin == 60 && watch.killAfter == 10)
+        let script = watch.script()
+        #expect(script.contains("[ $i -ge 60 ]"), "two minutes of looks two seconds apart")
+        #expect(script.contains("[ $waited -ge 300 ]"), "ten, before any process")
     }
 
     /// An update gives back the window it found (Logan, 25 Nov 2026): with

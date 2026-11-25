@@ -3,10 +3,12 @@
 // its server being in its own process): a plain shell, started by the app
 // as it goes, which waits for it to end, installs the new bundle over the
 // running one if there is one (that one kept aside), starts the app again
-// and watches it. Up to `firstAnswer` seconds for the new process to answer
-// the first time (on the server's port from its own process, or at the
-// socket file when it doesn't listen on the port: no password yet), then
-// `seconds` more. If the app's process goes (it quit, crashed, or launchd
+// and watches it: up to `appearWithin` seconds for its process to appear,
+// then `firstAnswer` for it to answer the first time (on the server's port
+// from its own process, or at the socket file when it doesn't listen on the
+// port: no password yet), then `seconds` more. The app's process is the one
+// `pid` names (Visor.app: the holder of its instance lock, so a second copy
+// that loses the race and exits 0 is never taken for a crash). If the app's process goes (it quit, crashed, or launchd
 // started another after a crash) or never answers, it's stopped, the
 // previous bundle is put back, the rollback note says why
 // (VisorServer+Rollback), and it's started again. A plain restart that
@@ -52,9 +54,18 @@ public struct AppRelaunchWatch: Sendable {
     public var note: String
     public var newVersion: String
     public var oldVersion: String
-    /// How long it must stay up, and how long it has to answer first.
+    /// How long it must stay up; how long it has to answer first, once its
+    /// process is up; and how long its process has to appear at all (a
+    /// Mac's first run of a new build can wait on the system's checks
+    /// before any of it runs).
     public var seconds: Int
     public var firstAnswer: Int
+    public var appearWithin: Int
+    /// How long the app that goes has to end before it's sent TERM, and
+    /// then KILL (a quit held up by a modal, or a terminate never
+    /// answered, would leave no server and the watch's lock held).
+    public var endWithin: Int
+    public var killAfter: Int
     /// How long it's given before the first look.
     public var settle: Int
     /// The lock that keeps one watch at a time (RelaunchWatchLock); nil:
@@ -68,7 +79,8 @@ public struct AppRelaunchWatch: Sendable {
 
     public init(appPID: Int32, destination: String, backup: String?, install: String, accept: String = "", start: String, stop: String,
                 pid: String, answers: String, answersWhere: String, note: String, newVersion: String, oldVersion: String,
-                seconds: Int = 120, firstAnswer: Int = 600, settle: Int = 3, lock: String? = nil, present: String? = nil) {
+                seconds: Int = 120, firstAnswer: Int = 120, appearWithin: Int = 600, endWithin: Int = 60, killAfter: Int = 10,
+                settle: Int = 3, lock: String? = nil, present: String? = nil) {
         self.appPID = appPID
         self.destination = destination
         self.backup = backup
@@ -84,6 +96,9 @@ public struct AppRelaunchWatch: Sendable {
         self.oldVersion = oldVersion
         self.seconds = seconds
         self.firstAnswer = firstAnswer
+        self.appearWithin = appearWithin
+        self.endWithin = endWithin
+        self.killAfter = killAfter
         self.settle = settle
         self.lock = lock
         self.present = present
@@ -104,19 +119,36 @@ public struct AppRelaunchWatch: Sendable {
         "curl -s -o /dev/null -m 3 -w '%{http_code}' --unix-socket \(quoted(path)) http://localhost/api/hello | grep -qv '^000$'"
     }
 
-    /// The whole script.
+    /// The whole script. How long a build that runs and never serves leaves
+    /// the Mac with no server before it's undone: the start through launchd
+    /// (a registration, about two minutes at most), then `firstAnswer` (two
+    /// minutes) once its process is up, then the undo: about five minutes.
+    /// Only a build whose process never appears at all is waited for longer
+    /// (`appearWithin`, ten minutes: the system's first checks of a build).
     public func script() -> String {
         """
-        \(lock.map { RelaunchWatchLock.take($0) + "\n" } ?? "")while kill -0 \(appPID) 2>/dev/null; do sleep 0.2; done
+        \(lock.map { RelaunchWatchLock.take($0) + "\n" } ?? "")w=0
+        while kill -0 \(appPID) 2>/dev/null && ! grep -q '^State:.*Z' /proc/\(appPID)/status 2>/dev/null; do
+          w=$((w+1))
+          [ $w = \(endWithin * 5) ] && { echo "$(date): the app (process \(appPID)) didn't end within \(endWithin) s: sent TERM"; kill \(appPID) 2>/dev/null; }
+          [ $w = \((endWithin + killAfter) * 5) ] && { echo "$(date): the app (process \(appPID)) didn't end after TERM: sent KILL"; kill -9 \(appPID) 2>/dev/null; }
+          sleep 0.2
+        done
         sleep 0.5
         \(install.isEmpty ? "" : install + "\n")\(accept.isEmpty ? "" : accept + "\n")installed=$(cat \(Self.quoted(destination))/Contents/MacOS/* 2>/dev/null | cksum)
         echo "$(date): starting \(newVersion)"
         \(starting)
         sleep \(settle)
-        why=""; served=0; i=0; up=0; first=""
+        why=""; served=0; i=0; up=0; first=""; waited=0
         while :; do
           p=$(\(pid))
-          [ -z "$first" ] && first="$p"
+          if [ -z "$first" ]; then
+            if [ -z "$p" ]; then
+              waited=$((waited+1)); [ $waited -ge \(max(1, appearWithin / 2)) ] && { why="it never came up"; break; }
+              sleep 2; continue
+            fi
+            first="$p"
+          fi
           if [ -z "$p" ] || [ "$p" != "$first" ]; then why="it quit or crashed"; break; fi
           if \(answers); then served=1; fi
           if [ $served = 1 ]; then
