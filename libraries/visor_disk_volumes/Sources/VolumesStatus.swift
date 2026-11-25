@@ -21,10 +21,9 @@ public struct VolumesStatus: Codable, Equatable, Sendable {
     /// The APFS volume UUIDs of Visor's own volumes, by role (`sessions`,
     /// `sources`, `visor`): each found named for its role and mounted at its
     /// mount point (VolumeState.inPlaceUUID), as Visor Disk Utility makes
-    /// it, and kept across writes until another is found there. Only these,
-    /// or the volume mounted at the role's mount point, may ever be deleted
-    /// as that role (VolumeGuard, for Uninstall…): a volume someone else
-    /// gave the name, mounted elsewhere, never is.
+    /// it, and kept across writes until another is found there: which
+    /// volume of a role's name was Visor's, when it's since mounted
+    /// elsewhere.
     public var ownVolumes: [String: String]
 
     public init(version: Int = Self.currentVersion, updated: Date, volumes: [VolumeRecord], ownVolumes: [String: String] = [:]) {

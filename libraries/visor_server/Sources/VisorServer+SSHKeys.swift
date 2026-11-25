@@ -16,7 +16,7 @@ extension VisorServer {
     }
 
     /// The comment a line Visor adds ends in: `visor:<device>`, so
-    /// "Forget this device" and Uninstall… take out Visor's lines alone,
+    /// "Forget this device" takes out Visor's lines alone,
     /// never one put there by hand. (0.64's lines say just `visor`.)
     public static let keyTag = "visor:"
 

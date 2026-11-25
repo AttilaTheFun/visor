@@ -59,14 +59,13 @@ public enum VolumePlanner {
                            measuredFree: info.mountPoint.flatMap { survey.freeSpace[$0] })
     }
 
-    /// What a case-insensitive volume means for the role.
+    /// What a case-insensitive volume means for the role, and how to remake
+    /// it: Visor Disk Utility never converts or reformats one (Logan, 24 Nov
+    /// 2026: it only creates the volumes and checks them).
     static func caseNote(_ role: VolumeRole) -> String {
-        let what = "It's case-insensitive APFS: names differing only in case (Makefile and makefile, Foo.h and foo.h) "
-            + "are one file here, so a Linux checkout or build in the container can collide or fail where a Linux disk wouldn't."
-        guard role.isConvertible else {
-            return what + " It's adopted as it is, never reformatted. To change it, move what's on it elsewhere, then remake the volume yourself."
-        }
-        return what + " It's adopted as it is, never reformatted. To change it, convert it below (Stage, a checked copy, "
-            + "Swap In: docs/volume-conversion.md)."
+        "It's case-insensitive APFS, and should be case-sensitive: names differing only in case (Makefile and makefile, "
+            + "Foo.h and foo.h) are one file here, so a Linux checkout or build in the container can collide or fail where a "
+            + "Linux disk wouldn't. It's adopted as it is, never reformatted. To remake it, move what's on it elsewhere, "
+            + "delete \(role.volumeName) in Apple's Disk Utility, then Create it here again and move its contents back."
     }
 }

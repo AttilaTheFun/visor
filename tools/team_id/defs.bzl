@@ -4,8 +4,8 @@ real Apple team id loads, never a value in the repository.
     load("//tools/team_id:defs.bzl", "TEAM_ID_REAL")
 
 TEAM_ID_REAL is "" when the build has no VISOR_TEAM_ID (or the
-placeholder): Visor Disk Utility's root check then refuses in an optimized
-build (ConversionChecker.team).
+placeholder): the shared sign-in's keychain group (tools/shared_sign_in)
+then has no team, and the build's ShakeKit has no sign-in.
 """
 
 load("@visor_team_id//:team_id.bzl", _TEAM_ID_REAL = "TEAM_ID_REAL")

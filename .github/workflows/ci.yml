@@ -658,9 +658,9 @@ jobs:
         env:
           UPDATE_APP_GROUP: ${{ secrets.VISOR_UPDATE_APP_GROUP }}
           UPDATE_APPLICATIONS_BUNDLE_IDS: ${{ secrets.VISOR_UPDATE_APPLICATIONS_BUNDLE_IDS }}
-          # The team Visor Disk Utility's root check pins its copy to,
-          # compiled in (tools/signing's TEAM_ID; never in the repository):
-          # an optimized build without it refuses Swap In and unswap.
+          # The team the shared sign-in's keychain group is made with
+          # (tools/team_id's TEAM_ID_REAL; never in the repository): a build
+          # without it has no shared sign-in (tools/shared_sign_in).
           VISOR_TEAM_ID: ${{ vars.VISOR_TEAM_ID }}
         run: |
           if [ -z "$UPDATE_APP_GROUP" ] || [ -z "$UPDATE_APPLICATIONS_BUNDLE_IDS" ]; then
@@ -668,7 +668,7 @@ jobs:
             exit 1
           fi
           if [ -z "$VISOR_TEAM_ID" ]; then
-            echo "::error::No VISOR_TEAM_ID variable: Visor Disk Utility built without its team refuses Swap In and unswap"
+            echo "::error::No VISOR_TEAM_ID variable: a build without its team has no shared sign-in"
             exit 1
           fi
           printf 'common --repo_env=VISOR_UPDATE_APP_GROUP=%s\ncommon --repo_env=VISOR_UPDATE_APPLICATIONS_BUNDLE_IDS=%s\n' \
@@ -969,9 +969,9 @@ jobs:
         env:
           UPDATE_APP_GROUP: ${{ secrets.VISOR_UPDATE_APP_GROUP }}
           UPDATE_APPLICATIONS_BUNDLE_IDS: ${{ secrets.VISOR_UPDATE_APPLICATIONS_BUNDLE_IDS }}
-          # The team Visor Disk Utility's root check pins its copy to,
-          # compiled in (tools/signing's TEAM_ID; never in the repository):
-          # an optimized build without it refuses Swap In and unswap.
+          # The team the shared sign-in's keychain group is made with
+          # (tools/team_id's TEAM_ID_REAL; never in the repository): a build
+          # without it has no shared sign-in (tools/shared_sign_in).
           VISOR_TEAM_ID: ${{ vars.VISOR_TEAM_ID }}
         run: |
           if [ -z "$UPDATE_APP_GROUP" ] || [ -z "$UPDATE_APPLICATIONS_BUNDLE_IDS" ]; then
@@ -979,7 +979,7 @@ jobs:
             exit 1
           fi
           if [ -z "$VISOR_TEAM_ID" ]; then
-            echo "::error::No VISOR_TEAM_ID variable: Visor Disk Utility built without its team refuses Swap In and unswap"
+            echo "::error::No VISOR_TEAM_ID variable: a build without its team has no shared sign-in"
             exit 1
           fi
           printf 'common --repo_env=VISOR_UPDATE_APP_GROUP=%s\ncommon --repo_env=VISOR_UPDATE_APPLICATIONS_BUNDLE_IDS=%s\n' \

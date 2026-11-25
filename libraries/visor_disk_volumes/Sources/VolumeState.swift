@@ -100,14 +100,6 @@ public struct VolumeState: Equatable, Sendable {
         return [try DiskCommand.spotlightOff(role)]
     }
 
-    /// The commands that delete it, by its APFS volume UUID: for
-    /// Uninstall…, which VolumeGuard lets through only when the volume's
-    /// deletion is asked for.
-    public func deleteCommands() throws -> [DiskCommand] {
-        guard let volume else { throw DiskVolumesError.blocked("There's no \(role.volumeName) volume to delete.") }
-        return [try DiskCommand.deleteVolume(role, uuid: volume.uuid)]
-    }
-
     /// Its APFS volume UUID when it's Visor's own as found now: named for
     /// its role, with no system role, mounted at its mount point (as Visor
     /// Disk Utility makes it). volumes.json keeps it (VolumesStatus.ownVolumes):

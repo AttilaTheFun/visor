@@ -34,7 +34,7 @@
 // may too. Reads ask the protected store first, then the legacy one, whose
 // item is copied over. Writes go to the protected store alone, so the
 // legacy copy goes stale from then on (it's for a rollback through the prep
-// release; Uninstall… removes it). A secret removed is removed from the
+// release; it stays until a person removes it in Keychain Access). A secret removed is removed from the
 // protected store, and the legacy copy it had then is noted as forgotten
 // (`forgottenName`, by its value's hash), so a read doesn't bring it back;
 // a different value there later (written by a build rolled back to) is

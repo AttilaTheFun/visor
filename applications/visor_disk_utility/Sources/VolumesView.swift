@@ -3,18 +3,10 @@
 import DiskVolumes
 import SwiftUI
 
-/// The three volumes, a refresh, where Visor reads them from, and
-/// Uninstall….
+/// The three volumes, each made or checked, a refresh, and where Visor
+/// reads them from.
 struct VolumesView: View {
     @Bindable var model: VolumesModel
-    @State private var uninstall: UninstallModel?
-
-    /// The conversion's box, while there's something to convert, a
-    /// conversion under way, or a volume one kept.
-    private var showsConversion: Bool {
-        !model.kept.isEmpty || !model.conversionResult.isEmpty
-            || VolumeRole.convertible.contains { model.states[$0]?.isCaseSensitive == false || model.conversions[$0]?.staged != nil }
-    }
 
     var body: some View {
         ScrollView {
@@ -23,9 +15,6 @@ struct VolumesView: View {
                     .foregroundStyle(.secondary)
                 ForEach(VolumeRole.allCases, id: \.self) { role in
                     VolumeCard(model: model, role: role)
-                }
-                if showsConversion {
-                    ConversionBox(model: model)
                 }
                 Text(model.statusLine)
                     .font(.caption)
@@ -42,12 +31,7 @@ struct VolumesView: View {
             if model.isBusy {
                 ToolbarItem { ProgressView().controlSize(.small) }
             }
-            ToolbarItem {
-                Button("Uninstall…") { uninstall = UninstallModel() }
-                    .disabled(model.isBusy)
-            }
         }
-        .sheet(item: $uninstall) { UninstallSheet(model: $0) }
         .alert("Visor Disk Utility", isPresented: Binding(get: { model.failure != nil }, set: { if !$0 { model.failure = nil } })) {
             Button("OK", role: .cancel) {}
         } message: {
