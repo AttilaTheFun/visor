@@ -8,9 +8,14 @@ load("//tools/variant:defs.bzl", "variant_infoplist")
 
 package(default_visibility = ["//visibility:public"])
 
-# The server agent's plist, for the bundle and for its test
-# (//tests/visor_launch_agent_tests, which checks it is ServerAgentJob's).
-exports_files(["LaunchAgents/com.LoganShire.Visor.server.plist"])
+# The app's own launchd agent's plist (AppAgentJob: it starts Visor at login
+# and again after a crash), and the server agent's (ServerAgentJob, until
+# 0.72.1, kept a release for the hand-back), for the bundle and for their
+# tests (//tests/visor_launch_agent_tests, which checks each is the code's).
+exports_files([
+    "LaunchAgents/com.LoganShire.Visor.app.plist",
+    "LaunchAgents/com.LoganShire.Visor.server.plist",
+])
 
 # The Info.plist, for the test that holds Shireworks Kit's keys out of it
 # (tests/visor_plists_tests).
@@ -60,16 +65,17 @@ app_group_entitlements(
 shared_sign_in_infoplist(name = "shared_sign_in_plist")
 
 # Visor on the Mac: a menu bar app whose
-# window is Visor's client, with the Mac's Visor server under it. It took
-# over from Visor Server (applications/visor_menubar) and the Mac's own
+# window is Visor's client, with the Mac's Visor server in its own process
+# (0.72.1: Sources/LocalServer.swift), started at login and again after a
+# crash by the app's own launchd agent (Sources/MacAppInstance.swift). It
+# took over from Visor Server (applications/visor_menubar) and the Mac's own
 # client app in 0.46, and keeps what it has in places of its own
-# (Sources/MacPlaces.swift). The same executable is the server
-# agent with `--server` (Sources/MacServerAgent.swift: the server headless,
-# a launchd job, while the app's `ServerAsAgent` default is on) and
-# agent-proxy with `--agent-proxy`. The app is its server's client alone,
-# its window, menu and Settings alike, at the server's socket file
-# (Sources/LocalServer.swift, //libraries/visor_socket_file), whichever
-# process runs it.
+# (Sources/MacPlaces.swift). The same executable is the server agent with
+# `--server` (Sources/MacServerAgent.swift: the server headless, until
+# 0.72.1, kept a release for the hand-back) and agent-proxy with
+# `--agent-proxy`. The app is its server's client alone, its window, menu
+# and Settings alike, at the server's socket file
+# (//libraries/visor_socket_file).
 swift_library(
     name = "mac_lib",
     copts = STRICT_SWIFT,
@@ -119,12 +125,15 @@ macos_application(
     # each session's agent runs under one.
     # And agent_protocol's agent-wrapper, which the native runner runs each
     # of its agents under.
-    # And the server agent's launchd plist (ServerAgentJob), registered
-    # with SMAppService from the bundle, so none is written outside it: at
-    # Contents/Library/LaunchAgents (the file keeps its own folder's name).
+    # And the launchd plists, registered with SMAppService from the bundle,
+    # so none is written outside it: the app's own agent's (AppAgentJob),
+    # and the server agent's (ServerAgentJob, kept a release for the
+    # hand-back, which unregisters it), at Contents/Library/LaunchAgents
+    # (the files keep their own folder's name).
     additional_contents = {
         "//applications/agent_wrapper:agent-wrapper": "Helpers",
         "//applications/visor_agent_host:visor-agent-host": "Helpers",
+        "LaunchAgents/com.LoganShire.Visor.app.plist": "Library",
         "LaunchAgents/com.LoganShire.Visor.server.plist": "Library",
     },
     app_icons = ["//artwork/app-icon:app_icon"],

@@ -15,11 +15,11 @@ server as a command for Linux and Windows.)
 
 - **applications/visor_mac** — Visor.app on the Mac
   (`com.LoganShire.Visor`): a menu bar app whose window is Visor (the
-  same client as the iPhone's, below), with Visor's server under it. The
-  same executable is the server's background process (`--server`, a
-  launchd job registered from the bundle), which runs sessions natively
-  or in the Sessions container it manages (docs/containers.md), their
-  files on the Visor, Sessions and Sources volumes.
+  same client as the iPhone's, below), with Visor's server in its own
+  process (from 0.72.1; launchd starts the app at login and again after a
+  crash), which runs sessions natively or in the Sessions container it
+  manages (docs/containers.md), their files on the Visor, Sessions and
+  Sources volumes.
 - **applications/visor_disk_utility** — Visor Disk Utility: creates the
   Sessions, Sources and Visor volumes (case-sensitive APFS) and checks
   they're as they should be, and writes volumes.json for Visor.

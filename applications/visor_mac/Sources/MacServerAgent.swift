@@ -1,5 +1,11 @@
-// `Visor --server`: the server agent (docs/DEVELOPMENT.md, The server as a
-// background agent). Visor.app's own executable run headless by this
+// `Visor --server`: the server agent, until 0.72.1, when the server moved
+// into the app's own process (docs/DEVELOPMENT.md, The server in the app).
+// Kept one more release, for the hand-back and for safety: the update from
+// a build before 0.72.1 is installed by its agent's watcher, which starts
+// the new build as the agent (`server-agent register`) before the app,
+// reopened, hands it back (ServerHandBack). Nothing new uses it.
+//
+// What it is: Visor.app's own executable run headless by this
 // user's launchd (ServerAgentJob, settled by the app: LocalServer), with no
 // AppKit UI: the same server the app runs (MacServer), with agent-proxy
 // inside it (MacAgentProxy.foldIn) and the Sessions container's engine
@@ -113,19 +119,11 @@ enum MacServerAgent {
         // ShireworksKit.start(), which would write the build for Shireworks
         // from here too: that's the app's process's to write.
         ShireworksCrashes.start()
-        server.start()
+        // With the Sessions container's engine and agent-proxy beside it,
+        // as the app's (docs/containers.md).
+        MacServer.run(server)
         if !server.listening, server.password.isEmpty, !server.settings.asksNothing {
             log("the server agent has no password: it serves once one is set")
-        }
-        // The Sessions container's engine (docs/containers.md): given first,
-        // so turning it on has given agent-proxy its relay port before
-        // agent-proxy is folded in; started again once it is, if a session
-        // is placed in it.
-        let container = MacSessionsContainer(settings: server.settings, placed: { await server.placedInContainer })
-        server.sessionsContainer = container
-        Task {
-            await MacAgentProxy.foldIn(server)
-            await container.engine.serverStarted()
         }
         RunLoop.main.run()
         exit(0)

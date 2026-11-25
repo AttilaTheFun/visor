@@ -1,11 +1,12 @@
-// The server as a background agent on a Mac (docs/DEVELOPMENT.md, The
-// server as a background agent): `Visor --server`, Visor.app's own
-// executable run headless by this user's launchd, so it has the app's
-// signature, keychain items and entitlements, starts at login whether or not
-// the app is open, and is started again if it fails. Visor.app is then its
-// client. Settled by the app at its launch (ServerHandOver), and only while
-// the app's `ServerAsAgent` default is on: off (the default), the server
-// runs in the app, as before.
+// The server as a background agent on a Mac, until 0.72.1, when the server
+// moved into the app's own process (docs/DEVELOPMENT.md, The server in the
+// app): `Visor --server`, Visor.app's own executable run headless by this
+// user's launchd. Kept one more release, for the hand-back (ServerHandBack:
+// the app's launch unregisters it and removes 0.64's plist) and for the
+// update from a build before 0.72.1, whose watcher starts the new build as
+// this agent (`server-agent register`, ServerAgentRestart, ServerAgentWatch)
+// before the app, reopened, hands it back. Nothing new registers it, and
+// the app's `ServerAsAgent` default is no longer read.
 //
 // - `<bundle id>.server` (`com.LoganShire.Visor.server`): its plist is the
 //   app bundle's own (`Contents/Library/LaunchAgents/<label>.plist`,
