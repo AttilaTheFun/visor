@@ -87,8 +87,13 @@ import VisorServer
         #expect(AgentProxySettings.importableName("agent-proxy/mcp/token") == "mcp/token", "as Shireworks named it")
         #expect(AgentProxySettings.importableName("github-token") == "github-token")
         #expect(AgentProxySettings.importableName("claude/oauth-token") == "claude/oauth-token")
+        for app in ["github-app/key", "github-app/id", "github-app/installation"] {
+            #expect(AgentProxySettings.importableName(app) == app)
+            #expect(AgentProxySettings.importableName("agent-proxy/" + app) == app)
+        }
         #expect(AgentProxySettings.importableName("mcp/gh/API_KEY") == "mcp/gh/api_key")
-        for refused in ["password", "relay-token", "ca-key.pem", "mcp/gh", "mcp//x", "mcp/gh/a b", "mcp/a/b/c", "agent-proxy/ca.pem", "claude/other", ""] {
+        for refused in ["password", "relay-token", "ca-key.pem", "mcp/gh", "mcp//x", "mcp/gh/a b", "mcp/a/b/c", "agent-proxy/ca.pem", "claude/other", "",
+                        "github-app/secret", "github-app"] {
             #expect(AgentProxySettings.importableName(refused) == nil, "\(refused)")
         }
     }
@@ -124,6 +129,20 @@ import VisorServer
         #expect(secrets.get("agent-proxy/github-token") == nil)
         _ = try AgentProxyCommand.run(["secret-remove", "mcp/token"], secrets: secrets, input: try piped(""), inputIsTerminal: true)
         #expect(secrets.get("agent-proxy/mcp/token") == nil)
+        // The App's key is a PEM, every line of it kept (a stand-in's, not a key).
+        let pem = "-----BEGIN RSA PRIVATE KEY-----\nAAAA\nBBBB\n-----END RSA PRIVATE KEY-----"
+        let kept = try AgentProxyCommand.run(["secret-set", "github-app/key"], secrets: secrets, input: try piped(pem + "\n"), inputIsTerminal: false)
+        #expect(kept.contains("agent-proxy/github-app/key kept") && !kept.contains("AAAA"))
+        #expect(secrets.get("agent-proxy/github-app/key") == pem)
+        #expect(throws: AgentProxyCommand.Failure.self) {
+            try AgentProxyCommand.run(["secret-set", "github-app/key"], secrets: secrets, input: try piped("ghp_x\n"), inputIsTerminal: false)
+        }
+        #expect(secrets.get("agent-proxy/github-app/key") == pem, "what isn't a PEM isn't kept")
+        _ = try AgentProxyCommand.run(["secret-set", "github-app/id"], secrets: secrets, input: try piped("123456\n"), inputIsTerminal: false)
+        #expect(secrets.get("agent-proxy/github-app/id") == "123456")
+        #expect(throws: AgentProxyCommand.Failure.self) {
+            try AgentProxyCommand.run(["secret-set", "github-app/id"], secrets: secrets, input: try piped("1\n2\n"), inputIsTerminal: false)
+        }
     }
 
     @Test func theJobRunsOnlyFromAnAppInApplications() {
