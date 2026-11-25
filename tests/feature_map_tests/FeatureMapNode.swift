@@ -6,7 +6,7 @@ import Testing
 
 enum FeatureMapNode: String, CaseIterable, CustomTestStringConvertible {
     case onboarding, signIn, sessions, search, archived, project, migrate, addComputer
-    case newSession, restore, folder, chat, approval, question, signInCode, model, allModels, details, toolCalls
+    case newSession, restore, newInContainer, folder, chat, approval, question, signInCode, model, allModels, details, toolCalls
     case preview, subPage, settings, computer, export
     case superCompact, superCompactRunning, superCompactReview, superCompactEdit, superCompactDone
 
@@ -35,6 +35,9 @@ enum FeatureMapNode: String, CaseIterable, CustomTestStringConvertible {
         case .newSession: return sheet && screen.texts.contains("New Session")
         // New Session with Restore chosen: its Import… listed.
         case .restore: return sheet && screen.texts.contains("New Session") && screen.has(id: "import-archive")
+        // New Session with its computer's Sessions container chosen: where
+        // it works there said.
+        case .newInContainer: return sheet && screen.texts.contains("New Session") && screen.has(id: "compose-place-note")
         case .folder: return screen.texts.contains("Choose a folder")
         // Send, or with nothing typed on the iPhone, Dictate in its place;
         // or its slash commands offered, over it on the iPhone (a popover,

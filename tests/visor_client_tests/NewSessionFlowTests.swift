@@ -64,6 +64,43 @@ final class NewSessionFlowTests: XCTestCase {
         XCTAssertEqual(server.subscribed, [id])
     }
 
+    /// New Session in the computer's Sessions container: offered while it
+    /// takes sessions; the session started there with its model, effort
+    /// and first message, listed placed in it and subscribed; a refusal
+    /// thrown in the server's words, nothing listed.
+    func testASessionStartedInTheContainer() async throws {
+        let server = ScriptedServer()
+        server.containerStatus = ContainerStatus(state: .stopped, enabled: true, canRun: true)
+        let host = await connected(server)
+        XCTAssertTrue(host.takesContainerSessions)
+        let id = try await host.startInContainer(title: "Born there", model: "sonnet", effort: "high", firstMessage: "Hello")
+        XCTAssertEqual(server.startedInContainer.map(\.title), ["Born there"])
+        XCTAssertEqual(server.startedInContainer.first?.model, "sonnet")
+        XCTAssertEqual(server.startedInContainer.first?.effort, "high")
+        XCTAssertEqual(server.startedInContainer.first?.text, "Hello")
+        XCTAssertEqual(host.sessions.first { $0.id == id }?.placement, .container)
+        XCTAssertEqual(server.subscribed, [id])
+
+        server.containerRefusal = "The Sessions container is off: turn it on in Settings › Sessions Container."
+        do {
+            _ = try await host.startInContainer(title: "", model: nil, effort: nil)
+            XCTFail("started, though refused")
+        } catch {
+            XCTAssertEqual(VisorAgentServer.problem(error), "The Sessions container is off: turn it on in Settings › Sessions Container.")
+        }
+        XCTAssertEqual(server.startedInContainer.count, 1, "nothing started")
+    }
+
+    /// Not offered by a computer whose container is off, or that has none.
+    func testNoContainerNoSessionsThere() async {
+        let server = ScriptedServer()
+        server.containerStatus = ContainerStatus(state: .off, enabled: false, canRun: true)
+        let off = await connected(server)
+        XCTAssertFalse(off.takesContainerSessions)
+        let none = await connected(ScriptedServer())
+        XCTAssertFalse(none.takesContainerSessions)
+    }
+
     /// A list from a server of 0.49 or before that says containers are on
     /// offer is read as any other list: the flag is passed over.
     func testAnOldServersContainerFlagIsPassedOver() {

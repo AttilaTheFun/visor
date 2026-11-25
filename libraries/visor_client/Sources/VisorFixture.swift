@@ -28,7 +28,11 @@ public enum VisorFixture {
     /// reply's row: `turnSteps`), turn-tool, turn-subagents and
     /// turn-background (the chat held in one state: `stillTurn`),
     /// and super-compact-running, -review and -done (Super Compact's
-    /// sheet over the chat: its job running, done for review, cut over).
+    /// sheet over the chat: its job running, done for review, cut over);
+    /// new-session-container-refused (New Session, its computer's Sessions
+    /// container refusing a session started there: `containerRefusal`)
+    /// and new-session-no-container (New Session, the container off, so
+    /// not offered).
     /// A session to open a few seconds after launch, for a recording of
     /// its first open (`-visor.probe.open <session id>`); "" for none.
     @MainActor public static var probeSession: String { VisorHost.settings?.get(key: "probe.open") ?? "" }
@@ -145,6 +149,14 @@ public enum VisorFixture {
         if screen == "super-compact-done" { sessions = continued(sessions) }
         return sessions
     }
+
+    /// The session New Session starts in the computer's Sessions container,
+    /// in a folder of its own on the Sessions volume.
+    public static let containerSession = "fixture-container"
+    static let containerSessionsFolder = "/Volumes/Sessions"
+    /// What the computer says on refusing a session in its container, on
+    /// `new-session-container-refused`.
+    public static let containerRefusal = "The Sessions container has no egress (its check failed): Check Again in Settings."
 
     /// The session the chat is carried on as by a Super Compact's cut-over.
     public static let continuedSession = "fixture-continued"

@@ -143,6 +143,22 @@ final class ScriptedServer: AgentServer {
     var choices: [StartChoice] = []
     func startChoices() async throws -> [StartChoice] { choices }
     var managesSessions = true
+
+    /// How its Sessions container stands, and the sessions started in it
+    /// (title, model, effort, first message); refused, in these words,
+    /// while `containerRefusal` is set.
+    var containerStatus: ContainerStatus?
+    var containerRefusal: String?
+    var startedInContainer: [(title: String, model: String?, effort: String?, text: String?)] = []
+    func sessionsContainer() async -> ContainerStatus? { containerStatus }
+    func startSessionInContainer(title: String, model: String?, effort: String?, text: String?) async throws -> SessionInfo {
+        if let containerRefusal { throw AgentServerError.message(containerRefusal) }
+        startedInContainer.append((title, model, effort, text))
+        var info = SessionInfo(id: "in-container-\(startedInContainer.count)", agent: .claude, cwd: "/Volumes/Sessions/Claude/in-container",
+                               title: title, model: model, effort: effort, created: 0)
+        info.placement = .container
+        return info
+    }
     func transcript(of session: String, since revision: Int, generation: Int, after: String?) async throws -> Envelope {
         // Nothing moves: held, as a server holds it.
         while !Task.isCancelled { try await Task.sleep(nanoseconds: 60_000_000_000) }

@@ -455,7 +455,15 @@ and an alert, not a menu within the context menu, which only Apple's
 SwiftUI draws. Move to a Runner (the dispatcher's) is no longer
 offered. A session's row marks where it runs: a box, "In the Sessions
 container", for one placed there (SessionPlaceMark, from
-`SessionInfo.placement`).
+`SessionInfo.placement`). **New Session** (ComposeSessionSheet) asks where
+a new conversation runs while the computer's container takes sessions
+(`compose-place`): "‹computer›", as before, or "‹computer›'s Container",
+a Claude Code session with no folder to pick (the server's
+`<Sessions>/Claude/<id>`), its model and effort chosen there, started by
+`POST /api/container/sessions` (AgentServerConnection's
+`startInContainer`). It opens once its agent has started there; the
+server's refusal (the container off, without egress, its agent unable to
+start) is shown in the sheet, which stays open.
 
 **Its token in the agent's environment** (agent_protocol#17): the wrapper
 reads `AGENT_TOKEN` and unsets it, and keeps it from its harness's
@@ -479,8 +487,6 @@ as a defence beside it. Visor adopts it once #17 lands in a release.
 
 ## What's next
 
-- **New Session in the container** in the clients (the server's `POST
-  /api/container/sessions` is there).
 - **agent_protocol#17:** the token handed over on a descriptor, above.
 
 ## Testing
@@ -518,6 +524,11 @@ as a defence beside it. Visor adopts it once #17 lands in a release.
   held stopped, a restart under it uncounted, Stop and Start Agent, a move
   refused or coming straight back, a folder of its own outside the shared
   ones, and a new session there.
+- `//tests/feature_map_tests` (the client headless through Isomer's
+  driver): Migrate… into the container and back (FeatureMapTests.Sessions),
+  and New Session in the container (FeatureMapTests.NewSession): chosen,
+  started (its row marked "In the Sessions container"), refused with the
+  sheet still open, and not offered while the container takes no sessions.
   `//tests/visor_container_tests:visor_container_mac_tests` (macOS): this
   Mac's readiness and memory, and the Containerization backend's archive
   reading. The settings' decoding is in `//tests/visor_server_tests`.

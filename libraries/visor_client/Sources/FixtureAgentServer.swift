@@ -149,17 +149,44 @@ final class FixtureAgentServer: AgentServer {
     }
 
     /// The fixture's computer has a Sessions container, on, that takes
-    /// sessions (so Migrate… offers it).
+    /// sessions (so Migrate… and New Session offer it); on
+    /// `new-session-no-container`, one turned off, which takes none.
     func sessionsContainer() async -> ContainerStatus? {
-        ContainerStatus(state: .stopped, enabled: true, canRun: true, cpus: 8, memoryGiB: 16, idleMinutes: 30)
+        VisorFixture.screen == "new-session-no-container"
+            ? ContainerStatus(state: .off, enabled: false, canRun: true, cpus: 8, memoryGiB: 16, idleMinutes: 30)
+            : ContainerStatus(state: .stopped, enabled: true, canRun: true, cpus: 8, memoryGiB: 16, idleMinutes: 30)
+    }
+
+    /// The sessions New Session started in the container here.
+    private var startedInContainer: [SessionInfo] = []
+
+    /// New Session in the container, as a server answers once its agent
+    /// has started there: a Claude Code session placed in it, in a folder
+    /// of its own on Sessions (`VisorFixture.containerSession`). On
+    /// `new-session-container-refused`, refused as a server refuses one
+    /// whose container went without egress since it was last asked.
+    func startSessionInContainer(title: String, model: String?, effort: String?, text: String?) async throws -> SessionInfo {
+        if VisorFixture.screen == "new-session-container-refused" {
+            throw AgentServerError.message(VisorFixture.containerRefusal)
+        }
+        let id = VisorFixture.containerSession
+        var info = SessionInfo(id: id, agent: .claude, cwd: VisorFixture.containerSessionsFolder + "/Claude/" + id,
+                               title: title.isEmpty ? "Claude Code (container)" : title, skipPermissions: true,
+                               model: model, effort: effort, created: VisorFixture.now)
+        info.updated = VisorFixture.now
+        info.placement = .container
+        startedInContainer.removeAll { $0.id == id }
+        startedInContainer.append(info)
+        return Self.wire(.sessions([info])).sessions?.first ?? info
     }
 
     func sessions() async throws -> [SessionInfo] { kept(listed) }
 
-    /// The fixture's sessions, those restored, and the chat carried on
-    /// once it has been (Super Compact's cut-over).
+    /// The fixture's sessions, those restored and started in the
+    /// container, and the chat carried on once it has been (Super
+    /// Compact's cut-over).
     var listed: [SessionInfo] {
-        let all = (Self.welcome.sessions ?? []) + restored
+        let all = (Self.welcome.sessions ?? []) + restored + startedInContainer
         return cutOver ? VisorFixture.continued(all) : all
     }
 

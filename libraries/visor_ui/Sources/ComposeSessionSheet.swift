@@ -5,6 +5,9 @@
 // place of folders, and asks for the first message the session starts with.
 // A server with Shireworks offers a container in place of a folder: the agent
 // runs there, a repository cloned into it.
+// A computer whose Sessions container takes sessions offers it as where
+// the session runs (docs/containers.md, "Placing sessions"): Claude Code,
+// in a folder of its own there, its model and effort chosen here.
 // Or a session is restored: one imported from a session archive (Import…,
 // here or the Mac's File › Import…) or backed up on the computer, started
 // again there on its own conversation.
@@ -61,6 +64,12 @@ struct ComposeSessionSheet: View {
     @State private var importJob: SessionImport?
     /// The sheet has opened on Restore as it was asked to (startsOnRestore).
     @State private var openedOnRestore = false
+    /// Where it runs: on the computer, or in its Sessions container.
+    @State private var inContainer = false
+    /// The model and effort a session in the container starts with: ""
+    /// for Claude Code's own.
+    @State private var containerModel = ""
+    @State private var containerEffort = ""
 
     private enum Conversation: Hashable { case new, resume, restore }
 
@@ -92,11 +101,25 @@ struct ComposeSessionSheet: View {
     private var sessionsHere: Set<String> {
         Set((host?.projects ?? []).flatMap { $0.sessions + $0.archived }.map(\.id))
     }
+    /// The computer's Sessions container is offered for a new conversation
+    /// while it takes sessions (as Migrate… offers it).
+    private var offersContainer: Bool { host?.takesContainerSessions == true && starting == .inFolders && conversation == .new }
+    /// In the container: Claude Code, in a folder the server gives it
+    /// there (`<Sessions>/Claude/<id>`), so no folder to pick.
+    private var containerChosen: Bool { inContainer && offersContainer }
+    private var claudeModels: [AgentModel] { host?.catalog(for: .claude)?.models.filter(\.listed) ?? [] }
+    /// The efforts of the model chosen for the container, or of Claude
+    /// Code's own.
+    private var containerEfforts: [String] {
+        let catalog = host?.catalog(for: .claude)
+        return (catalog?.models.first(where: { $0.id == containerModel }) ?? catalog?.model(matching: nil))?.efforts ?? []
+    }
     private var available: Set<AgentKind> {
         Set((host?.catalogs ?? []).filter(\.available).map(\.agent))
     }
     private var ready: Bool {
         if restoring { return host != nil && !waiting && restorable.contains { $0.id == restoreChoice && !sessionsHere.contains($0.item.id) } }
+        if containerChosen { return host != nil && !waiting }
         return host != nil && !waiting && !place.isEmpty && !(resuming && canResume && resumeID.trimmed.isEmpty)
             && (!starting.withFirstMessage || !message.trimmed.isEmpty)
     }
@@ -124,6 +147,7 @@ struct ComposeSessionSheet: View {
                         .accessibilityIdentifier("computer")
                     }
                 }
+                if let host, offersContainer { placeSection(host) }
                 if restoring {
                     // Restoring: the session's own folder, agent and name.
                     EmptyView()
@@ -141,7 +165,7 @@ struct ComposeSessionSheet: View {
                             .accessibilityIdentifier("choice")
                         }
                     }
-                } else if host != nil {
+                } else if host != nil, !containerChosen {
                     // The folder chosen (the latest project's until another
                     // is picked), and the row that opens the browser for
                     // another.
@@ -173,6 +197,8 @@ struct ComposeSessionSheet: View {
                             }
                         }
                         .pickerStyle(.menu)
+                        // The container runs Claude Code alone.
+                        .disabled(containerChosen)
                     }
                     if canResume || canRestore {
                         Picker("Conversation", selection: $conversation) {
@@ -308,6 +334,8 @@ struct ComposeSessionSheet: View {
             if restoring { loadRestorable() }
         }
         .onChange(of: agent) { if resuming { loadResumable() } }
+        .onChange(of: inContainer) { if inContainer { agent = .claude } }
+        .onChange(of: containerModel) { if !containerEfforts.contains(containerEffort) { containerEffort = "" } }
         .onChange(of: cwd) { if resuming { loadResumable() } }
     }
 
@@ -319,6 +347,8 @@ struct ComposeSessionSheet: View {
     }
 
     private var defaultTitle: String {
+        // As the server names one in its container.
+        if containerChosen { return "Claude Code (container)" }
         let siblings = host?.projects.first { $0.cwd == place }?.sessions.filter { $0.agent == agent }.count ?? 0
         return "\(agent.title) \(siblings + 1)"
     }
@@ -356,6 +386,47 @@ struct ComposeSessionSheet: View {
         guard let host, starting.fromChoices else { return }
         if host.startChoices.isEmpty { Task { await host.loadStartChoices() } }
         if !host.startChoices.contains(where: { $0.id == choiceID }) { choiceID = host.startChoices.first?.id ?? "" }
+    }
+
+    /// Where the session runs, the computer or its Sessions container (as
+    /// Migrate… names them); in the container, its model and effort, and
+    /// where it works there.
+    @ViewBuilder private func placeSection(_ host: AgentServerConnection) -> some View {
+        Section {
+            Picker("Runs on", selection: $inContainer) {
+                Text(MigratePlaces.name(of: host)).tag(false)
+                Text(MigratePlaces.containerName(of: host)).tag(true)
+            }
+            .pickerStyle(.menu)
+            .accessibilityIdentifier("compose-place")
+            if containerChosen {
+                Picker("Model", selection: $containerModel) {
+                    Text("Default").tag("")
+                    ForEach(claudeModels) { model in
+                        Text(model.title).tag(model.id)
+                    }
+                }
+                .pickerStyle(.menu)
+                .accessibilityIdentifier("compose-model")
+                if !containerEfforts.isEmpty {
+                    Picker("Effort", selection: $containerEffort) {
+                        Text("Default").tag("")
+                        ForEach(containerEfforts, id: \.self) { effort in
+                            Text(AgentCatalog.effortTitle(effort)).tag(effort)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .accessibilityIdentifier("compose-effort")
+                }
+            }
+        } header: {
+            Text("Where")
+        } footer: {
+            if containerChosen {
+                Text("Claude Code only. It works in a folder of its own in the Sessions container, Claude/‹session› on the Sessions volume.")
+                    .accessibilityIdentifier("compose-place-note")
+            }
+        }
     }
 
     /// The sessions to resume for the agent and folder as they stand: an
@@ -495,6 +566,7 @@ struct ComposeSessionSheet: View {
     private func start() {
         guard let host else { return }
         if restoring { return restore(on: host) }
+        if containerChosen { return startInContainer(on: host) }
         waiting = true
         failure = nil
         let place = place
@@ -508,6 +580,25 @@ struct ComposeSessionSheet: View {
                 started(host.id, id)
             } catch {
                 failure = "\(error)"
+                waiting = false
+            }
+        }
+    }
+
+    /// A Claude Code session started in the computer's Sessions container,
+    /// and opened once its agent has started there; the server's refusal
+    /// shown here, the sheet kept open.
+    private func startInContainer(on host: AgentServerConnection) {
+        waiting = true
+        failure = nil
+        Task {
+            do {
+                let id = try await host.startInContainer(title: title.trimmed, model: containerModel.isEmpty ? nil : containerModel,
+                                                         effort: containerEffort.isEmpty ? nil : containerEffort)
+                dismiss()
+                started(host.id, id)
+            } catch {
+                failure = VisorAgentServer.problem(error)
                 waiting = false
             }
         }

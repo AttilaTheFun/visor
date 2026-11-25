@@ -478,7 +478,7 @@ public struct VisorRootView: View {
                 selection = .session(SessionSelection(serverID: VisorFixture.serverID, sessionID: VisorFixture.goalSession))
             case "search":
                 search = VisorFixture.searchQuery
-            case "new-session":
+            case "new-session", "new-session-container-refused", "new-session-no-container":
                 composing = true
             case "restore":
                 composeRestores = true
