@@ -5,8 +5,6 @@ load("//tools/app_groups:defs.bzl", "app_group_entitlements")
 load("//tools/shared_sign_in:defs.bzl", "shared_sign_in_infoplist")
 load("//tools/signing:defs.bzl", "update_infoplist")
 load("//tools/variant:defs.bzl", "variant_infoplist")
-load("@bazel_skylib//rules:write_file.bzl", "write_file")
-load("//tools/team_id:defs.bzl", "TEAM_ID_REAL")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -34,54 +32,36 @@ update_infoplist(name = "update_plist")
 shared_sign_in_infoplist(name = "shared_sign_in_plist")
 
 # Visor Disk Utility: a small app of its own, beside Visor.app (Logan, 19
-# Nov 2026), that makes and adopts the three APFS volumes Visor keeps what
-# is its own on, Sessions, Sources and Visor (libraries/visor_disk_volumes),
-# with macOS's administrator prompt for diskutil, and writes volumes.json
-# for Visor, and Uninstall… (libraries/visor_uninstall: a dry run first,
-# then everything Visor left on the Mac outside its volumes, the volumes
-# only when asked and their names typed, the apps to the Trash last), and
-# the conversion of a case-insensitive Sessions or Sources (Stage, Swap In,
-# a kept volume's Delete…: docs/volume-conversion.md). Its command line
-# (`status`, `create`, `erase-containers`, `uninstall`, `stage`,
-# `copy-staged`, `swap`, `unswap`, `delete-kept`) runs the same code, for
-# scripts, NCH over SSH and test machines.
-# The team this build is made for, compiled in from tools/team_id's
-# TEAM_ID_REAL (VISOR_TEAM_ID: a builder's own, or, in CI's alpha-apple and
-# release-apple, the repository's VISOR_TEAM_ID variable; never in the
-# repository): the root's check's copy must be signed by it
-# (ConversionChecker). nil without it: then an optimized build refuses Swap
-# In and unswap.
-write_file(
-    name = "signing_team",
-    out = "SigningTeam.swift",
-    content = [
-        "// Made by applications/visor_disk_utility/BUILD.bazel from tools/team_id's TEAM_ID_REAL.",
-        "",
-        "enum SigningTeam {",
-        "    static let compiled: String? = %s" % ('"%s"' % TEAM_ID_REAL if TEAM_ID_REAL else "nil"),
-        "}",
-        "",
-    ],
-)
-
+# Nov 2026), that creates the three APFS volumes Visor keeps what is its
+# own on, Sessions, Sources and Visor (libraries/visor_disk_volumes), with
+# macOS's administrator prompt for diskutil, checks that each is as it
+# should be (mounted where Visor looks, case-sensitive, the person's, and
+# Visor's out of Time Machine and Spotlight), and writes volumes.json for
+# Visor. Nothing else (Logan, 24 Nov 2026): no conversion of a volume, no
+# migration and no uninstall; with everything of Visor's on its volumes, a
+# person removes it by deleting them in Apple's Disk Utility. Its command
+# line (`status`, `create`, `fix-owner`, `exclude-visor`) runs the same
+# code, for scripts, NCH over SSH and test machines.
 swift_library(
     name = "disk_utility_lib",
     copts = STRICT_SWIFT,
-    srcs = glob(["Sources/*.swift"]) + [":signing_team"],
+    srcs = glob(["Sources/*.swift"]),
     module_name = "VisorDiskUtility",
     deps = [
         "@swiftpkg_shireworks_kit//:ShireworksKit",
         "//:foundation",
         "//libraries/visor_disk_volumes",
-        "//libraries/visor_uninstall",
     ],
 )
 
 # The CI build's entitlements: its own identifier, Visor's keychain access
 # group, and the app groups, the Visor family's and Applications'
-# (tools/app_groups: UpdateKit's installed versions, and Uninstall… finding
-# the group's container), the team prefix the builder's here (a placeholder
-# in CI), which CI's signing makes the profile's (tools/signing).
+# (tools/app_groups), the team prefix the builder's here (a placeholder in
+# CI), which CI's signing makes the profile's (tools/signing). Uninstall…
+# was what used the keychain group and the group's container; since it
+# went (Logan, 24 Nov 2026) nothing here does; they're kept so CI's
+# signing of it, and its profile, stay as they were, and go with a change
+# to that signing.
 app_group_entitlements(
     name = "app_ci_entitlements",
     template = "app.ci.entitlements",
@@ -94,14 +74,11 @@ macos_application(
     bundle_name = "Visor Disk Utility",
     # Not sandboxed (it runs diskutil and osascript), and the hardened
     # runtime needs nothing for that. A build CI publishes asks for the app
-    # groups (above) and Visor's own keychain access group
-    # (`<team>.com.LoganShire.Visor`), as
-    # Visor.app's build does (applications/visor_mac), so Uninstall… can
-    # delete the app key in the data-protection keychain: Shireworks'
-    # signing makes the prefix its Developer ID profile's, which must grant
-    # the groups (the team's `<team>.*`, and both app groups). A build to
-    # run here asks for none,
-    # and Uninstall… says the protected items are out of its reach.
+    # groups and Visor's own keychain access group
+    # (`<team>.com.LoganShire.Visor`), as Visor.app's build does
+    # (applications/visor_mac): Shireworks' signing makes the prefix its
+    # Developer ID profile's, which must grant the groups (the team's
+    # `<team>.*`, and both app groups). A build to run here asks for none.
     entitlements = select({
         "//applications/visor_mac:ci_signed": ":app_ci_entitlements",
         "//conditions:default": None,

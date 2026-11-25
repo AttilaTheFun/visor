@@ -14,7 +14,6 @@ enum MacCommandLine {
         usage: Visor                               the app (its window, menu and server)
                Visor --server                      the server agent (launchd's, as SMAppService registers it)
                Visor server-agent register         the server agent registered afresh from this app
-               Visor server-agent unregister       the server agent stopped and unregistered (Uninstall…)
                Visor admin-token                   the admin token, for a script
                Visor agent-proxy secret-set <name> agent-proxy's secret, read from standard input
                Visor agent-proxy secret-remove <name>
