@@ -29,7 +29,10 @@
 # It downloads the file as <App>-<version>-<platform>.<ext>, and adds its
 # line to <dir>/builds.json, which it writes again whole each time: the
 # builds of every call into the folder, one a line, with the app's link
-# schemes as the server read them ("urlSchemes"). A Mac app's .zip gives
+# schemes as the server read them ("urlSchemes"), and the bundle ids the
+# build takes the place of ("replaces"), where the caller defines
+# `release_asset_replaces <bundle id> <platform>` (a JSON array, or
+# nothing). A Mac app's .zip gives
 # the app's icon too, <App>-<version>-icon.png (the largest PNG in the .icns
 # its Info.plist names), named in its line as "icon": what Applications
 # shows for the app. An icon that can't be read is left out, never failing
@@ -128,7 +131,8 @@ release_asset() {
 #   release_asset_record <dir> <file> <bundle id> <app> <platform> <version> <build number> <variant> <commit> <uuid> <icon> <schemes JSON>
 release_asset_record() {
   local dir="$1" asset="$2" bundle="$3" app="$4" platform="$5" version="$6" build_number="$7" variant="$8" commit="$9"
-  local uuid="${10}" icon="${11}" schemes="${12}" digest size
+  local uuid="${10}" icon="${11}" schemes="${12}" digest size replaces=""
+  if declare -F release_asset_replaces > /dev/null; then replaces="$(release_asset_replaces "$bundle" "$platform")"; fi
   if command -v sha256sum > /dev/null; then digest="$(sha256sum "$dir/$asset" | cut -d' ' -f1)"
   else digest="$(shasum -a 256 "$dir/$asset" | cut -d' ' -f1)"; fi
   size="$(wc -c < "$dir/$asset" | tr -d ' ')"
@@ -137,7 +141,7 @@ release_asset_record() {
   printf '{"file":"%s","bundleID":"%s","app":"%s","platform":"%s","version":"%s","buildNumber":"%s","variant":"%s","commit":"%s","executableUUID":"%s","size":%s,"sha256":"%s"%s}\n' \
     "$(release_asset_json "$asset")" "$(release_asset_json "$bundle")" "$(release_asset_json "$app")" \
     "$platform" "$(release_asset_json "$version")" "$(release_asset_json "$build_number")" "$variant" "$commit" "$uuid" \
-    "$size" "$digest" "${icon:+,\"icon\":\"$(release_asset_json "$icon")\"}${schemes:+,\"urlSchemes\":$schemes}" >> "$dir/builds.lines.new"
+    "$size" "$digest" "${icon:+,\"icon\":\"$(release_asset_json "$icon")\"}${schemes:+,\"urlSchemes\":$schemes}${replaces:+,\"replaces\":$replaces}" >> "$dir/builds.lines.new"
   mv "$dir/builds.lines.new" "$dir/builds.lines"
   { echo '['; sed '$!s/$/,/' "$dir/builds.lines"; echo ']'; } > "$dir/builds.json"
   # Fail closed: a builds.json Applications can't read would hide the

@@ -1,5 +1,5 @@
-// Visor.app's updates from Shireworks (UpdateKit 0.18, docs/Updates.md
-// there): it installs them itself. Shireworks quitting it would end every
+// Visor.app's updates from Shireworks (Shireworks Kit's ShireworksUpdates,
+// docs/updates/Updates.md there): it installs them itself. Shireworks quitting it would end every
 // session's agent with it, so it answers each offer "install myself"; once
 // the verified build is ready, it waits until no session is mid-turn, then
 // installs it through the server's own relaunch (`/api/restart {path}`,
@@ -21,7 +21,7 @@
 
 import Foundation
 import Security
-import UpdateKit
+import ShireworksKit
 import VisorUpdateInstall
 
 @MainActor
@@ -30,16 +30,19 @@ enum VisorUpdates {
     static let quietCheck: Duration = .seconds(30)
 
     /// At launch, after the server has started: the handler and the install
-    /// hook, the build this is written for Shireworks, and, when the
-    /// server says an update didn't stay up and was rolled back (its
-    /// relauncher's word, or the server agent's watch's), that, once.
+    /// hook, which win over Shireworks Kit's update sheet; then the kit
+    /// started (the build this is written for Shireworks, and crashes
+    /// caught), here and not only by the window's `.shireworks()`, as a
+    /// menu bar app's window may never open; and, when the server says an
+    /// update didn't stay up and was rolled back (its relauncher's word, or
+    /// the server agent's watch's), that, once.
     static func start() {
         // A copy staged for an install before is done with: the install
         // relaunched into it, or failed.
         try? FileManager.default.removeItem(at: staging)
         AppUpdates.register(autoUpdate: { _ in .installMyself })
         AppUpdates.register(install: { offer in await install(offer) })
-        AppUpdates.start()
+        ShireworksKit.start()
         Task { await reportRollback() }
     }
 

@@ -1,4 +1,4 @@
-"""The client id of the sign-in Logan's apps share (ShakeKit's
+"""The client id of the sign-in Logan's apps share (Shireworks Kit's
 `GitHubSharedClientID`), from the builder's environment, never the
 repository, which is public: the OAuth App's client id is kept private.
 

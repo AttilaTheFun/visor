@@ -672,11 +672,12 @@ jobs:
           # No build event stream to BuildBuddy here: it would carry these
           # options. Its remote cache stays.
           echo 'common --bes_backend=' >> .bazelrc.user
-      # The sign-in Logan's apps share (ShakeKit's GitHubShared… keys and
-      # its keychain group, tools/shared_sign_in): the shared OAuth App's
+      # The sign-in Logan's apps share (Shireworks Kit's GitHubShared… keys,
+      # with ShireworksRepository, and its keychain group,
+      # tools/shared_sign_in): the shared OAuth App's
       # client id, from the repository's secrets, so neither the public
       # source nor a log names it; its keychain group's team is VISOR_TEAM_ID
-      # (tools/team_id). Without it the build's ShakeKit, whose only sign-in
+      # (tools/team_id). Without it the build's Shireworks Kit, whose only sign-in
       # this is, reports nothing. After Update settings, whose app group
       # holds its lock; before the build, with BuildBuddy's event stream
       # already off.
@@ -685,7 +686,7 @@ jobs:
           SHARED_CLIENT_ID: ${{ secrets.VISOR_GITHUB_SHARED_CLIENT_ID }}
         run: |
           if [ -z "$SHARED_CLIENT_ID" ]; then
-            echo "::warning::No VISOR_GITHUB_SHARED_CLIENT_ID secret: this build's ShakeKit has no sign-in, so it reports nothing"
+            echo "::warning::No VISOR_GITHUB_SHARED_CLIENT_ID secret: this build's Shireworks Kit has no sign-in, so it files nothing"
             exit 0
           fi
           printf 'common --repo_env=VISOR_GITHUB_SHARED_CLIENT_ID=%s\n' "$SHARED_CLIENT_ID" >> .bazelrc.user
@@ -973,11 +974,12 @@ jobs:
           # No build event stream to BuildBuddy here: it would carry these
           # options. Its remote cache stays.
           echo 'common --bes_backend=' >> .bazelrc.user
-      # The sign-in Logan's apps share (ShakeKit's GitHubShared… keys and
-      # its keychain group, tools/shared_sign_in): the shared OAuth App's
+      # The sign-in Logan's apps share (Shireworks Kit's GitHubShared… keys,
+      # with ShireworksRepository, and its keychain group,
+      # tools/shared_sign_in): the shared OAuth App's
       # client id, from the repository's secrets, so neither the public
       # source nor a log names it; its keychain group's team is VISOR_TEAM_ID
-      # (tools/team_id). Without it the build's ShakeKit, whose only sign-in
+      # (tools/team_id). Without it the build's Shireworks Kit, whose only sign-in
       # this is, reports nothing. After Update settings, whose app group
       # holds its lock; before the build, with BuildBuddy's event stream
       # already off.
@@ -986,7 +988,7 @@ jobs:
           SHARED_CLIENT_ID: ${{ secrets.VISOR_GITHUB_SHARED_CLIENT_ID }}
         run: |
           if [ -z "$SHARED_CLIENT_ID" ]; then
-            echo "::warning::No VISOR_GITHUB_SHARED_CLIENT_ID secret: this build's ShakeKit has no sign-in, so it reports nothing"
+            echo "::warning::No VISOR_GITHUB_SHARED_CLIENT_ID secret: this build's Shireworks Kit has no sign-in, so it files nothing"
             exit 0
           fi
           printf 'common --repo_env=VISOR_GITHUB_SHARED_CLIENT_ID=%s\n' "$SHARED_CLIENT_ID" >> .bazelrc.user

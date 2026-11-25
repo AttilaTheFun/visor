@@ -1,6 +1,7 @@
-"""What a build of Logan's says of the sign-in his apps share: ShakeKit's
-`GitHubShared…` keys in its Info.plist, and the shared keychain group in
-its entitlements (shake_kit's GitHubAuth, GitHubSharedSignIn: one OAuth
+"""What a build of Logan's says of the sign-in his apps share: Shireworks
+Kit's `GitHubShared…` keys in its Info.plist, with `ShireworksRepository`,
+where its crashes and bug reports are filed, and the shared keychain group
+in its entitlements (shireworks_kit's GitHubAuth, GitHubSharedSignIn: one OAuth
 App's token, kept in a keychain group the apps all carry and renewed under
 a lock in an app group's container they all carry too).
 
@@ -13,9 +14,9 @@ CLIENT_ID, tools/team_id's TEAM_ID_REAL, and tools/signing's
 UPDATE_APP_GROUP, the lock's group), which CI's builds to publish alone
 have; and the apps take it in
 those builds alone (their `ci_signed`/`ci_device` selects), so a build to
-run here, and anyone else's, carries none of it. It is ShakeKit's only
-sign-in (shake_kit 0.3: signed in to Shireworks on the same phone or
-computer), so there ShakeKit, on by its Info.plist, reports nothing.
+run here, and anyone else's, carries none of it. It is Shireworks Kit's
+only sign-in (signed in to Shireworks on the same phone or computer), so
+there its shake and its crashes file nothing.
 
 An entitlements template takes the shared keychain group at the line
 `<!-- SHARED_SIGN_IN_KEYCHAIN_GROUP -->`, in its `keychain-access-groups`
@@ -37,6 +38,10 @@ KEYCHAIN_PLACEHOLDER = "<!-- SHARED_SIGN_IN_KEYCHAIN_GROUP -->"
 # service the token is kept under: Shireworks' and the rest of Logan's apps'.
 KEYCHAIN_NAME = "com.LoganShire.github"
 
+# Where the apps' crashes and bug reports are filed (Shireworks Kit's
+# `ShireworksRepository`): this repository.
+REPOSITORY = "AttilaTheFun/visor"
+
 def _xml(text):
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
@@ -53,9 +58,10 @@ def shared_keychain_group(prefix):
         return ""
     return "<string>%s%s</string>" % (_xml(prefix), KEYCHAIN_NAME)
 
-def shared_sign_in_infoplist(name, **kwargs):
+def shared_sign_in_infoplist(name, repository = REPOSITORY, **kwargs):
     """An Info.plist fragment: GitHubSharedClientID, GitHubSharedKeychainGroup,
-    GitHubSharedLockGroup and GitHubSharedKeychainService, or nothing."""
+    GitHubSharedLockGroup, GitHubSharedKeychainService and
+    ShireworksRepository (`repository`), or nothing."""
     entries = []
     if shared_sign_in():
         for key, value in [
@@ -63,6 +69,7 @@ def shared_sign_in_infoplist(name, **kwargs):
             ("GitHubSharedKeychainGroup", TEAM_ID_REAL + "." + KEYCHAIN_NAME),
             ("GitHubSharedLockGroup", UPDATE_APP_GROUP),
             ("GitHubSharedKeychainService", KEYCHAIN_NAME),
+            ("ShireworksRepository", repository),
         ]:
             entries += ["\t<key>%s</key>" % key, "\t<string>%s</string>" % _xml(value)]
     write_file(
