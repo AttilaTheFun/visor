@@ -106,6 +106,39 @@ final class GitHubGateTests: XCTestCase {
         refused(web("GET", "/not%20a/repo/archive/x.zip"), "")
     }
 
+    /// Which requests only read, and may go on with no token when none is
+    /// configured (Logan's container test, 25 Nov 2026: a clone of an
+    /// allowed public repository): REST's GET and HEAD, a GraphQL query, a
+    /// fetch or clone, an LFS download, an asset or archive. Never a push, a
+    /// REST write, a mutation or an upload.
+    func testReadsAreTheRequestsThatGoOnWithNoTokenConfigured() {
+        let read = { (method: String, host: String, target: String, body: String?) in
+            self.gate.isRead(GateRequest(method: method, host: host, target: target, body: body.map { Data($0.utf8) }))
+        }
+        let query = #"{"query":"query { repository(owner: \"AttilaTheFun\", name: \"swift_sql\") { name } }"}"#
+        let mutation = #"{"query":"mutation { addComment(input: {subjectId: \"I_1\", body: \"x\"}) { clientMutationId } }"}"#
+        XCTAssertTrue(read("GET", "api.github.com", "/repos/AttilaTheFun/swift_sql/pulls?state=open", nil))
+        XCTAssertTrue(read("HEAD", "api.github.com", "/repos/AttilaTheFun/swift_sql", nil))
+        XCTAssertTrue(read("GET", "api.github.com", "/search/issues?q=x", nil))
+        XCTAssertTrue(read("POST", "api.github.com", "/graphql", query))
+        XCTAssertTrue(read("GET", "github.com", "/AttilaTheFun/swift_sql.git/info/refs?service=git-upload-pack", nil))
+        XCTAssertTrue(read("POST", "github.com", "/AttilaTheFun/swift_sql.git/git-upload-pack", "0000"))
+        XCTAssertTrue(read("POST", "github.com", "/AttilaTheFun/swift_sql.git/info/lfs/objects/batch", #"{"operation":"download"}"#))
+        XCTAssertTrue(read("GET", "github.com", "/AttilaTheFun/visor/releases/download/v0.47.1/builds.json", nil))
+        XCTAssertTrue(read("GET", "github.com", "/AttilaTheFun/visor/archive/refs/tags/v0.47.1.tar.gz", nil))
+        XCTAssertFalse(read("POST", "api.github.com", "/graphql", mutation))
+        XCTAssertFalse(read("POST", "api.github.com", "/repos/AttilaTheFun/swift_sql/issues/1/comments", #"{"body":"x"}"#))
+        XCTAssertFalse(read("PATCH", "api.github.com", "/repos/AttilaTheFun/swift_sql/pulls/1", #"{"title":"x"}"#))
+        XCTAssertFalse(read("PUT", "api.github.com", "/repos/AttilaTheFun/swift_sql/pulls/1/update-branch", "{}"))
+        XCTAssertFalse(read("DELETE", "api.github.com", "/repos/AttilaTheFun/swift_sql/issues/comments/1", nil))
+        XCTAssertFalse(read("GET", "github.com", "/AttilaTheFun/swift_sql.git/info/refs?service=git-receive-pack", nil))
+        XCTAssertFalse(read("POST", "github.com", "/AttilaTheFun/swift_sql.git/git-receive-pack", "0000"))
+        XCTAssertFalse(read("POST", "github.com", "/AttilaTheFun/swift_sql.git/info/lfs/objects/batch", #"{"operation":"upload"}"#))
+        XCTAssertFalse(read("GET", "github.com", "/AttilaTheFun/swift_sql/settings", nil))
+        XCTAssertFalse(read("POST", "uploads.github.com", "/repos/AttilaTheFun/visor/releases/1/assets?name=x", "x"))
+        XCTAssertFalse(read("GET", "api.github.com", "/repos/AttilaTheFun/x/../../repos/someone/else", nil), "no plain path")
+    }
+
     func testAPathCantClimbOutOfItsRepository() {
         refused(rest("GET", "/repos/AttilaTheFun/x/../../repos/someone/else"), "no plain path")
         refused(rest("GET", "/repos/AttilaTheFun/x/%2e%2e/y"), "no plain path")

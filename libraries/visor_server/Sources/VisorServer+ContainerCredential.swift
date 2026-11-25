@@ -55,14 +55,22 @@ extension VisorServer {
     /// The environment of Claude Code in the container, its agents' and the
     /// server's own `claude -p` there: its Claude folder on Sessions
     /// (`<sessions>/.claude`), the credential's placeholder, which
-    /// agent-proxy replaces, and agent-proxy's authorities for Node's TLS
-    /// (the engine's ContainerEngine.authoritiesInGuest; the system's trust
-    /// has them too).
+    /// agent-proxy replaces, gh's placeholder token, which agent-proxy's
+    /// GitHub gate takes off (and sends its own token in its place, or none
+    /// for a read when none is configured), and agent-proxy's authorities
+    /// for Node's TLS (the engine's ContainerEngine.authoritiesInGuest; the
+    /// system's trust has them too).
     nonisolated static func containerClaudeEnvironment(sessions: String) -> [String: String] {
         ["CLAUDE_CONFIG_DIR": sessions + "/.claude",
          "CLAUDE_CODE_OAUTH_TOKEN": ClaudeCredential.placeholder,
+         "GH_TOKEN": containerGitHubPlaceholder,
          "NODE_EXTRA_CA_CERTS": containerAuthoritiesInGuest]
     }
+
+    /// gh's token in the container: a placeholder, never a credential, so
+    /// that gh sends its requests at all (without one it asks to log in).
+    /// agent-proxy's GitHub gate takes off whatever authorization comes.
+    nonisolated static let containerGitHubPlaceholder = "visor-agent-proxy"
 
     /// agent-proxy's authorities' certificates in the container, one file
     /// (ContainerEngine.authoritiesInGuest, which carries them in).

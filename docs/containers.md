@@ -430,6 +430,18 @@ environment), so none goes in.
   names: trusting them trusts nothing else.
 - **`/login`** in a session placed in the container signs in nothing: it's
   told to Sign In to Claude in Settings › Sessions Container.
+- **gh in the container** (from 0.71.1): its agents (and the server's own
+  `claude -p`) have `GH_TOKEN=visor-agent-proxy`, a placeholder like
+  Claude's, so gh sends its requests without a `gh auth login`; it is
+  never a GitHub credential. agent-proxy's GitHub gate (docs/agent-proxy.md)
+  takes off whatever authorization gh or git sends and puts the auth token
+  (`github-token`) in its place. With no token configured, reads of the
+  allowed repositories go on anonymously, as reads of public repositories
+  outside them always do: `git clone` and `git fetch`, `gh api` and gh's
+  other REST reads of a public repository work; writes (`git push`, `gh pr
+  create`, a comment) are refused, saying where the token is set. GitHub's
+  GraphQL API takes no anonymous request, so gh's commands that use it (`gh
+  pr view`, `gh repo view`, among others) need the token.
 
 ## Placing sessions (the container runner)
 

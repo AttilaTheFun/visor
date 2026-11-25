@@ -24,6 +24,17 @@ private struct FixedTokens: GitHubTokenSource {
     func forget(session: String, repository: String) async {}
 }
 
+/// A source whose token can't be had for another reason than none being
+/// configured (an App's that couldn't be minted, say): nothing goes on.
+private struct BrokenTokens: GitHubTokenSource {
+    struct Broken: Error, CustomStringConvertible {
+        var description: String { "the token couldn't be made" }
+    }
+
+    func token(session: String, repository: String) async throws -> String { throw Broken() }
+    func forget(session: String, repository: String) async {}
+}
+
 /// GitHub's API as the checks read it: every repository's default branch is main.
 private struct DefaultBranchMain: GitHubReading {
     func get(_ path: String) async -> GitHubAnswer { GitHubAnswer(status: 200, json: .object(["default_branch": .string("main")])) }
@@ -165,7 +176,8 @@ final class GitHubInterceptorTests: XCTestCase {
 
     /// GitHub played as `host`, and agent-proxy before it: its connections to
     /// it held back `delay`, or to nothing at all (`unreachable`).
-    private func launch(host: String = "api.github.com", delay: TimeAmount = .zero, unreachable: Bool = false) throws {
+    private func launch(host: String = "api.github.com", delay: TimeAmount = .zero, unreachable: Bool = false,
+                        tokens: any GitHubTokenSource = FixedTokens()) throws {
         relay?.stop()
         interceptor?.stop()
         github?.stop()
@@ -175,7 +187,7 @@ final class GitHubInterceptorTests: XCTestCase {
         trust.trustRoots = .certificates([try NIOSSLCertificate(bytes: Array(try githubCA.pem.utf8), format: .pem)])
         let githubPort = unreachable ? 1 : github.port
         let lines = self.lines
-        interceptor = try GitHubInterceptor(gate: GitHubGate(), ca: proxyCA, tokens: FixedTokens(), reader: { _ in DefaultBranchMain() },
+        interceptor = try GitHubInterceptor(gate: GitHubGate(), ca: proxyCA, tokens: tokens, reader: { _ in DefaultBranchMain() },
                                             upstream: .init(address: { _ in ("127.0.0.1", githubPort) }, tls: trust, delay: delay),
                                             egress: egress, log: { lines.add($0) })
         let proxy = EgressProxy(connect: { agent_proxy_connect_tcp($0.host, $0.port) }, interceptor: interceptor, egress: egress,
@@ -203,9 +215,9 @@ final class GitHubInterceptorTests: XCTestCase {
 
     /// A container's request to `host` through the relay: its CONNECT, then
     /// TLS trusting agent-proxy's authority, then the request, with gh's
-    /// placeholder token. The answer's status and body.
+    /// placeholder token (`authorization`). The answer's status and body.
     private func agent(_ method: HTTPMethod, _ path: String, host: String = "api.github.com", body: [UInt8] = [],
-                       contentType: String = "application/json", extraHeaders: [String] = [],
+                       contentType: String = "application/json", authorization: String = "token placeholder", extraHeaders: [String] = [],
                        relayToken: String = GitHubInterceptorTests.relayToken) throws
         -> (status: Int, body: String) {
         let socket = agent_proxy_connect_tcp("127.0.0.1", UInt16(port))
@@ -245,7 +257,7 @@ final class GitHubInterceptorTests: XCTestCase {
             .wait()
         var headers = HTTPHeaders()
         headers.add(name: "host", value: host)
-        headers.add(name: "authorization", value: "token placeholder")
+        headers.add(name: "authorization", value: authorization)
         headers.add(name: "content-length", value: "\(body.count)")
         if !body.isEmpty { headers.add(name: "content-type", value: contentType) }
         for header in extraHeaders {
@@ -447,6 +459,95 @@ final class GitHubInterceptorTests: XCTestCase {
         XCTAssertFalse(body.contains("placeholder"))
         _ = try agent(.GET, "/repos/AttilaTheFun/shireworks/pulls/3")
         XCTAssertEqual(github.requests.last, "GET /repos/AttilaTheFun/shireworks/pulls/3 Bearer ghs_fixedtoken")
+    }
+
+    /// Logan's container test (25 Nov 2026): with no auth token configured, a
+    /// clone of an allowed public repository failed at once. Now a fetch, a
+    /// clone and a download of an allowed repository go on anonymously, as a
+    /// read outside them does (Logan, 9 Nov 2026), with no authorization at
+    /// all; a push is still refused, saying where the token is set, and none
+    /// of it reaches GitHub.
+    func testWithNoTokenAnAllowedRepositoryIsClonedAnonymouslyAndNeverPushed() throws {
+        try launch(host: "github.com", tokens: ConfiguredGitHubToken(current: { nil }))
+        let refs = try agent(.GET, "/AttilaTheFun/swift_sql.git/info/refs?service=git-upload-pack", host: "github.com")
+        XCTAssertEqual(refs.status, 200, refs.body)
+        let pack = try agent(.POST, "/AttilaTheFun/swift_sql.git/git-upload-pack", host: "github.com", body: Array("0000".utf8),
+                             contentType: "application/x-git-upload-pack-request",
+                             authorization: "Basic " + Data("x-access-token:visor-agent-proxy".utf8).base64EncodedString())
+        XCTAssertEqual(pack.status, 200, pack.body)
+        let archive = try agent(.GET, "/AttilaTheFun/swift_sql/archive/refs/tags/v1.0.0.tar.gz", host: "github.com")
+        XCTAssertEqual(archive.status, 200, archive.body)
+        XCTAssertEqual(github.requests, ["GET /AttilaTheFun/swift_sql.git/info/refs?service=git-upload-pack ",
+                                         "POST /AttilaTheFun/swift_sql.git/git-upload-pack ",
+                                         "GET /AttilaTheFun/swift_sql/archive/refs/tags/v1.0.0.tar.gz "], "no authorization header")
+        XCTAssertFalse(github.headers.withLock { $0 }.contains { $0.contains("authorization") }, "the client's placeholder taken off")
+        // A push: its discovery and its commands, refused in git's form.
+        let discovery = try agent(.GET, "/AttilaTheFun/swift_sql.git/info/refs?service=git-receive-pack", host: "github.com")
+        XCTAssertTrue(discovery.body.contains("ERR Failed: agent-proxy has no auth token for GitHub"), discovery.body)
+        let zero = String(repeating: "0", count: 40), sha = String(repeating: "a", count: 40)
+        let pushed = try agent(.POST, "/AttilaTheFun/swift_sql.git/git-receive-pack", host: "github.com",
+                               body: push("\(zero) \(sha) refs/heads/feature", pack: 100), contentType: "application/x-git-receive-pack-request")
+        XCTAssertTrue(pushed.body.contains("ng refs/heads/feature Failed: agent-proxy has no auth token for GitHub"), pushed.body)
+        XCTAssertTrue(pushed.body.contains("secret-set github-token"), pushed.body)
+        XCTAssertEqual(github.requests.count, 3, "no push reached GitHub")
+        let decisions = egress.entries().filter { $0.method != nil }.map { "\($0.method ?? "") \($0.decision ?? "") \($0.outcome)" }
+        XCTAssertEqual(decisions, ["GET anonymous forwarded", "POST anonymous forwarded", "GET anonymous forwarded",
+                                   "GET allow unreachable", "POST check unreachable"], "logged as anonymous")
+    }
+
+    /// The same for REST and GraphQL with no token configured: gh's reads
+    /// (GET, a query) go on anonymously, its `token visor-agent-proxy` taken
+    /// off; its writes (a comment, a mutation) are refused, saying where the
+    /// token is set.
+    func testWithNoTokenGhsReadsGoOnAnonymouslyAndItsWritesAreRefused() throws {
+        try launch(tokens: ConfiguredGitHubToken(current: { nil }))
+        let placeholder = "token visor-agent-proxy"
+        let pulls = try agent(.GET, "/repos/AttilaTheFun/swift_sql/pulls?state=open", authorization: placeholder)
+        XCTAssertEqual(pulls.status, 200, pulls.body)
+        let query = try agent(.POST, "/graphql", body: json(#"{"query":"query { repository(owner: \"AttilaTheFun\", name: \"swift_sql\") { name } }"}"#),
+                              authorization: placeholder)
+        XCTAssertEqual(query.status, 200, query.body)
+        XCTAssertEqual(github.requests, ["GET /repos/AttilaTheFun/swift_sql/pulls?state=open ", "POST /graphql "], "no authorization header")
+        XCTAssertFalse(github.headers.withLock { $0 }.contains { $0.contains("authorization") })
+        XCTAssertFalse(pulls.body.contains("visor-agent-proxy") || query.body.contains("visor-agent-proxy"), "the placeholder never reached GitHub")
+        let comment = try agent(.POST, "/repos/AttilaTheFun/swift_sql/issues/3/comments", body: json(#"{"body":"x"}"#), authorization: placeholder)
+        XCTAssertEqual(comment.status, 502, comment.body)
+        XCTAssertTrue(comment.body.contains("Failed: agent-proxy has no auth token for GitHub"), comment.body)
+        let mutation = try agent(.POST, "/graphql", body: json(#"{"query":"mutation { addComment(input: {subjectId: \"I_1\", body: \"x\"}) { clientMutationId } }"}"#),
+                                 authorization: placeholder)
+        XCTAssertEqual(mutation.status, 200, "GraphQL's errors are a 200's: \(mutation.body)")
+        XCTAssertTrue(mutation.body.contains("\"type\":\"FORBIDDEN\""), mutation.body)
+        XCTAssertTrue(mutation.body.contains("secret-set github-token"), mutation.body)
+        XCTAssertEqual(github.requests.count, 2, "no write reached GitHub")
+        let decisions = egress.entries().filter { $0.method != nil }.map { "\($0.method ?? "") \($0.decision ?? "") \($0.outcome)" }
+        XCTAssertEqual(decisions, ["GET anonymous forwarded", "POST anonymous forwarded", "POST allow unreachable", "POST check unreachable"])
+    }
+
+    /// With a token, gh's placeholder is replaced by it, whichever way it
+    /// came (`token …` or `Bearer …`): one authorization header, the proxy's.
+    func testWithATokenGhsPlaceholderIsReplaced() throws {
+        for placeholder in ["token visor-agent-proxy", "Bearer visor-agent-proxy"] {
+            _ = try agent(.GET, "/repos/AttilaTheFun/swift_sql/pulls", authorization: placeholder)
+        }
+        let query = try agent(.POST, "/graphql", body: json(#"{"query":"{ viewer { login } }"}"#), authorization: "token visor-agent-proxy")
+        XCTAssertEqual(query.status, 200, query.body)
+        XCTAssertEqual(github.requests, ["GET /repos/AttilaTheFun/swift_sql/pulls Bearer ghs_fixedtoken",
+                                         "GET /repos/AttilaTheFun/swift_sql/pulls Bearer ghs_fixedtoken",
+                                         "POST /graphql Bearer ghs_fixedtoken"])
+        XCTAssertTrue(github.headers.withLock { $0 }.allSatisfy { $0.filter { $0 == "authorization" }.count == 1 }, "the proxy's alone")
+        let decisions = egress.entries().filter { $0.method != nil }.map(\.decision)
+        XCTAssertEqual(decisions, ["allow", "allow", "allow"])
+    }
+
+    /// Only a token that isn't configured lets a read go on anonymously: one
+    /// that can't be had otherwise (an App's that couldn't be minted) is a
+    /// failure, and nothing reaches GitHub.
+    func testATokenThatCantBeHadIsNoReasonToGoAnonymously() throws {
+        try launch(tokens: BrokenTokens())
+        let (status, body) = try agent(.GET, "/repos/AttilaTheFun/swift_sql/pulls")
+        XCTAssertEqual(status, 502, body)
+        XCTAssertTrue(body.contains("Failed: the token couldn't be made"), body)
+        XCTAssertEqual(github.requests, [])
     }
 
     func testAnAllowedWriteGoesOnWithItsBody() throws {

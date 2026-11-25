@@ -331,6 +331,11 @@ extension ServerTests {
         #expect(agent.environment["CLAUDE_CODE_OAUTH_TOKEN"] == "visor-agent-proxy")
         #expect(agent.environment["NODE_EXTRA_CA_CERTS"] == "/opt/visor/trust/agent-proxy-ca.pem")
         #expect(!agent.environment.values.contains { $0.hasPrefix("sk-ant-") }, "no credential in its environment")
+        // gh's token a placeholder too, which the GitHub gate takes off: never a GitHub credential.
+        #expect(agent.environment["GH_TOKEN"] == "visor-agent-proxy")
+        #expect(agent.environment["GITHUB_TOKEN"] == nil)
+        #expect(!agent.environment.values.contains { value in ["ghp_", "ghs_", "gho_", "ghu_", "github_pat_"].contains { value.hasPrefix($0) } },
+                "no GitHub credential in its environment")
         #expect(agent.harness == "echo", "the driver's harness")
         guard case .success(let claims) = server.agentTokens.verify(agent.token, as: .runnerAgent, agent: agent.agent, scope: .job) else {
             Issue.record("its token isn't a runner agent's")
