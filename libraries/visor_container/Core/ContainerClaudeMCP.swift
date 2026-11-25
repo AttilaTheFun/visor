@@ -1,6 +1,8 @@
 // The Sessions container's Claude told of agent-proxy's MCP pass-through
-// (docs/containers.md, "MCP in the container"; 0.72.1): the servers a native
-// session is passed on (gh, oss, …), each at
+// (docs/containers.md, "MCP in the container"; 0.72.1): of the servers it
+// passes on, those a container's agents are given (`served`: Nimbus's
+// alone, Logan, 25 Nov 2026; gh there is the gh CLI through the GitHub gate,
+// oss is retired, Shireworks' is Nimbus's now), each at
 // `http://mcp.agent.internal/mcp/<name>`, the relay's dial-in to the
 // pass-through. agent_protocol's wrapper starts its Claude with Visor's own
 // server alone (`--mcp-config`, "visor"), and a job can't add to it; so these
@@ -19,17 +21,26 @@
 // other entry, is left as it was.
 
 import Foundation
+import VisorAgentProxy
 
 public struct ContainerClaudeMCP: Equatable, Sendable {
     /// The container's Claude folder (CLAUDE_CONFIG_DIR), at the same path
     /// on the Mac as in the guest.
     public var folder: String
-    /// The pass-through's servers, each name's URL in the guest.
-    public var servers: [String: String]
+    /// The pass-through's servers its agents are given, each name's URL in
+    /// the guest: of those given, `served` alone.
+    public let servers: [String: String]
 
+    /// The servers a container's agents are given, whatever else the
+    /// pass-through serves: the pass-through's own list
+    /// (NativeMCPProxy.containerServers), which refuses them any other.
+    public static let served = NativeMCPProxy.containerServers
+
+    /// `servers`: what the pass-through serves, each at its URL; only
+    /// `served` of them are kept.
     public init(folder: String, servers: [String: String]) {
         self.folder = folder
-        self.servers = servers
+        self.servers = servers.filter { Self.served.contains($0.key) }
     }
 
     /// What each entry's headers come from, in the guest.

@@ -1,9 +1,10 @@
-// What the Sessions container's agents are given of agent-proxy's MCP
+// Where the Sessions container's agents reach agent-proxy's MCP
 // pass-through (docs/containers.md, "MCP in the container"; 0.72.1): each
 // server it serves, by its name, at `http://mcp.agent.internal/mcp/<name>`,
 // the relay's dial-in to the pass-through (agent-proxy's
-// DialIn.passThrough). The container's Claude is told of them
-// (ContainerClaudeMCP), each call showing the agent's own token.
+// DialIn.passThrough). Of those, a container's Claude is told of Nimbus's
+// alone (ContainerClaudeMCP.served; Logan, 25 Nov 2026), and the
+// pass-through refuses its agents any other.
 
 import Foundation
 

@@ -268,14 +268,16 @@ import VisorServer
     }
 
     /// A container reaches the pass-through through the relay by its dial-in, `mcp.agent.internal:80`, and nothing else
-    /// on loopback by that name; its call is let in with its agent's own token (the server's to say whose), and goes on
-    /// as that token's session; with no token, or one the server says is no one's, it's refused.
+    /// on loopback by that name; its call to Nimbus's is let in with its agent's own token (the server's to say whose),
+    /// and goes on as that token's session with Nimbus's secret header from Visor's secrets, which the container never
+    /// sees; with no token, or one the server says is no one's, it's refused (401), and to any other server (403).
     @Test func aContainerReachesThePassThroughByItsDialInWithItsAgentsToken() throws {
         let upstream = try #require(FakeEndpoint())
         defer { upstream.stop() }
         let secrets = MemorySecrets()
         secrets.set("agent-proxy/mcp/token", "sessions-token")
         secrets.set("agent-proxy/relay-token", "relay-secret")
+        secrets.set("agent-proxy/mcp/nimbus/api_key", "nimbus-secret")
         let places = AgentProxyHost.Places(dataDirectory: try folder())
         var running: AgentProxyHost.Running?
         var mcpPort = 0
@@ -283,9 +285,10 @@ import VisorServer
         for _ in 0..<20 where running == nil {
             mcpPort = Int.random(in: 20000...32000)
             relayPort = Int.random(in: 33000...45000)
-            let settings = AgentProxySettings(mcp: .init(port: mcpPort, upstreams: [.init(name: "oss", url: "http://127.0.0.1:\(upstream.port)/mcp",
-                                                                                       headers: ["CLIENT_ID": "$SESSION_ID"])]),
-                                              relayPort: relayPort)
+            let upstreams: [AgentProxySettings.Upstream] = ["nimbus", "gh", "oss", "shireworks"].map { name in
+                .init(name: name, url: "http://127.0.0.1:\(upstream.port)/mcp", headers: ["CLIENT_ID": "$SESSION_ID"], secretHeaders: ["API_KEY"])
+            }
+            let settings = AgentProxySettings(mcp: .init(port: mcpPort, upstreams: upstreams), relayPort: relayPort)
             running = AgentProxyHost.start(settings, places: places, secrets: secrets, version: "test",
                                            agentSession: { $0 == "agent.own.token" ? "s-container" : nil }, log: { _ in })
             if running?.complete == false {
@@ -296,8 +299,8 @@ import VisorServer
         let proxy = try #require(running)
         defer { proxy.stop() }
         let body = #"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#
-        func call(_ token: String?) -> String {
-            "POST /mcp/oss HTTP/1.1\r\nHost: mcp.agent.internal\r\nContent-Type: application/json\r\nContent-Length: \(body.utf8.count)\r\n"
+        func call(_ token: String?, _ server: String = "nimbus") -> String {
+            "POST /mcp/\(server) HTTP/1.1\r\nHost: mcp.agent.internal\r\nContent-Type: application/json\r\nContent-Length: \(body.utf8.count)\r\n"
                 + (token.map { "X-Visor-Proxy: \($0)\r\n" } ?? "") + "CLIENT_ID: s-other\r\n\r\n" + body
         }
         let answered = relayed(relayPort, connect: "mcp.agent.internal:80", then: call("agent.own.token"))
@@ -305,6 +308,11 @@ import VisorServer
         let heard = try #require(upstream.requests.withLock { $0.first })
         #expect(heard.contains("CLIENT_ID: s-container\r\n") && !heard.contains("s-other"), "as its token's session: \(heard)")
         #expect(!heard.contains("agent.own.token"), "the token stops at the pass-through")
+        #expect(heard.lowercased().contains("api_key: nimbus-secret"), "Nimbus's header added here, from Visor's secrets: \(heard)")
+        for server in ["gh", "oss", "shireworks"] {
+            let refused = relayed(relayPort, connect: "mcp.agent.internal:80", then: call("agent.own.token", server))
+            #expect(refused.contains("HTTP/1.1 403"), "\(server): \(refused)")
+        }
         for token in [nil, "someone.elses.token", "sessions-token-guess"] {
             let refused = relayed(relayPort, connect: "mcp.agent.internal:80", then: call(token))
             #expect(refused.contains("HTTP/1.1 401"), "\(token ?? "none"): \(refused)")

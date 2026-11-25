@@ -20,9 +20,9 @@ settings.json has `agentProxy`.
   `X-Visor-Proxy` header a secret of the endpoint's). Upstreams are plain
   `http://` addresses.
 - **The Sessions container's agents' MCP** (from 0.72.1), at the same
-  pass-through: through the relay, by agent-proxy's own dial-in
-  `mcp.agent.internal:80`, each call showing its agent's own token in
-  `X-Visor-Proxy`, never the sessions' token. It is below, under The
+  pass-through, Nimbus's alone: through the relay, by agent-proxy's own
+  dial-in `mcp.agent.internal:80`, each call showing its agent's own token
+  in `X-Visor-Proxy`, never the sessions' token. It is below, under The
   container's agents and the pass-through.
 - **gh_mcp, in-process** (from 0.66) at the pass-through's `/mcp/gh`, when
   `agentProxy.gh` is set and no upstream is named `gh`. It is below, under
@@ -164,10 +164,11 @@ sessions' token (`X-Visor-Proxy`) to reach `/mcp/gh`, and its `CLIENT_ID`
 (the session's own id, since #482) names the session.
 
 **How far that is trusted.** `CLIENT_ID` is the caller's word, and the
-sessions' token is one token shared by every native session (a Sessions
-container's agent's call is the exception: its CLIENT_ID is its token's
-session, set by the pass-through; see The container's agents and the
-pass-through). So anything
+sessions' token is one token shared by every native session. (The Sessions
+container's agents never reach gh_mcp: their gh is the gh CLI through the
+GitHub gate. Their calls to Nimbus's MCP carry their token's session as
+CLIENT_ID, set by the pass-through; see The container's agents and the
+pass-through.) So anything
 holding the token can name any session, act as the app `sessionAgents` gives
 that session, and be logged as it. `CLIENT_ID` and `sessionAgents` are
 trusted only as far as the token is: they choose among the apps the token
@@ -251,8 +252,13 @@ The MacBook's own gh_mcp goes when its sessions move to the Mini.
 
 A native session reaches the pass-through through Visor's server, which
 shows the sessions' token. The Sessions container's agents reach it
-themselves (docs/containers.md, "MCP in the container"), and the token never
-goes into the container:
+themselves (docs/containers.md, "MCP in the container"), for Nimbus's MCP
+alone, and the token never goes into the container. Logan, 25 Nov 2026:
+"agents can talk to the visor and nimbus mcps as well which are proxied
+through visor to authenticate them just adding the headers visor saves in
+its keychain"; gh in a container is the gh CLI through the GitHub gate, oss
+is retired, and Shireworks' MCP is Nimbus's now. This replaces the 16 Nov
+rule (no passed-on servers in a container) for Nimbus only.
 
 - **The dial-in.** With the pass-through and the relay listener both
   running, the relay has a dial-in of agent-proxy's own:
@@ -276,14 +282,20 @@ goes into the container:
   anything goes on. The agent's harness gets such a token from its own
   wrapper's stream, for MCP alone, an hour's, and asks again as it needs one
   (`visor-agent-host mcp-headers`, its Claude's headersHelper).
+- **Nimbus's alone.** A call let in by an agent's token reaches only the
+  servers containers are given (`NativeMCPProxy.containerServers`:
+  `nimbus`). On any other path (`/mcp/gh`, `/mcp/oss`, `/mcp/shireworks`)
+  it's refused with 403, its server never called. A token that's no one's
+  is refused (401) first.
 - **As its session.** A call let in by an agent's token goes on as that
   token's session: whatever `CLIENT_ID` it sent is replaced with its
-  session's id, so gh_mcp knows it by its token, not its word (for these
-  calls, the "later improvement" under gh_mcp, above, is made). An
+  session's id, so Nimbus knows it by its token, not its word. An
   upstream's plain header of `$SESSION_ID` is filled with it, and one naming
   anything else of the session (`$SESSION_TITLE`, `$SESSION_REPOSITORY`) is
-  left out; the caller's own of those names never goes on. The token stops
-  at the pass-through, as the sessions' token does.
+  left out; the caller's own of those names never goes on. The upstream's
+  plain and secret headers (`mcp/nimbus/<header>` from Visor's secrets) are
+  added exactly as for a native session's call, so the container never sees
+  them. The token stops at the pass-through, as the sessions' token does.
 - **Where.** Only the server agent (`Visor --server`) gives agent-proxy a
   server to ask. As a launchd job, or in visor-server on Linux, nothing
   runs a container, and the pass-through takes the sessions' token alone.

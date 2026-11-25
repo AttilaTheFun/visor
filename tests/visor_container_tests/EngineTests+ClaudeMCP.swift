@@ -1,13 +1,15 @@
 // agent-proxy's MCP pass-through's servers put in the Sessions container's
 // Claude's own file (ContainerClaudeMCP; docs/containers.md, "MCP in the
-// container"), at each boot before anything runs in it: each at its URL
-// with Visor's headersHelper and no credential, Visor's entries no longer
-// served taken out, the rest of the file and every other entry left as they
+// container"), at each boot before anything runs in it: Nimbus's alone
+// (Logan, 25 Nov 2026), never gh, oss or shireworks, at its URL with
+// Visor's headersHelper and no credential, Visor's entries for any other
+// taken out, the rest of the file and every other entry left as they
 // were, the file written only when it changes, and one that isn't JSON left
 // alone.
 
 import Foundation
 import Testing
+import VisorAgentProxy
 import VisorContainerCore
 
 extension EngineTests {
@@ -23,21 +25,23 @@ extension EngineTests {
         let before: [String: Any] = [
             "numStartups": 7, "hasCompletedOnboarding": true, "projects": ["/Volumes/Sessions/Claude/x": ["allowedTools": [String]()]],
             "mcpServers": ["mine": ["type": "stdio", "command": "mine"],
-                           "retired": ["type": "http", "url": "http://mcp.agent.internal/mcp/retired", "headersHelper": helper]],
+                           "gh": ["type": "http", "url": "http://mcp.agent.internal/mcp/gh", "headersHelper": helper],
+                           "oss": ["type": "http", "url": "http://mcp.agent.internal/mcp/oss", "headersHelper": helper]],
         ]
         try JSONSerialization.data(withJSONObject: before).write(to: file)
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
-        let servers = ["gh": "http://mcp.agent.internal/mcp/gh", "oss": "http://mcp.agent.internal/mcp/oss"]
-        rig.change { $0.claudeMCP = ContainerClaudeMCP(folder: folder.path, servers: servers) }
+        // What the pass-through serves: Nimbus's alone is its agents'.
+        let served = ["gh": "http://mcp.agent.internal/mcp/gh", "oss": "http://mcp.agent.internal/mcp/oss",
+                      "shireworks": "http://mcp.agent.internal/mcp/shireworks", "nimbus": "http://mcp.agent.internal/mcp/nimbus"]
+        rig.change { $0.claudeMCP = ContainerClaudeMCP(folder: folder.path, servers: served) }
         let engine = rig.engine(sessions: sessions.path)
         let status = await engine.start()
         #expect(status.state == .running, "\(status.errors)")
         let after = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
         let mcp = try #require(after["mcpServers"] as? [String: Any])
-        #expect(Set(mcp.keys) == ["mine", "gh", "oss"], "Visor's served, Visor's no longer served taken out, the person's own kept")
-        for (name, url) in servers {
-            #expect((mcp[name] as? [String: String]) == ["type": "http", "url": url, "headersHelper": helper], "\(name)")
-        }
+        #expect(Set(mcp.keys) == ["mine", "nimbus"], "Nimbus's put in, Visor's gh and oss taken out, the person's own kept: \(mcp.keys)")
+        #expect((mcp["nimbus"] as? [String: String])
+                == ["type": "http", "url": "http://mcp.agent.internal/mcp/nimbus", "headersHelper": helper])
         #expect((mcp["mine"] as? [String: String]) == ["type": "stdio", "command": "mine"])
         #expect(after["numStartups"] as? Int == 7 && after["hasCompletedOnboarding"] as? Bool == true && after["projects"] != nil,
                 "the rest of Claude's file as it was")
@@ -51,17 +55,36 @@ extension EngineTests {
         _ = await engine.stop()
     }
 
+    /// Nimbus's alone, and only where the pass-through serves it: gh (the
+    /// gh CLI through the GitHub gate), oss (retired) and shireworks (Nimbus's
+    /// now) never, whatever it serves; the pass-through's own list.
+    @Test func itsClaudeIsGivenNimbusAloneAndOnlyWhereItsServed() throws {
+        #expect(ContainerClaudeMCP.served == ["nimbus"])
+        #expect(ContainerClaudeMCP.served == NativeMCPProxy.containerServers, "the pass-through refuses them any other")
+        let others = ["gh": "http://mcp.agent.internal/mcp/gh", "oss": "http://mcp.agent.internal/mcp/oss",
+                      "shireworks": "http://mcp.agent.internal/mcp/shireworks"]
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("claude-mcp-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let notServed = ContainerClaudeMCP(folder: folder.path, servers: others)
+        #expect(notServed.servers.isEmpty)
+        var said: [String] = []
+        notServed.write { said.append($0) }
+        #expect(!FileManager.default.fileExists(atPath: notServed.file.path) && said.isEmpty, "no Nimbus served: nothing written")
+        let served = ContainerClaudeMCP(folder: folder.path, servers: others.merging(["nimbus": "http://mcp.agent.internal/mcp/nimbus"]) { one, _ in one })
+        #expect(served.servers == ["nimbus": "http://mcp.agent.internal/mcp/nimbus"])
+    }
+
     @Test func itsClaudesFileIsWrittenOnlyWhenItsServersChangeIt() throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("claude-mcp-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: folder) }
-        let one = ContainerClaudeMCP(folder: folder.path, servers: ["gh": "http://mcp.agent.internal/mcp/gh"])
+        let one = ContainerClaudeMCP(folder: folder.path, servers: ["nimbus": "http://mcp.agent.internal/mcp/nimbus"])
         let none = ContainerClaudeMCP(folder: folder.path, servers: [:])
         var said: [String] = []
         none.write { said.append($0) }
         #expect(!FileManager.default.fileExists(atPath: one.file.path) && said.isEmpty, "none to put, and no file: none made")
         one.write { said.append($0) }
         let made = try Data(contentsOf: one.file)
-        #expect(said.last?.hasSuffix("pass-through: gh") == true, "\(said)")
+        #expect(said.last?.hasSuffix("pass-through: nimbus") == true, "\(said)")
         let mode = try FileManager.default.attributesOfItem(atPath: one.file.path)[.posixPermissions] as? Int
         #expect(mode == 0o600, "made as Claude makes it, its own alone")
         said = []

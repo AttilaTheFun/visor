@@ -445,12 +445,24 @@ environment), so none goes in.
 
 ## MCP in the container (0.72.1)
 
-A native session's agent gets, beside Visor's own tools, the MCP servers this
-computer passes on (gh, oss, and nimbus once it's configured): Visor's server
-calls agent-proxy's MCP pass-through on loopback (7439) for it, showing the
-sessions' token (`mcp/token`). A container's agent reaches the same servers,
-from the pass-through itself, through the relay, and never holds `mcp/token`
-or any other credential that outlives its agent:
+Logan, 25 Nov 2026: "oss should not exist anymore. we can install gh in the
+container and proxy the outbound requests to github adding logan-shire-agent
+auth. agents can talk to the visor and nimbus mcps as well which are proxied
+through visor to authenticate them just adding the headers visor saves in its
+keychain." So a container's agent has Visor's own tools (from the driver, as
+before) and **Nimbus's MCP alone** of the servers this computer passes on.
+This replaces the 16 Nov rule (no passed-on servers in a container) for
+Nimbus only. gh there is the gh CLI, through the GitHub gate with the
+logan-shire-agent App's tokens ("gh in the container", above), never gh_mcp.
+oss is retired, and Shireworks' MCP is Nimbus's now.
+
+A native session gets the servers through Visor's server, which calls
+agent-proxy's MCP pass-through on loopback (7439) showing the sessions' token
+(`mcp/token`). A container's agent reaches Nimbus's from the pass-through
+itself, through the relay, and never holds `mcp/token`, Nimbus's own header
+(`mcp/nimbus/<header>`, which the pass-through adds from Visor's secrets as
+it does for a native session's call), or any other credential that outlives
+its agent:
 
 - **The reach:** agent-proxy's own dial-in, `mcp.agent.internal:80`, joined
   to the pass-through's loopback port (7439, or `agentProxy.mcp.port`), made
@@ -459,21 +471,25 @@ or any other credential that outlives its agent:
   that name, and nothing else on loopback. A server is at
   `http://mcp.agent.internal/mcp/<name>` in the container (relay-client's
   redirect makes the connection a CONNECT through the relay).
-- **The servers:** exactly what the pass-through serves, from agent-proxy's
-  settings: each `agentProxy.mcp.upstreams` entry by its name, and `gh`
-  where gh_mcp is answered in-process (`agentProxy.gh`). They go where every
-  Claude in the container reads them, its user MCP servers: `mcpServers` in
+- **The servers:** Nimbus's alone, and only where the pass-through serves
+  it: an allowlist (`NativeMCPProxy.containerServers`, which
+  ContainerClaudeMCP.served is), met with what agent-proxy's settings serve
+  (an `agentProxy.mcp.upstreams` entry named `nimbus`). Never gh, oss or
+  shireworks, whatever the pass-through serves; with no `nimbus` upstream
+  (this Mac, until Nimbus's rename adds it), nothing. It goes where every
+  Claude in the container reads it, its user MCP servers: `mcpServers` in
   its Claude folder's `.claude.json` (`<Sessions>/.claude/.claude.json`),
   where Shireworks' `shireworks` entry was. agent_protocol's wrapper starts
   its Claude with `--mcp-config` naming Visor's server (`visor`) alone, and
-  a job can't add to that, so this is the place. The engine writes them at
+  a job can't add to that, so this is the place. The engine writes it at
   each boot, before anything runs in the guest (so no Claude there writes
-  the file meanwhile), and only when they change it (ContainerClaudeMCP).
-  Each entry is `{"type": "http", "url": "http://mcp.agent.internal/mcp/<name>",
+  the file meanwhile), and only when that changes the file
+  (ContainerClaudeMCP). The entry is `{"type": "http", "url": "http://mcp.agent.internal/mcp/nimbus",
   "headersHelper": "/opt/visor/bin/visor-agent-host mcp-headers"}`: no header
   of its own, no token. An entry with that helper is Visor's: set by its
-  name over whatever was there, and taken out once the pass-through no longer
-  serves it; every other entry, and the rest of the file, is left as it was.
+  name over whatever was there, and taken out once it isn't given (so an
+  entry for gh or oss written before is gone at the next boot); every other
+  entry, and the rest of the file, is left as it was.
   A change to agent-proxy's settings takes a restart of the server, as
   agent-proxy's does, and so a new boot.
 - **The auth:** the agent's own token. Claude runs the headersHelper as it
@@ -493,21 +509,25 @@ or any other credential that outlives its agent:
   it's this server's, unexpired, allowed MCP, and names an agent the
   container runner runs now (not let go) and that agent's live session
   (ContainerRunner.passThroughSession). Its call then goes on as that
-  session's: any `CLIENT_ID` it sent is replaced by its session's id, an
+  session's, and to Nimbus's alone: a container's token on any other path
+  (`/mcp/gh`, `/mcp/oss`, `/mcp/shireworks`) is refused (403). Any
+  `CLIENT_ID` it sent is replaced by its session's id, an
   upstream's `$SESSION_ID` headers are filled with it, and one naming
   anything else of the session (`$SESSION_TITLE`, `$SESSION_REPOSITORY`) is
-  left out. So gh_mcp knows the caller by its token, not its word. An
+  left out; the upstream's own headers, plain and secret, are added just as
+  for a native session's call. So Nimbus knows the caller by its token, not
+  its word. An
   expired, forged or other session's token, a native session's, or one of an
   agent that has ended, is refused (401). The wrapper's own token (its
   job's, MCP among the rest) is taken too; the harness is given its own, for
   MCP alone.
 - **What doesn't change:** a native session's MCP. It is still Visor's
-  `visor` server alone, its passed-on servers through it (`gh__pr_create`),
+  `visor` server alone, its passed-on servers through it (`gh__pr_create`,
+  each of them, as before),
   with the sessions' token Visor's server holds. A container's agent's own
   Visor tools are still Visor's alone from the driver. The server's own
   `claude -p` in the container reads the same file, but has no wrapper to
-  ask, so the pass-through's servers don't connect for it; it doesn't need
-  them.
+  ask, so Nimbus's doesn't connect for it; it doesn't need it.
 - Only the server agent (`Visor --server`, where the container runs) gives
   agent-proxy the server to ask. agent-proxy as a launchd job, or in
   visor-server on Linux, takes the sessions' token alone, as before.
@@ -523,8 +543,8 @@ agent in the container itself, so nothing claims a job, and the dispatcher's
 queue isn't used. The driven-session code a runner's agent had is the same:
 its process is the wrapper's stream (DrivenProcess: rows, mail as `@@from`
 turns, approvals, interrupts), its MCP from the driver is Visor's own tools
-alone (the servers passed on come from agent-proxy's pass-through: MCP in
-the container, above), and a
+alone (Nimbus's comes from agent-proxy's pass-through: MCP in the
+container, above), and a
 move back is a hand-back (agent_protocol 0.5.0's `ReturnConversation`, the
 intake's containment and caps).
 
@@ -667,14 +687,15 @@ as a defence beside it. Visor adopts it once #17 lands in a release.
   credential replacing the placeholder and `x-api-key`, the beta merged,
   the 401 with none, the token never echoed or logged.
   `//tests/visor_container_tests`: the authorities staged, shared and
-  trusted; and the pass-through's servers put in its Claude's `.claude.json`
-  at its boot (each at its URL with Visor's headersHelper, no credential,
-  Visor's no longer served taken out, the rest kept, written only on a
-  change, a file that isn't JSON left alone). `//tests/visor_agent_proxy_tests`
+  trusted; and Nimbus's MCP put in its Claude's `.claude.json` at its boot,
+  alone and only where it's served (at its URL with Visor's headersHelper,
+  no credential, Visor's gh and oss entries taken out, the rest kept,
+  written only on a change, a file that isn't JSON left alone). `//tests/visor_agent_proxy_tests`
   (AgentProxyHostTests, NativeMCPProxyTests): the pass-through's own dial-in,
-  reaching it alone, a container's call through the relay let in with its
-  agent's token as its session's and refused without one, and a native
-  session's call as before; MCPHeadersTests and MCPConfigTests in
+  reaching it alone, a container's call to Nimbus's through the relay let in
+  with its agent's token as its session's, Nimbus's secret header added as
+  for a native call, refused without one (401) and on any other server's
+  path (403), and a native session's call as before; MCPHeadersTests and MCPConfigTests in
   `//tests/visor_server_tests`: the headersHelper's one request and its
   answer, and a native session's Claude config unchanged.
 - `//tests/feature_map_tests` (the client headless through Isomer's

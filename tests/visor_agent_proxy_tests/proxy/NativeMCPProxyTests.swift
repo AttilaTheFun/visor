@@ -71,14 +71,15 @@ final class NativeMCPProxyTests: XCTestCase {
 
     /// A Sessions container agent's call (0.72.1): not the sessions' token, its agent's own, which the server says is
     /// its session's. It goes on as that session's whatever CLIENT_ID it sent (an endpoint's `$SESSION_ID` filled with
-    /// it, a session header agent-proxy can't fill left out, never the caller's word), and the token stops here. Any
-    /// other token (another's, an expired or a forged one: the server says it's no one's) is refused before anything is
-    /// passed on; only a JWT's shape is asked about, and the sessions' token never is.
+    /// it, a session header agent-proxy can't fill left out, never the caller's word), with the endpoint's plain and
+    /// secret headers added exactly as for a native session's call, and the token stops here. Any other token
+    /// (another's, an expired or a forged one: the server says it's no one's) is refused before anything is passed on;
+    /// only a JWT's shape is asked about, and the sessions' token never is.
     func testAContainerAgentsOwnTokenGoesOnAsItsSession() throws {
         let endpoint = try XCTUnwrap(FakeEndpoint())
         defer { endpoint.stop() }
         let asked = Lines()
-        let proxy = try proxy([NativeMCPProxy.Endpoint(name: "oss", url: "http://127.0.0.1:\(endpoint.port)/mcp",
+        let proxy = try proxy([NativeMCPProxy.Endpoint(name: "nimbus", url: "http://127.0.0.1:\(endpoint.port)/mcp",
                                                        headers: ["CLIENT_ID": "$SESSION_ID", "X-Title": "$SESSION_TITLE", "X-Fleet": "mini"],
                                                        secretHeaders: ["API_KEY"])],
                               agentSession: { token in
@@ -86,7 +87,7 @@ final class NativeMCPProxyTests: XCTestCase {
                                   return token == "agent.own.token" ? "s-container" : nil
                               })
         defer { proxy.stop() }
-        let answered = try ask(proxy.port, "/mcp/oss", token: "agent.own.token", body: #"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#,
+        let answered = try ask(proxy.port, "/mcp/nimbus", token: "agent.own.token", body: #"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#,
                                extra: ["CLIENT_ID: s-other", "client-id: s-other", "X-Title: the-callers-own", "API_KEY: the-callers-own"])
         XCTAssertEqual(answered.status, "200")
         let seen = try XCTUnwrap(endpoint.requests.withLock { $0.first })
@@ -94,19 +95,51 @@ final class NativeMCPProxyTests: XCTestCase {
         XCTAssertEqual(seen.components(separatedBy: "CLIENT_ID").count, 2, "once: \(seen)")
         XCTAssertFalse(seen.contains("s-other"), "the caller's CLIENT_ID never goes on: \(seen)")
         XCTAssertFalse(seen.contains("the-callers-own"), "nor its word for a session's header, nor its secret: \(seen)")
-        XCTAssertTrue(seen.contains("API_KEY: oss-secret\r\n") && seen.contains("X-Fleet: mini\r\n"), seen)
+        XCTAssertTrue(seen.contains("API_KEY: nimbus-secret\r\n") && seen.contains("X-Fleet: mini\r\n"), seen)
         XCTAssertFalse(seen.contains("agent.own.token"), "the agent's token stops at the proxy")
         for token in ["expired.or.forged", "not-a-jwt", ""] {
-            XCTAssertEqual(try ask(proxy.port, "/mcp/oss", token: token).status, "401", token)
+            XCTAssertEqual(try ask(proxy.port, "/mcp/nimbus", token: token).status, "401", token)
         }
-        XCTAssertEqual(try ask(proxy.port, "/mcp/oss", token: nil).status, "401")
+        XCTAssertEqual(try ask(proxy.port, "/mcp/nimbus", token: nil).status, "401")
         XCTAssertEqual(endpoint.requests.withLock { $0.count }, 1, "nothing refused is passed on")
         XCTAssertEqual(asked.all, ["agent.own.token", "expired.or.forged"], "only a JWT's shape is asked about")
-        // A native session's call, through Visor's server, as before: never asked about.
-        XCTAssertEqual(try ask(proxy.port, "/mcp/oss", token: "one-token", extra: ["CLIENT_ID: s1"]).status, "200")
+        // A native session's call, through Visor's server, as before: never asked about, and the endpoint's headers
+        // added just as they were for the container's agent.
+        XCTAssertEqual(try ask(proxy.port, "/mcp/nimbus", token: "one-token", body: #"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#,
+                               extra: ["CLIENT_ID: s-container"]).status, "200")
         XCTAssertEqual(asked.all.count, 2)
         let native = try XCTUnwrap(endpoint.requests.withLock { $0.last })
-        XCTAssertTrue(native.contains("CLIENT_ID: s1\r\n"), native)
+        XCTAssertTrue(native.contains("CLIENT_ID: s-container\r\n"), native)
+        func added(_ request: String) -> [String] {
+            request.components(separatedBy: "\r\n").filter { $0.hasPrefix("API_KEY:") || $0.hasPrefix("X-Fleet:") || $0.hasPrefix("CLIENT_ID:") }.sorted()
+        }
+        XCTAssertEqual(added(seen), added(native), "the same headers on, the container's call or the native one")
+    }
+
+    /// A container agent's token reaches the servers containers are given alone (Logan, 25 Nov 2026: Nimbus's; gh is
+    /// the gh CLI through the GitHub gate, oss is retired, Shireworks' is Nimbus's): any other path is 403, its server
+    /// never called. A native session's call reaches each, as before.
+    func testAContainerAgentReachesNimbusAlone() throws {
+        XCTAssertEqual(NativeMCPProxy.containerServers, ["nimbus"])
+        let endpoint = try XCTUnwrap(FakeEndpoint())
+        defer { endpoint.stop() }
+        let names = ["gh", "oss", "shireworks", "nimbus"]
+        let proxy = try proxy(names.map { NativeMCPProxy.Endpoint(name: $0, url: "http://127.0.0.1:\(endpoint.port)/mcp") },
+                              agentSession: { $0 == "agent.own.token" ? "s-container" : nil })
+        defer { proxy.stop() }
+        for name in ["gh", "oss", "shireworks"] {
+            for path in ["/mcp/\(name)", "/mcp/\(name)/x", "/mcp/\(name)?a=b"] {
+                XCTAssertEqual(try ask(proxy.port, path, token: "agent.own.token").status, "403", path)
+            }
+        }
+        XCTAssertEqual(try ask(proxy.port, "/other", token: "agent.own.token").status, "403")
+        XCTAssertEqual(endpoint.requests.withLock { $0.count }, 0, "nothing refused is passed on")
+        XCTAssertEqual(try ask(proxy.port, "/mcp/gh", token: "someone.elses.token").status, "401", "a token that's no one's: 401 first")
+        XCTAssertEqual(try ask(proxy.port, "/mcp/nimbus", token: "agent.own.token").status, "200")
+        for name in names {
+            XCTAssertEqual(try ask(proxy.port, "/mcp/\(name)", token: "one-token").status, "200", "native: \(name)")
+        }
+        XCTAssertEqual(endpoint.requests.withLock { $0.count }, 5)
     }
 
     /// An endpoint kept as MultiPass's runner.json kept it (CLIENT_ID: $SESSION_ID) leaves CLIENT_ID to the session, so

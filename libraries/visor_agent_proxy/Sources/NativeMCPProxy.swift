@@ -11,7 +11,9 @@
 // (DialIn.passThrough), with no sessions' token of theirs: a call shows its agent's own token (`agentSession`, Visor's
 // container runner: a JWT for `visor.runner-agent`, minted for MCP alone, naming an agent running now), and goes on as
 // that token's session (CLIENT_ID, and an upstream's `$SESSION_ID` headers, are agent-proxy's to set, never the
-// caller's word).
+// caller's word). Only on the servers containers are given (`containerServers`: Nimbus's, Logan, 25 Nov 2026); any
+// other path is refused them (403). gh in a container is the gh CLI through the GitHub gate, oss is retired, and
+// Shireworks' is Nimbus's now.
 
 import CAgentProxyPOSIX
 import Foundation
@@ -19,6 +21,10 @@ import Foundation
 public final class NativeMCPProxy: Sendable {
     /// The header a call carries the sessions' token in, as MultiPass read it.
     public static let tokenHeader = "X-Visor-Proxy"
+    /// The servers the Sessions container's agents are given, by name (`/mcp/<name>`): Nimbus's alone (Logan, 25 Nov
+    /// 2026: "agents can talk to the visor and nimbus mcps", gh the CLI through the GitHub gate, oss gone). A
+    /// container agent's call to any other is refused, and its Claude is told of no other (ContainerClaudeMCP).
+    public static let containerServers: Set<String> = ["nimbus"]
 
     /// An MCP server calls are passed on to: its name (`/mcp/<name>`), its plain HTTP address, its headers, the names
     /// of those whose values are secrets (kept by agent-proxy), and the tools it keeps from sessions.
@@ -66,6 +72,8 @@ public final class NativeMCPProxy: Sendable {
     /// The session a container agent's own token acts as, while its agent runs (nil for any other token). None: only
     /// the sessions' token is taken.
     private let agentSession: (@Sendable (String) async -> String?)?
+    /// The servers a container agent's call may reach (`containerServers` unless a test says).
+    private let agentServers: Set<String>
     /// How long a call waits to hear whether a token is a container agent's.
     static let agentSessionWithin: DispatchTimeInterval = .seconds(10)
 
@@ -77,6 +85,7 @@ public final class NativeMCPProxy: Sendable {
                  secret: @escaping @Sendable (_ endpoint: String, _ header: String) -> String?,
                  inProcess: [String: any InProcessMCP] = [:], inProcessWithheld: [String: [String]] = [:],
                  agentSession: (@Sendable (String) async -> String?)? = nil,
+                 agentServers: Set<String> = NativeMCPProxy.containerServers,
                  maxConnections: Int = NativeMCPProxy.defaultMaxConnections) {
         agent_proxy_ignore_broken_pipes()
         let listener = agent_proxy_listen(port, 0)
@@ -89,6 +98,7 @@ public final class NativeMCPProxy: Sendable {
         self.inProcess = inProcess
         self.inProcessWithheld = inProcessWithheld.mapValues(Set.init)
         self.agentSession = agentSession
+        self.agentServers = agentServers
         self.maxConnections = maxConnections
     }
 
@@ -231,6 +241,10 @@ public final class NativeMCPProxy: Sendable {
             guard let agents = agentsSession(of: token) else {
                 return Self.reply(client, "401 Unauthorized", "No sessions' token for this proxy.")
             }
+            // A container's agent reaches the servers it's given alone.
+            guard agentServers.contains(Self.serverName(request.path)) else {
+                return Self.reply(client, "403 Forbidden", "This MCP server isn't one the Sessions container's agents are given.")
+            }
             session = agents
             request = Self.asSession(request, agents)
         }
@@ -256,6 +270,11 @@ public final class NativeMCPProxy: Sendable {
         return found.withLock { $0 }
     }
 
+    /// The server a call's path names: `/mcp/<name>`'s name, up to a `?` or `/`; "" for any other path.
+    static func serverName(_ path: String) -> String {
+        path.hasPrefix("/mcp/") ? String(path.dropFirst(5).prefix { $0 != "?" && $0 != "/" }) : ""
+    }
+
     /// Whether `token` is shaped as a JWT (three parts, none empty): only such a token is asked about.
     static func isJWTShaped(_ token: String) -> Bool {
         let parts = token.split(separator: ".", omittingEmptySubsequences: false)
@@ -276,7 +295,7 @@ public final class NativeMCPProxy: Sendable {
     /// its token's session.
     func answerMCP(_ client: Int32, _ request: Request, session: String? = nil) {
         var request = request
-        let name = request.path.hasPrefix("/mcp/") ? String(request.path.dropFirst(5).prefix { $0 != "?" && $0 != "/" }) : ""
+        let name = Self.serverName(request.path)
         guard let endpoint = endpoints().first(where: { $0.name == name }) else {
             guard let server = inProcess[name] else { return Self.reply(client, "404 Not Found", "No MCP server \(name).") }
             // Its withheld tools kept from the sessions as an upstream's are: a call refused, the listing without them.
