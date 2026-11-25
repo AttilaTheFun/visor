@@ -1307,10 +1307,14 @@ container agents.
     diff of documentation alone checks the rules and stops there; a newer
     push cancels the run before. A fork's pull request runs them too, with
     no secret and writing no cache.
-  - **Each commit on main** runs `populate` and `populate-apple`: the
-    merged tree built as the pull request's jobs build it and its screens
-    walked headless, into GitHub's cache and BuildBuddy's; nothing
-    published.
+  - **Each commit on main** runs `populate`: the merged tree built as the
+    pull request's Linux jobs build it and its screens walked headless,
+    into GitHub's cache and BuildBuddy's; nothing published.
+    `populate-apple`, the same for the Apple apps, runs **nightly** (06:00Z,
+    on main) and by hand (`-f run=populate`), not at each push: GitHub gives
+    a public repository's account 5 macOS runners in all, and a populate on
+    every merge held one while a prerelease waited (25 Nov 2026). A pull
+    request's `container-apple` reads the last night's cache.
   - **By hand on main** (`gh workflow run ci.yml --ref main -f run=…`, or
     the gh tools' run_dispatch): `verify` runs the tests on Linux
     (`//tests:linux`, and the headless screens), those that need a Mac
