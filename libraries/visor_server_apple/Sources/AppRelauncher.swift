@@ -213,10 +213,12 @@ public struct AppRelauncher: ServerLifecycle {
         return holder
     }
 
-    /// Shell: the instance lock's holder, while it runs, else nothing.
+    /// Shell: the instance lock's holder, while it holds the lock, else
+    /// nothing: a process that merely has the id the file names (reused
+    /// since its holder ended) is none (AppRelaunchWatch.lockHolder).
     var holder: String {
         guard let lock = agent?.instanceLock else { return "true" }
-        return "h=$(head -1 \(Self.quoted(lock)) 2>/dev/null | tr -dc 0-9); [ -n \"$h\" ] && kill -0 $h 2>/dev/null && echo $h"
+        return AppRelaunchWatch.lockHolder(lock)
     }
 
     /// Shell: the processes running `executable` as the app: by itself or
