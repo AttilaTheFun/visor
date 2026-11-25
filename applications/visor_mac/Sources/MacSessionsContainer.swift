@@ -1,6 +1,7 @@
-// The Sessions container in the server agent (`Visor --server`,
-// docs/containers.md): VisorContainer's engine on Apple's Containerization,
-// given to the server as its SessionsContainer. Its settings are the
+// The Sessions container in the server (in Visor.app's own process from
+// 0.72.1, the server agent's, `Visor --server`, before; docs/containers.md):
+// VisorContainer's engine on Apple's Containerization, given to the server
+// as its SessionsContainer. Its settings are the
 // server's, resolved for this Mac (its cores, the memory free when it
 // starts); its assets and root filesystem on the Visor volume (Containers/),
 // Sessions and Sources shared at their paths as volumes.json has them; its

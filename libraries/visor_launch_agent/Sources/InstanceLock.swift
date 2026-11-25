@@ -73,8 +73,9 @@ public final class InstanceLock: Sendable {
     /// Mac, whoever started the process; else the process's.
     public static var userTemporaryFolder: String {
         #if canImport(Darwin)
-        var buffer = [CChar](repeating: 0, count: Int(PATH_MAX))
-        if confstr(_CS_DARWIN_USER_TEMP_DIR, &buffer, buffer.count) > 0 {
+        let size = Int(PATH_MAX)
+        var buffer = [CChar](repeating: 0, count: size)
+        if confstr(_CS_DARWIN_USER_TEMP_DIR, &buffer, size) > 0 {
             return String(decoding: buffer.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
         }
         #endif
