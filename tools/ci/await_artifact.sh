@@ -6,7 +6,11 @@
 #   tools/ci/await_artifact.sh <artifact> <folder> <build job>
 #
 # Downloads <artifact> into <folder> once this run has it. Fails at once if
-# <build job> ends without success, and after 40 minutes in any case. From
+# <build job> ends without success, and 40 minutes after <build job> began
+# to run: a build still queued for a runner isn't counted (0.70.1's first
+# release run, 25 Nov: build-apple waited 23 minutes for a Mac, and the
+# proof gave up before its apps came), though never past 100 minutes, which
+# leaves the proof's own 120 its time. From
 # the job's environment: GH_TOKEN (actions: read), GITHUB_REPOSITORY,
 # GITHUB_RUN_ID.
 #
@@ -22,8 +26,13 @@ job="${3:?usage: tools/ci/await_artifact.sh <artifact> <folder> <build job>}"
 mkdir -p "$folder"
 api="repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
 started=$SECONDS
+# When <build job> was first seen running; until then it's queued.
+building=""
 looks=0
-while [ $((SECONDS - started)) -lt 2400 ]; do
+deadline() {
+    if [ -n "$building" ]; then echo $((building + 2400)); else echo $((started + 6000)); fi
+}
+while [ $SECONDS -lt "$(deadline)" ] && [ $((SECONDS - started)) -lt 6000 ]; do
     count="$(gh api "$api/artifacts?name=$artifact&per_page=1" --jq .total_count 2> /dev/null || echo 0)"
     if [ "${count:-0}" -gt 0 ]; then
         gh run download "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" -n "$artifact" -D "$folder" > /dev/null
@@ -35,11 +44,12 @@ while [ $((SECONDS - started)) -lt 2400 ]; do
         state="$(gh api "$api/jobs?per_page=100" \
             --jq ".jobs[] | select(.name == \"$job\") | .status + \" \" + (.conclusion // \"\")" 2> /dev/null || true)"
         case "$state" in
-            "completed success" | "" | queued* | in_progress* | waiting* | pending*) ;;
+            in_progress*) [ -n "$building" ] || building=$SECONDS ;;
+            "completed success" | "" | queued* | waiting* | pending*) ;;
             completed*) echo "await_artifact: $job ended ${state#completed }: no $artifact" >&2; exit 1 ;;
         esac
     fi
     sleep 30
 done
-echo "await_artifact: no $artifact after 40 minutes" >&2
+echo "await_artifact: no $artifact after $(( (SECONDS - started) / 60 )) minutes${building:+ ($(( (SECONDS - building) / 60 )) of them with $job running)}" >&2
 exit 1
