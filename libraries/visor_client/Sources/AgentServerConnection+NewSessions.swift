@@ -34,6 +34,20 @@ public extension AgentServerConnection {
         return id
     }
 
+    /// Starts a Claude Code session in the computer's Sessions container
+    /// (docs/containers.md, "Placing sessions"), in a folder of its own
+    /// there, and returns its id once its agent has started, subscribed.
+    /// The server's refusal is thrown in its words, for the compose sheet
+    /// to show. Offered while `takesContainerSessions`.
+    @discardableResult
+    func startInContainer(title: String, model: String?, effort: String?, firstMessage: String? = nil) async throws -> String {
+        let started = try await server.startSessionInContainer(title: title, model: model, effort: effort, text: firstMessage)
+        take([started], replacing: false)
+        subscribe(started.id)
+        await refreshContainer()
+        return started.id
+    }
+
     /// Asks the server for the choices a new session starts from; what
     /// was had is kept when it does not answer.
     func loadStartChoices() async {

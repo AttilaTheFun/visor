@@ -1,7 +1,8 @@
 // The Sessions container of a server, as Settings shows it
 // (docs/containers.md): `GET /api/container`, and Start and Stop
 // (`POST /api/container/start`, `/stop`), each an admin's call; and as
-// Migrate… asks of it, whether it takes sessions now.
+// Migrate… asks of it, whether it takes sessions now; and New Session's
+// session started in it (`POST /api/container/sessions`).
 
 import VisorProtocol
 import VisorServices
@@ -26,6 +27,29 @@ extension VisorAgentServer {
     /// or not reached).
     public func sessionsContainer() async -> ContainerStatus? {
         try? await containerStatus()
+    }
+
+    /// A new Claude Code session in it, once its agent has started there
+    /// (`{title, model, effort, text}`): the session, as the server lists
+    /// it; or what the server said in refusing it (off, not ready, its
+    /// agent unable to start), as the message thrown.
+    public func startSessionInContainer(title: String, model: String?, effort: String?, text: String?) async throws -> SessionInfo {
+        var body = Envelope(type: "start")
+        body.title = title
+        body.model = model
+        body.effort = effort
+        body.text = text
+        let reply: Envelope
+        do {
+            reply = try await call("POST", "/container/sessions", body)
+        } catch {
+            if let answer = VisorHost.http?.body(of: error), let said = Self.said(answer) { throw AgentServerError.message(said) }
+            throw error
+        }
+        guard let started = reply.sessions?.first else {
+            throw AgentServerError.message(reply.message ?? "The server started no session in its container")
+        }
+        return started
     }
 
     static func containerStatus(from text: String) throws -> ContainerStatus {

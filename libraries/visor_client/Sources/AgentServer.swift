@@ -214,6 +214,11 @@ public protocol AgentServer: AnyObject {
     /// How its Sessions container stands: nil from a server that has none,
     /// or doesn't say (before 0.64). What Migrate… offers it by.
     func sessionsContainer() async -> ContainerStatus?
+    /// A new Claude Code session in the Sessions container, its agent
+    /// started there in a folder of its own, with `text` its first message
+    /// if one is given: the session, once its agent has started; else the
+    /// server's refusal, in its words (the container off, not ready).
+    func startSessionInContainer(title: String, model: String?, effort: String?, text: String?) async throws -> SessionInfo
 
     // MARK: Super Compact (`/api/sessions/<id>/super-compact`)
 
@@ -300,6 +305,9 @@ public extension AgentServer {
     func importWrite(_ token: String, offset: Int, data: String) async throws -> Int { throw AgentServerError.unsupported }
     func importFinish(_ token: String) async throws -> SessionBackup { throw AgentServerError.unsupported }
     func sessionsContainer() async -> ContainerStatus? { nil }
+    func startSessionInContainer(title: String, model: String?, effort: String?, text: String?) async throws -> SessionInfo {
+        throw AgentServerError.unsupported
+    }
     var superCompacts: Bool { false }
     func superCompact(of session: String) async throws -> SuperCompactStatus? { throw AgentServerError.unsupported }
     func startSuperCompact(_ session: String) async throws -> SuperCompactStatus { throw AgentServerError.unsupported }

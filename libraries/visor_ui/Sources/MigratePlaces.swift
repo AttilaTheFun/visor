@@ -22,9 +22,17 @@ struct MigratePlaces {
     /// Where it is on its computer: there, unless placed elsewhere.
     var placement: SessionPlacement { session.placement ?? .host }
     /// Its computer's name.
-    var name: String { host.record.name.isEmpty ? host.record.address : host.record.name }
+    var name: String { Self.name(of: host) }
     /// The container's place, as offered.
-    var containerName: String { "\(name)'s Container" }
+    var containerName: String { Self.containerName(of: host) }
+
+    /// A computer's name, as its places are offered (here and in New
+    /// Session).
+    static func name(of host: AgentServerConnection) -> String {
+        host.record.name.isEmpty ? host.record.address : host.record.name
+    }
+    /// A computer's Sessions container, as a place it's offered.
+    static func containerName(of host: AgentServerConnection) -> String { "\(name(of: host))'s Container" }
     /// Into the container: a Claude Code session on the computer itself,
     /// while its container takes sessions.
     var intoContainer: Bool { placement == .host && session.agent == .claude && !session.archived && host.takesContainerSessions }

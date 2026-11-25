@@ -47,6 +47,7 @@ flowchart TD
     AddComputer["Add Computer"]
     NewSession["New Session"]
     Restore["Restore a session<br/>(New Session's Restore)"]
+    NewInContainer["New Session in the container<br/>(New Session, run in ‹computer›'s Container)"]
     Export["Export a session"]
     SuperCompact["Super Compact<br/>(ready to start)"]
     SCRunning["Super Compact running"]
@@ -105,6 +106,10 @@ flowchart TD
     Folder -->|"tap choose-folder"| NewSession
     NewSession -->|"type first-message, tap start"| Chat
     NewSession -->|"select conversation “Restore”"| Restore
+    NewSession -->|"select compose-place “‹computer›'s Container”"| NewInContainer
+    NewInContainer -->|"select compose-place “‹computer›”"| NewSession
+    NewInContainer -->|"tap start"| Chat
+    NewInContainer -->|"tap start, refused: start-error"| NewInContainer
     Restore -->|"tap restore-‹id›, tap start"| Chat
 
     Chat -->|"tap session-title"| Details
@@ -144,7 +149,8 @@ that opens it directly (see "Driving it" below).
 | Archived Sessions | text "Archived Sessions" | `archived-session-‹id›` | none (the fixture has no archived sessions) |
 | Project settings | the project's page, titled by its name: "Copy folder path" listed | "Rename in Visor…", "Copy folder path", "Archived Sessions (‹n›)", "Remove Project" | none: `longpress session-fixture-chat` on `sessions`, then tap "Project Settings" (not on the iPhone yet: see "Not wired yet") |
 | Add Computer | a sheet; `host` and `connect` listed | `host`, `paste-code`, `password`, `authentication`, `connect`, `provider-‹id›` (several providers), `copy-ssh-key`, `show-key-qr` (an SSH address) | `connect` |
-| New Session | a sheet; text "New Session" | `computer` (several computers), `choice`, `project`, `project-chosen`, `conversation` (New, Resume, Restore), `resume-id`, `title`, `first-message`, `start-error`, `start` | `new-session` |
+| New Session | a sheet; text "New Session" | `computer` (several computers), `compose-place` (where it runs, "‹computer›" or "‹computer›'s Container": only while the computer's Sessions container takes sessions, for a new conversation), `choice`, `project`, `project-chosen`, `conversation` (New, Resume, Restore), `resume-id`, `title`, `first-message`, `start-error`, `start` | `new-session`; `new-session-no-container` (the computer's Sessions container off: no `compose-place`) |
+| New Session in the container | New Session's sheet with `compose-place-note` listed (`compose-place` on "‹computer›'s Container") | `compose-place`, `compose-model` ("Default" or one of Claude Code's models), `compose-effort` (the model's efforts, where it has them), `compose-place-note` ("Claude Code only…": no `project`, the agent fixed to Claude Code, its folder the server's, `<Sessions>/Claude/‹id›`), `title`, `start`, `start-error` (the computer's refusal; the sheet stays open) | none: `new-session`, then `select compose-place "Snapshot Mac's Container"`; `start` opens `fixture-container` ("Claude Code (container)"), its row's `place-fixture-container` "In the Sessions container". On `new-session-container-refused`, `start` is refused: "The Sessions container has no egress (its check failed): Check Again in Settings." |
 | Restore a session | New Session's sheet with `import-archive` listed (`conversation` on Restore) | `restore-‹id›` (each imported or backed-up session; one still on the computer is disabled, "remove it first"), `import-archive` ("Import…": a session archive, `.visorsession`, from the system's file picker), `import-error`, `start` ("Restore"), `start-error` | `restore` (the fixture's computer keeps `fixture-imported`, "Field notes", imported from "Mini", and a backup of `fixture-chat`, which is here) |
 | Export a session | a sheet; `export-progress`, `export-save` or `export-error` listed | `export-progress`, `export-save` ("Save…": the save panel, opened at once on the Mac), `export-share` ("Share…", the iPhone's share sheet), `export-said`, `export-error`, `export-done` | none: `longpress session-fixture-chat` on `sessions`, then tap "Export…" (the fixture's archive is "Offline sync-2026-11-20.visorsession") |
 | Super Compact | a sheet; `super-compact-start` listed ("Start", or "Carry On" after a failed job; "The last one was cancelled." or "The last handoff was discarded." under it) | `super-compact-start`, `super-compact-error`, `super-compact-done` ("Done") | none: `longpress session-fixture-chat` on `sessions`, then tap "Super Compact…" (Claude's sessions only) |
