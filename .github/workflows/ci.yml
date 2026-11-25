@@ -33,9 +33,13 @@ name: CI
 #   documentation alone checks the rules and stops there. A newer push
 #   cancels its run. A fork's pull request runs them too, on GitHub's
 #   runners: no secret reaches it, and it writes no cache.
-# - Each commit on main runs `populate` and `populate-apple`: the merged
-#   tree built as the pull request's jobs build it, and its screens walked
-#   headless (nothing published), into GitHub's cache and BuildBuddy's.
+# - Each commit on main runs `populate`: the merged tree built as the
+#   pull request's Linux jobs build it, and its screens walked headless
+#   (nothing published), into GitHub's cache and BuildBuddy's.
+#   `populate-apple`, the same for the Apple apps, runs nightly (06:00Z,
+#   on main) and by hand (`run=populate`), not at each push: GitHub gives
+#   a public repository's account 5 macOS runners in all, and a populate
+#   on every merge held one while a prerelease waited (25 Nov 2026).
 # - By hand (workflow_dispatch on main, `run`): `verify` (the tests and
 #   the proof, its last job `verify` keeping the `proof` artifact),
 #   `prerelease` (Alphas built, signed in alpha with the environment
@@ -57,19 +61,22 @@ on:
   pull_request:
   push:
     branches: [main]
+  # populate-apple, nightly on main.
+  schedule:
+    - cron: "0 6 * * *"
   workflow_dispatch:
     inputs:
       run:
-        description: "verify: the tests and the proof. prerelease: Alphas and a draft pre-release. release: verify, then Alphas and a draft release. agent-image: Visor's toolchain image, built and pushed."
+        description: "verify: the tests and the proof. prerelease: Alphas and a draft pre-release. release: verify, then Alphas and a draft release. agent-image: Visor's toolchain image, built and pushed. populate: the Apple apps built into the caches (populate-apple), as the nightly run does."
         type: choice
-        options: [verify, prerelease, release, agent-image]
+        options: [verify, prerelease, release, agent-image, populate]
         default: verify
   # Logan's Release in Reviews publishes the draft, which makes its v* tag.
   release:
     types: [published]
 concurrency:
   # A pull request's newer push cancels its older run. Every other run (main's
-  # populate, a run by hand, a release) is a group of its own and never
+  # populate, the nightly one, a run by hand, a release) is a group of its own and never
   # cancelled, so a publish is never cut off halfway.
   group: >-
     ${{ github.event_name == 'pull_request'
@@ -226,8 +233,12 @@ jobs:
           gigabytes: 5
           repository-hit: ${{ steps.cache.outputs.repository-hit }}
 
+  # The Apple apps' share, nightly and by hand on main rather than at each
+  # push: a Mac is the scarce runner (above).
   populate-apple:
-    if: github.event_name == 'push'
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.run == 'populate'))
     runs-on: xcode-27
     timeout-minutes: 120
     steps:

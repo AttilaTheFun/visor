@@ -40,8 +40,8 @@
 #   the release jobs sign what they build) use BuildBuddy's default
 #   instance, and every other run (a pull request's, a branch's) its own,
 #   `visor-unreviewed`, so a pull request's scripts can't by mistake put a
-#   result where a signed build would take it. main's builds (a push to
-#   main: populate, populate-apple) and the alpha and release jobs download
+#   result where a signed build would take it. main's builds (populate at a push
+#   to main, populate-apple nightly) and the alpha and release jobs download
 #   every output, so the disk cache GitHub's cache keeps (above) stays whole
 #   for the runs without a key. Without a key, nothing of BuildBuddy's.
 # Never the Apple targets on Linux (.bazelrc's apple_on_linux, which takes
