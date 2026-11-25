@@ -71,8 +71,11 @@ extension FeatureMapTests {
             try app.tap("start")
             FeatureMapNode.chat.expectShown(on: try app.screen { FeatureMapNode.chat.isShown(on: $0) })
             // Its row marks it in the Sessions container (on a phone, back
-            // from its chat).
-            func marked(_ screen: HeadlessScreen) -> Bool { screen.element("place-fixture-container")?.label == "In the Sessions container" }
+            // from its chat): the mark, or the row's button that holds it.
+            func marked(_ screen: HeadlessScreen) -> Bool {
+                screen.elements.contains { $0.id == "place-fixture-container" && $0.label == "In the Sessions container" }
+                    || screen.elements.contains { $0.id == "session-fixture-container" && $0.label.hasPrefix("In the Sessions container") }
+            }
             var placed = try app.screen(within: 1) { marked($0) }
             if !marked(placed) {
                 try app.back()
