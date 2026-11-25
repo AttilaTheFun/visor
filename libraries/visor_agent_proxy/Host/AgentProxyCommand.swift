@@ -12,6 +12,7 @@
 // and never typed where it's echoed or kept in a shell's history. The names:
 //
 //   github-token               the GitHub credential the gate attaches
+//   claude/oauth-token         the Claude credential the Anthropic interceptor attaches
 //   mcp/token                  the sessions' token (X-Visor-Proxy)
 //   mcp/<upstream>/<header>    an upstream's secret header
 //
@@ -31,7 +32,7 @@ public enum AgentProxyCommand {
         Usage: agent-proxy secret-set <name>      (the value on standard input, not a terminal)
                agent-proxy secret-remove <name>
 
-          <name>   github-token, mcp/token, or mcp/<upstream>/<header>
+          <name>   github-token, claude/oauth-token, mcp/token, or mcp/<upstream>/<header>
         """
 
     /// The most a secret may be.
@@ -66,7 +67,7 @@ public enum AgentProxyCommand {
             throw Failure(message: "takes secret-set or secret-remove, and a name\n\n\(usage)", status: 2)
         }
         guard let name = AgentProxySettings.importableName(arguments[1]) else {
-            throw Failure(message: "\(arguments[1]) isn't one of agent-proxy's secrets: github-token, mcp/token, or mcp/<upstream>/<header>", status: 2)
+            throw Failure(message: "\(arguments[1]) isn't one of agent-proxy's secrets: github-token, claude/oauth-token, mcp/token, or mcp/<upstream>/<header>", status: 2)
         }
         let key = AgentProxySettings.secretKey(name)
         if arguments[0] == "secret-remove" {

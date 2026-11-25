@@ -70,10 +70,10 @@ extension ServerTests {
         try? FileManager.default.removeItem(at: root)
     }
 
-    private func call(_ method: String, _ path: String, bearer: String? = "pw") async -> HTTPResponse {
+    private func call(_ method: String, _ path: String, bearer: String? = "pw", body: String = "") async -> HTTPResponse {
         var headers: [String: String] = [:]
         if let bearer { headers["authorization"] = "Bearer " + bearer }
-        let request = HTTPRequest(method: method, path: path, headers: headers, body: "", trusted: false)
+        let request = HTTPRequest(method: method, path: path, headers: headers, body: body, trusted: false)
         return await withCheckedContinuation { done in
             server.route(request) { done.resume(returning: $0) }
         }
@@ -108,6 +108,36 @@ extension ServerTests {
         #expect(engine.calls.withLock { $0 } == ["status", "start", "stop", "restart"])
         #expect(await call("GET", "/api/container/start").status == 404)
         #expect(await call("POST", "/api/container/reboot").status == 404)
+    }
+
+    /// The Claude credential (Settings › Sessions Container): an admin's to
+    /// set and remove, kept as agent-proxy's secret once its shape is a
+    /// setup-token's, its presence alone in every answer, never itself.
+    @Test func theClaudeCredentialIsKeptAndNeverAnswered() async throws {
+        server.sessionsContainer = FakeEngine()
+        let key = "agent-proxy/claude/oauth-token"
+        #expect(status(await call("GET", "/api/container"))?.claudeCredential == false)
+        let refused = await call("POST", "/api/container/claude", body: #"{"text":"sk-live-not-one"}"#)
+        #expect(refused.status == 400 && refused.body.contains("sk-ant-oat"), "\(refused.body)")
+        #expect(VisorServer.secrets.get(key) == nil, "nothing kept")
+        let token = "sk-ant-oat01-" + String(repeating: "Ab3_", count: 24)
+        #expect(await call("POST", "/api/container/claude", bearer: "wrong", body: "{\"text\":\"\(token)\"}").status == 401)
+        #expect(VisorServer.secrets.get(key) == nil)
+        let kept = await call("POST", "/api/container/claude", body: "{\"text\":\" \(token)\\n\"}")
+        #expect(kept.status == 200 && status(kept)?.claudeCredential == true, "\(kept.body)")
+        #expect(!kept.body.contains(token) && !kept.body.contains("sk-ant"), "never answered")
+        #expect(VisorServer.secrets.get(key) == token, "kept trimmed, as agent-proxy's")
+        let read = await call("GET", "/api/container")
+        #expect(status(read)?.claudeCredential == true && !read.body.contains("sk-ant"))
+        let out = await call("DELETE", "/api/container/claude")
+        #expect(out.status == 200 && status(out)?.claudeCredential == false)
+        #expect(VisorServer.secrets.get(key) == nil, "Sign Out removes it")
+    }
+
+    @Test func withoutAnEngineTheCredentialIsSaidToo() async throws {
+        #expect(status(await call("GET", "/api/container"))?.claudeCredential == false)
+        VisorServer.secrets.set("agent-proxy/claude/oauth-token", "sk-ant-oat01-kept")
+        #expect(status(await call("GET", "/api/container"))?.claudeCredential == true)
     }
 
     @Test func turningItOnGivesAgentProxyARelayPort() async throws {

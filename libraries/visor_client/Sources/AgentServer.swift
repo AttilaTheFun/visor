@@ -214,6 +214,11 @@ public protocol AgentServer: AnyObject {
     /// How its Sessions container stands: nil from a server that has none,
     /// or doesn't say (before 0.64). What Migrate… offers it by.
     func sessionsContainer() async -> ContainerStatus?
+    /// The Claude credential of the container's agents (a `claude
+    /// setup-token` token) kept as agent-proxy's, or removed with nil: how
+    /// the container stands after; the server's refusal, in its words, when
+    /// it isn't a setup-token's.
+    func setContainerClaudeCredential(_ token: String?) async throws -> ContainerStatus
 
     // MARK: Super Compact (`/api/sessions/<id>/super-compact`)
 
@@ -300,6 +305,7 @@ public extension AgentServer {
     func importWrite(_ token: String, offset: Int, data: String) async throws -> Int { throw AgentServerError.unsupported }
     func importFinish(_ token: String) async throws -> SessionBackup { throw AgentServerError.unsupported }
     func sessionsContainer() async -> ContainerStatus? { nil }
+    func setContainerClaudeCredential(_ token: String?) async throws -> ContainerStatus { throw AgentServerError.unsupported }
     var superCompacts: Bool { false }
     func superCompact(of session: String) async throws -> SuperCompactStatus? { throw AgentServerError.unsupported }
     func startSuperCompact(_ session: String) async throws -> SuperCompactStatus { throw AgentServerError.unsupported }

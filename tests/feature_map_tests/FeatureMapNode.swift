@@ -7,7 +7,7 @@ import Testing
 enum FeatureMapNode: String, CaseIterable, CustomTestStringConvertible {
     case onboarding, signIn, sessions, search, archived, project, migrate, addComputer
     case newSession, restore, folder, chat, approval, question, signInCode, model, allModels, details, toolCalls
-    case preview, subPage, settings, computer, export
+    case preview, subPage, settings, computer, claudeSignIn, export
     case superCompact, superCompactRunning, superCompactReview, superCompactEdit, superCompactDone
 
     var testDescription: String { rawValue }
@@ -60,6 +60,9 @@ enum FeatureMapNode: String, CaseIterable, CustomTestStringConvertible {
         // Or its "Network paths": on the iPhone the page is taller than the
         // screen, and the driver lists what is on it.
         case .computer: return screen.has(id: "relay-toggle") || screen.has(id: "share-log") || screen.texts.contains("Network paths")
+        // Sign In to Claude, for the computer's Sessions container: its
+        // token's field and Save.
+        case .claudeSignIn: return sheet && screen.has(id: "container-claude-token") && screen.has(id: "container-claude-save")
         // The export's sheet, reading, read or refused.
         case .export:
             return sheet && (screen.has(id: "export-progress") || screen.has(id: "export-save") || screen.has(id: "export-error"))

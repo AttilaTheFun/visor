@@ -381,6 +381,56 @@ same after. A server without the engine (Linux, the app's own server)
 answers `off`, saying why. Settings › Sessions Container shows it, with
 Start, Stop and Check Again.
 
+## Claude's credential
+
+The container's agents reach Claude, but never hold a credential for it:
+Visor's agent-proxy holds it, and adds it to their requests on the way out,
+as it does GitHub's token. A credential in the container would be readable
+by every agent there (they run as root, and `/proc/<pid>/environ` shows an
+environment), so none goes in.
+
+- **What it is:** a `claude setup-token` token (`sk-ant-oat…`, long-lived,
+  inference only, with nothing to refresh), kept as agent-proxy's secret
+  `claude/oauth-token` (`agent-proxy/claude/oauth-token` with the server's
+  secrets: the keychain on a Mac), beside `github-token`. agent-proxy reads
+  it again at most once a minute (KeptSecret), so one set or removed counts
+  within a minute, without a restart.
+- **Signing in:** Settings › Sessions Container (the Mac's server settings),
+  or the computer's page in Visor's Settings on any client: **Sign In to
+  Claude…** (`container-sign-in`) asks for the token `claude setup-token`
+  printed on the Mac (in Terminal: it's a terminal program, and its token
+  is shown on its screen) and sends it to the server (`POST
+  /api/container/claude {text}`, an admin's), which keeps it once it looks
+  like one (it begins `sk-ant-oat`) and refuses anything else, saying so.
+  **Sign Out** removes it (`DELETE /api/container/claude`). `GET
+  /api/container` says only whether there is one (`claudeCredential`: "Claude
+  sign-in: Set" or "Not set"); nothing gives it back, and it's never logged.
+- **What the container sees:** its agents (and the server's own `claude -p`
+  there) have `CLAUDE_CODE_OAUTH_TOKEN=visor-agent-proxy`, a placeholder that
+  has Claude Code start signed in, and `NODE_EXTRA_CA_CERTS=/opt/visor/trust/agent-proxy-ca.pem`.
+  Their requests to api.anthropic.com go out through the relay, where
+  agent-proxy's **Anthropic interceptor** opens them with a leaf of its
+  Anthropic authority (made once, beside GitHub's, as
+  `agent-proxy/anthropic-ca.pem` and its key; constrained to
+  api.anthropic.com alone, as GitHub's is to github.com), takes off whatever
+  came as `Authorization` or `x-api-key`, sets `Authorization: Bearer
+  <token>`, and merges `oauth-2025-04-20` into `anthropic-beta`. The token is
+  masked should an answer echo it. With none kept, each request is answered
+  401 in Anthropic's own form: "Sign In to Claude in Visor's Settings ›
+  Sessions Container". Each request is a line of the egress log (route
+  `anthropic`), without its headers or body.
+- **The authorities in the guest:** agent-proxy's two certificates (GitHub's
+  at `agentProxy.caCertificate` or `agent-proxy/ca.pem`, Anthropic's at
+  `agent-proxy/anthropic-ca.pem` in the data folder; public, never a key)
+  are staged at each boot in `sessions/trust/` on the Visor volume and shared
+  read-only at `/opt/visor/trust`, and, before the egress check, made the
+  guest's system trust (copied into `/usr/local/share/ca-certificates` and
+  `update-ca-certificates`), so git and curl take the GitHub gate's leaves
+  as Claude Code takes the Anthropic ones. Each is constrained to its own
+  names: trusting them trusts nothing else.
+- **`/login`** in a session placed in the container signs in nothing: it's
+  told to Sign In to Claude in Settings › Sessions Container.
+
 ## Placing sessions (the container runner)
 
 A session is **on this Mac** or **in this Mac's Sessions container**; another
@@ -517,7 +567,16 @@ as a defence beside it. Visor adopts it once #17 lands in a release.
   lifecycle: an end started again, three quick ends stopping it, a container
   held stopped, a restart under it uncounted, Stop and Start Agent, a move
   refused or coming straight back, a folder of its own outside the shared
-  ones, and a new session there.
+  ones, and a new session there; the container's Claude environment (the
+  placeholder and the authorities, never a credential), `/login` in a
+  container session pointing at Settings, and the credential's endpoint
+  (ContainerAPITests: kept, refused for its shape, never answered, Sign
+  Out). `//tests/visor_agent_proxy_tests` (AnthropicInterceptorTests): the
+  credential replacing the placeholder and `x-api-key`, the beta merged,
+  the 401 with none, the token never echoed or logged.
+  `//tests/visor_container_tests`: the authorities staged, shared and
+  trusted. `//tests/feature_map_tests` (ContainerCredential): the state,
+  the sheet, a refusal and a token kept, Sign Out.
   `//tests/visor_container_tests:visor_container_mac_tests` (macOS): this
   Mac's readiness and memory, and the Containerization backend's archive
   reading. The settings' decoding is in `//tests/visor_server_tests`.

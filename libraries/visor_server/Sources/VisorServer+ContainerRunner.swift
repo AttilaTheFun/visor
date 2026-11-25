@@ -197,8 +197,9 @@ extension VisorServer {
             sources: move.sources.map { ContainerAgent.Source(repository: $0.repository, ref: $0.ref, name: $0.name) },
             sourcesDirectory: move.sources.isEmpty ? nil : move.workingDirectory, token: containerRunner.token(for: agent),
             // The container's Claude folder is on Sessions, so what its
-            // agents say survives the container, and the host can read it.
-            environment: ["CLAUDE_CONFIG_DIR": sessions + "/.claude"])
+            // agents say survives the container, and the host can read it;
+            // its credential is agent-proxy's, a placeholder here.
+            environment: Self.containerClaudeEnvironment(sessions: sessions))
         do {
             let run = try await container.startAgent(request)
             containerRunner.started(agent, run: run)

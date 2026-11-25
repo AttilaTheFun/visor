@@ -2,7 +2,10 @@
 // the readiness row under it — this Mac (macOS 26 or later, Apple silicon,
 // virtualization), the Visor volume, and the assets on it — and the
 // container as the server's engine has it (`GET /api/container`: its state,
-// CPUs and memory, image, egress check and errors), with Start and Stop.
+// CPUs and memory, image, egress check and errors), with Start and Stop;
+// and whether its agents' Claude credential is set (agent-proxy's: its
+// presence alone), with Sign In to Claude… and Sign Out (docs/containers.md,
+// "Claude's credential").
 // The switch is off, and can't be turned on, unless this Mac can run it.
 // The readiness is read here, as files and this Mac's own facts: nothing is
 // fetched (the container engine does that when it first starts).
@@ -14,6 +17,7 @@ import VisorClient
 import VisorContainer
 import VisorContainerCore
 import VisorProtocol
+import VisorUI
 
 @MainActor
 struct ContainerSettingsSection: View {
@@ -25,6 +29,7 @@ struct ContainerSettingsSection: View {
     @State private var status: ContainerStatus?
     @State private var problem: String?
     @State private var busy = false
+    @State private var signingIn = false
 
     var body: some View {
         Section {
@@ -42,6 +47,7 @@ struct ContainerSettingsSection: View {
                     }
                 }
             }
+            claudeRow
             Text(imageLine)
                 .font(.caption).foregroundColor(.secondary)
                 .textSelection(.enabled)
@@ -59,6 +65,36 @@ struct ContainerSettingsSection: View {
             while !Task.isCancelled {
                 await refresh()
                 try? await Task.sleep(for: .seconds(status?.state == .starting ? 2 : 10))
+            }
+        }
+    }
+
+    /// Whether the container's agents have a Claude credential (agent-proxy's),
+    /// with Sign In to Claude… and Sign Out.
+    @ViewBuilder private var claudeRow: some View {
+        if let set = status?.claudeCredential {
+            HStack(alignment: .firstTextBaseline) {
+                Image(systemName: set ? "checkmark.circle.fill" : "xmark.circle")
+                    .foregroundColor(set ? .green : .secondary)
+                VStack(alignment: .leading) {
+                    Text("Claude sign-in")
+                    Text(set ? "Set: agent-proxy adds it to the container's requests to Claude; the container never sees it."
+                             : "Not set: the container's agents can't reach Claude.")
+                        .font(.caption).foregroundColor(.secondary)
+                }
+                Spacer()
+                Button("Sign In to Claude…") { signingIn = true }
+                    .accessibilityIdentifier("container-sign-in")
+                if set {
+                    Button("Sign Out") { act { try await client.setContainerClaudeCredential(nil) } }
+                        .disabled(busy)
+                        .accessibilityIdentifier("container-claude-sign-out")
+                }
+            }
+            .sheet(isPresented: $signingIn) {
+                ClaudeCredentialSheet(computer: "this Mac") { token in
+                    status = try await client.setContainerClaudeCredential(token)
+                }
             }
         }
     }

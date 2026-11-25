@@ -12,6 +12,8 @@
 //                                       of the template) and the image it was cloned from
 //   sessions/boot.log                   the guest's console, each boot
 //   sessions/logs/<process>.log         each process exec'd in it
+//   sessions/trust/                     agent-proxy's authorities' certificates, staged
+//                                       each boot (public; never a key)
 
 import DiskVolumes
 import Foundation
@@ -71,6 +73,9 @@ public struct ContainerLayout: Equatable, Sendable {
     public var rootfsRecord: URL { sessionsFolder.appendingPathComponent("rootfs.json") }
     public var bootLog: URL { sessionsFolder.appendingPathComponent("boot.log") }
     public var logs: URL { sessionsFolder.appendingPathComponent("logs", isDirectory: true) }
+    /// agent-proxy's authorities' certificates, shared read-only at
+    /// ContainerEngine.trustInGuest.
+    public var trust: URL { sessionsFolder.appendingPathComponent("trust", isDirectory: true) }
 
     /// A process's log, by its id (letters, digits, `-`, `_` and `.`; any
     /// other character a `_`).
