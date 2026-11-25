@@ -30,7 +30,21 @@ settings.json has `agentProxy`.
   - a CONNECT to GitHub's three hosts: the GitHub gate. agent-proxy's own
     authority shows a leaf for the host, each request is decided by the gate
     (gate.json, or the standard rules), and it goes on with the **auth
-    token**;
+    token**. Whatever authorization the client sent (a container's gh sends
+    its `GH_TOKEN` placeholder) is taken off first. A read of a repository
+    outside the allowed ones goes on **anonymously**, with no authorization
+    at all (Logan, 9 Nov 2026: an agent's open-source dependencies); so does
+    a read of an allowed one while no token is configured (from 0.71.1):
+    REST's GET and HEAD, a GraphQL query, a fetch or a clone
+    (`info/refs?service=git-upload-pack`, `git-upload-pack`), an LFS
+    download, and a release's asset or a ref's archive. GitHub answers a
+    private repository's with 404, and its GraphQL API answers 401 to any
+    request without a token. A write (a push, its `git-receive-pack`
+    discovery too, a REST write, a GraphQL mutation) still needs the token,
+    and without one is refused, saying where it is set. Only a token that
+    isn't configured lets a read go on anonymously: one GitHub turns down, or
+    one that can't be had, never does. The egress log names such a request's
+    decision `anonymous`;
   - a CONNECT to api.anthropic.com: the Anthropic interceptor. Its own
     authority (constrained to that name) shows a leaf, and each request
     goes on with the **Claude credential** in place of the agent's

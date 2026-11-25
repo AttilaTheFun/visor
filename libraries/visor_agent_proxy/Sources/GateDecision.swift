@@ -12,6 +12,7 @@ public enum GateDecision: Equatable, Sendable {
     /// repository outside the allowed ones, as anyone on the internet reads
     /// it (Logan, 9 Nov 2026: an agent's open-source dependencies). A private
     /// one stays out of reach: GitHub answers a read without a token with
-    /// 404.
+    /// 404. An allowed read goes on so too while no token is configured
+    /// (GitHubGate+Reads), and is logged as this.
     case anonymous(repository: String)
 }

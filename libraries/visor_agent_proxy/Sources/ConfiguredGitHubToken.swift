@@ -17,7 +17,7 @@ import Foundation
 /// Settings' auth token, as it is now.
 struct ConfiguredGitHubToken: GitHubTokenSource {
     /// Why there's no token to send.
-    struct Missing: Error, CustomStringConvertible {
+    struct Missing: NoGitHubToken, CustomStringConvertible {
         var description: String {
             "agent-proxy has no auth token for GitHub (Settings › Agent Proxy, or `agent-proxy secret-set github-token`)"
         }

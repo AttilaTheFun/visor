@@ -161,7 +161,7 @@ extension GitHubInterceptor {
             let bound = NIOLoopBound(context, eventLoop: context.eventLoop)
             let interceptor = self.interceptor
             let caller = self.caller
-            context.eventLoop.makeFutureWithTask { await interceptor.settle(decision, caller: caller) }
+            context.eventLoop.makeFutureWithTask { await interceptor.settle(decision, request: request, caller: caller) }
                 .whenComplete { result in
                     let context = bound.value
                     // Answered meanwhile (too much came, or the client went): nothing more to do.
@@ -169,6 +169,10 @@ extension GitHubInterceptor {
                     switch result {
                     case .success(.forward(let repository, let token, let rewrite)):
                         handler.value.forward(context, repository: repository, token: token, rewrite: rewrite)
+                    case .success(.anonymous(let repository)):
+                        // Logged as what it became: an allowed read with no token configured goes on as an anonymous one.
+                        handler.value.decision = .anonymous(repository: repository)
+                        handler.value.forward(context, repository: repository, token: "", rewrite: nil)
                     case .success(.refuse(let reason)):
                         handler.value.answer(context, refusal: reason)
                     case .success(.fail(let reason)):
@@ -216,6 +220,8 @@ extension GitHubInterceptor {
                 head.headers.remove(name: "transfer-encoding")
                 head.headers.replaceOrAdd(name: "content-length", value: "\(rewritten.count)")
             }
+            // Whatever authorization the client sent (a container's gh sends `token visor-agent-proxy`, its GH_TOKEN
+            // placeholder) is taken off: only the proxy's token, or none, reaches GitHub.
             for name in ["authorization", "proxy-authorization", "proxy-connection"] + Self.methodOverrides { head.headers.remove(name: name) }
             head.headers.replaceOrAdd(name: "host", value: host)
             // GitHub's answer as plain bytes, so a token in it can be found and masked (NCH's review of #417).

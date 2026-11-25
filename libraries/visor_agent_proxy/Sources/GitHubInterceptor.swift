@@ -128,12 +128,16 @@ public final class GitHubInterceptor: GitHubIntercepting, Sendable {
     /// What became of a decision once its checks have run.
     enum Settled: Sendable {
         case forward(repository: String, token: String, rewrite: CheckOutcome.Rewrite?)
+        /// On with no token at all: a read outside the allowed repositories,
+        /// or one of theirs with no token configured.
+        case anonymous(repository: String)
         case refuse(String)
         case fail(String)
     }
 
-    /// A decision, its check made and its token got.
-    func settle(_ decision: GateDecision, caller: EgressProxy.Caller) async -> Settled {
+    /// A decision, its check made and its token got. `request`: what it was
+    /// made of, read again only when no token is configured.
+    func settle(_ decision: GateDecision, request: GateRequest, caller: EgressProxy.Caller) async -> Settled {
         let repository: String?
         var rewrite: CheckOutcome.Rewrite?
         switch decision {
@@ -141,7 +145,7 @@ public final class GitHubInterceptor: GitHubIntercepting, Sendable {
             return .refuse(reason)
         case .anonymous(let named):
             // No token at all: none is asked for, and none goes on.
-            return .forward(repository: named, token: "", rewrite: nil)
+            return .anonymous(repository: named)
         case .allow(let named):
             repository = named
         case .check(let check):
@@ -163,6 +167,11 @@ public final class GitHubInterceptor: GitHubIntercepting, Sendable {
         let named = repository ?? ""
         do {
             return .forward(repository: named, token: try await tokens.token(session: caller.session, repository: named), rewrite: rewrite)
+        } catch is NoGitHubToken where gate.isRead(request) {
+            // None configured: a read of an allowed repository goes on as
+            // one outside them does (Logan, 9 Nov 2026). A token GitHub
+            // turned down, or one that couldn't be made, is no reason to.
+            return .anonymous(repository: named)
         } catch {
             return .fail("\(error)")
         }
