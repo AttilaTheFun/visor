@@ -6,10 +6,9 @@
 # launchd job, hand-over and restart watch (visor_launch_agent_tests),
 # the Sessions container's assets' core (visor_container_tests: no
 # Containerization, which is the Mac's alone), the client link's protos
-# (visor_client_proto_tests), Visor Client's entitlements
-# (visor_macos_tests: plists, read on Linux as anywhere), and Uninstall…'s
-# plan (visor_uninstall_tests, from a fake filesystem and keychain), and
-# Visor.app's check of a build Shireworks hands over
+# (visor_client_proto_tests), the apps' app groups and shared sign-in
+# (visor_plists_tests: plists, read on Linux as anywhere), and Visor.app's
+# check of a build Shireworks hands over
 # (visor_update_install_tests, with a fake cp, codesign and spctl).
 test_suite(
     name = "linux",
@@ -24,10 +23,9 @@ test_suite(
         "//tests/visor_driver_tests",
         "//tests/visor_gh_mcp_tests",
         "//tests/visor_launch_agent_tests",
-        "//tests/visor_macos_tests",
+        "//tests/visor_plists_tests",
         "//tests/visor_server_tests:visor_server_linux_tests",
         "//tests/visor_services_tests",
-        "//tests/visor_uninstall_tests",
         "//tests/visor_update_install_tests",
     ],
 )

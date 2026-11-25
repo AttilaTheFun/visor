@@ -1,6 +1,6 @@
 #!/bin/bash
-# Builds the Mac apps for anyone to install, and optionally publishes them:
-# Visor Server and the Visor client, each signed with the builder's
+# Builds the Mac app for anyone to install, and optionally publishes it:
+# Visor Server, signed with the builder's
 # "Developer ID Application" certificate (tools/sign_mac_app.sh), notarized
 # by Apple and stapled, in a disk image that is signed, notarized and
 # stapled too. Notarization uses a notarytool keychain profile, stored once
@@ -129,15 +129,13 @@ release_app() {
 
 linux_programs
 release_app visor_menubar "Visor Server" linux
-release_app visor_macos "Visor"
 
 if [ "$PUBLISH" = "--publish" ]; then
-  gh release create "v$VERSION" "dist/Visor-Server-$VERSION.dmg" "dist/Visor-$VERSION.dmg" \
+  gh release create "v$VERSION" "dist/Visor-Server-$VERSION.dmg" \
     --title "Visor $VERSION" --notes-file - <<NOTES
 Visor $VERSION for the Mac, signed with Developer ID and notarized by Apple.
 
 - **Visor-Server-$VERSION.dmg** — Visor Server, the menu bar app that runs Claude Code, Codex and the openrouter CLI on your Mac and serves them to your devices over any network that reaches your Mac — a LAN, a VPN, a reverse proxy, a tunnel. Needs macOS 15; the agents' CLIs are yours to install.
-- **Visor-$VERSION.dmg** — the Visor client for the Mac.
 
 Open the disk image and drag the app to Applications. The iPhone and iPad client is built from source for now (see the README).
 NOTES

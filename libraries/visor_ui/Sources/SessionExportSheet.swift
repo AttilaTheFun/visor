@@ -67,8 +67,8 @@ struct SessionExportSheet: View {
             Section {
                 LabeledContent("File", value: export.name)
                 LabeledContent("Size", value: MigrationSheet.size(export.size))
-                // Shared alone where the host saves no file (Visor Client's
-                // sandbox reads the files picked and writes none).
+                // Shared alone where the host saves no file (a sandbox that
+                // reads the files picked and writes none).
                 if VisorHost.savesFiles {
                     Button("Save…") { saving = true }
                         .accessibilityIdentifier("export-save")

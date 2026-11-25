@@ -2,7 +2,8 @@
 
 /// Which of Visor's three volumes a volume is. Everything Visor keeps on a
 /// Mac is on one of them once they're made (docs/containers.md, Visor's
-/// volumes), so deleting them, after Uninstall…, leaves the Mac as it was.
+/// volumes), so deleting them in Apple's Disk Utility, with the apps,
+/// leaves the Mac as it was.
 public enum VolumeRole: String, CaseIterable, Sendable {
     /// The sessions' working folders (`/Volumes/Sessions/<Agent>/<id>`), the
     /// container's harness folder (`/Volumes/Sessions/.claude`) and staged

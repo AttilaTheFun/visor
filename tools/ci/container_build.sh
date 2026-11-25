@@ -6,8 +6,8 @@
 #   tools/ci/job_tools.sh adds): the Linux client and blue Visor's Android
 #   APK (Google's Android SDK and NDK tools are x86_64);
 # - on a Mac (GitHub's `xcode-27`, a standard runner, free for a public
-#   repository, with its own Xcode): the iPhone and iPad app, Visor.app, the
-#   Mac client, Visor Server and Visor Disk Utility, the Mac's test bundles, then the libraries,
+#   repository, with its own Xcode): the iPhone and iPad app, Visor.app,
+#   Visor Server and Visor Disk Utility, the Mac's test bundles, then the libraries,
 #   the staging server and the command-line server for the Mac. Apple's SDKs
 #   may not be redistributed, so CI never builds the Apple targets on Linux
 #   (.bazelrc's apple_on_linux, for a builder that has the SDK archive). A
@@ -44,7 +44,6 @@ if [ $# -eq 0 ]; then
     if [ "$platform" = apple ]; then
         set -- --macos_cpus=arm64 --ios_multi_cpus=sim_arm64 \
             //applications/visor_ios \
-            //applications/visor_macos \
             //applications/visor_mac \
             //applications/visor_menubar \
             //applications/visor_disk_utility \

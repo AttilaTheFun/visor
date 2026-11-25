@@ -6,13 +6,19 @@ and the gotchas. Read it whole once; keep it current as things change.
 
 ## 1. What this is
 
-Visor is a Mac menu bar app that runs coding agents (Claude Code, Codex,
-OpenRouter models) as sessions on the Mac and serves them to clients on
-iPhone, iPad, Mac and the web, over whatever reaches the Mac. Clients chat
-with a session and watch it work. The agent doing this work can drive its
-own development through Visor: you talk to an agent in the Visor client;
-the agent edits, builds, tests, and redeploys the very server it is
-running under.
+Visor is Visor.app, on iOS and macOS (Logan, 24 Nov 2026: there's no
+separate "client" app). On the Mac it bundles Visor's server, notarized
+with it, as a background process (the server agent: Visor.app's own
+executable, `--server`), which runs coding agents (Claude Code, Codex,
+OpenRouter models) as sessions, natively or in the containers it manages,
+whose files are only on the Visor, Sessions and Sources volumes (Visor
+Disk Utility creates them and checks they're as they should be:
+docs/containers.md). Visor on the iPhone, iPad and Mac (and on Android
+and the web) reaches a Mac's server over whatever reaches the Mac, chats
+with a session and watches it work. The agent doing this work can drive
+its own development through Visor: you talk to an agent in Visor; the
+agent edits, builds, tests, and redeploys the very server it is running
+under.
 
 The repos (github.com/AttilaTheFun):
 
@@ -213,9 +219,8 @@ nextSeq), syncs (revision, generation), nodes (the source tree), messages
 Server cache: `~/Library/Application Support/com.LoganShire.VisorServer.macOS/
 messages.sqlite` (Visor.app's: `…/com.LoganShire.Visor/Server/
 messages.sqlite`), keyed by Visor session id; every agent's rows are
-written by the indexer from its log. Client cache: `…/com.LoganShire.
-VisorClient.macOS/messages.sqlite` (Visor.app's: `…/com.LoganShire.Visor/
-Client/messages.sqlite`; iOS in its container), keyed
+written by the indexer from its log. Client cache: Visor.app's
+`…/com.LoganShire.Visor/Client/messages.sqlite` (iOS in its container), keyed
 `<host id>/<session id>`; a session opens from it synchronously
 (`AgentServerConnection.transcript(for:)`, called from `AgentScreen.init`)
 with its latest 100 rows, and syncs only what moved; earlier pages are 50
@@ -677,66 +682,15 @@ removed (still only when `agentProxy` is set).
   them only as exactly that, at a role's mount point, for a volume made
   earlier in the same run, or for an adopted one of Visor's own when its
   card's Fix (or `fix-owner <role>`) names it in `fixing`.
-- **Sessions and Sources converted to case-sensitive (0.67;
-  docs/volume-conversion.md):** a hand-made case-insensitive Sessions or
-  Sources is converted by a copy, never reformatted. ConversionPlanner
-  (libraries/visor_disk_volumes) plans each step from the survey: Stage
-  (`stage sessions|sources|both`, the window's Stage: `apfs addVolume
-  <container> "Case-sensitive APFS" <Name>-new` with the role volume's own
-  quota and reserve, then its chown and chmod), Swap In (`swap …`: the old
-  volume renamed `<Name>-old-ci` and unmounted, the copy renamed `<Name>`,
-  unmounted and mounted, by disk) and `unswap …` (the old one put back, the
-  copy renamed `<Name>-cs-failed`). VolumeGuard passes a rename, unmount,
-  mount or `<Name>-new` addVolume only for a role the caller names in
-  `converting`, and only exactly as the planner plans that step again from
-  a fresh survey (Swap In's marker checked again); a kept volume is deleted
-  only by its UUID, its name in `deletingKept` (Delete…, `delete-kept`, or
-  Uninstall… with the volumes). `copy-staged …` runs as the person, never
-  root: Visor's processes and port, and `lsof -F pcn` of both volumes
-  (Spotlight and the system's root folders aside; as the person, their
-  processes alone), first; then ConversionCopy: what the person can't copy
-  as it is refused with a list (other owners and groups, unreadable, root's
-  flags, dataless, hard links across root entries), the bytes needed
-  against the copy's free space, `ditto` each root entry (`cp -P -p` a
-  root link, `chflags` a root folder's own flags), VolumeManifest's
-  manifest of both sides identical (sha256, mode, owner, group, flags,
-  extended attributes' and ACL's sha256 from FileInspecting: the Mac's
-  DarwinFileInspector in the app, Foundation's in tests; hard-link groups;
-  the system's root folders left out), the source's size-and-times
-  listing unchanged, and only then ConversionMarker
-  (`.visor-conversion-verified`: both UUIDs, the counts, the manifest's
-  and both listings' sha256, the time). Swap In wants that marker for
-  these two UUIDs, at most two hours old by the Mac's clock, and both
-  listings unchanged, and its prompt starts with Visor Disk Utility's own
-  `conversion-check` run as root (VolumeGuard requires it first): the
-  marker file's sha256, its UUIDs and age, both listings, Visor stopped
-  and root's lsof, again, before the first rename. Never the bundle as it
-  is, which the person can write: ConversionChecker's script (`/bin/sh -c`,
-  exact) copies it as root into a root-owned `mktemp -d` folder under
-  /private/var/tmp, verifies the copy with `codesign --verify --strict -R`
-  against a requirement built from constants (ConversionChecker:
-  Developer ID anchor and leaf, the identifier, the team compiled in
-  (SigningTeam, from tools/signing's TEAM_ID: VISOR_TEAM_ID, which CI's
-  alpha-apple and release-apple pass as a repo_env from the repository's
-  VISOR_TEAM_ID variable; an optimized build without it refuses, a dev or
-  test build falls back to the running process's entitlements),
-  and the running process's own cdhash, as the kernel holds it
-  (`csops(CS_OPS_CDHASH)`: SecCodeCopySelf's signing information is read
-  from the disk, and a bundle replaced after launch passed by it in a
-  leased VM; the disk's must match the kernel's, or nothing runs); never
-  read from the bundle), runs the copy, and removes it.
-  Ad hoc signatures, and the test hooks, are only in a build with
-  `--config=visor_test_signing` (VISOR_TEST_SIGNING); shipped builds are
-  `--compilation_mode=opt` (alpha-apple, release-apple), and DEBUG is no
-  gate (rules_swift defines it in fastbuild too). No quota is set on a copy
-  whose source has none (no tool can remove a quota later, and the copy
-  becomes the live volume); copy-staged keeps a tenth of the container's
-  free space (20 GB at least) free instead. Extended attributes or an ACL
-  that can't be read are refused, never compared. Swap In leaves a note
-  (`volume-conversions.json` in the data folder) that unswap compares the
-  converted volume with: changed, it wants `--force`. Uninstall…'s typed
-  phrase names the kept volumes it deletes. visor_disk_volumes uses
-  swift-crypto's SHA-256.
+- **A case-insensitive volume is a note, not a conversion (Logan, 24 Nov
+  2026):** Visor Disk Utility only creates the three volumes and checks
+  them. A Sessions or Sources made by hand as plain APFS is adopted as it
+  is, never reformatted or converted; its card (and `status`) says it
+  should be case-sensitive and how to remake it: move what's on it
+  elsewhere, delete it in Apple's Disk Utility, Create it again, and move
+  the contents back (VolumePlanner.caseNote). VolumeGuard passes only the
+  creation's, Fix's and Spotlight's commands: nothing that deletes,
+  erases, renames or mounts a volume.
 - **The Visor volume out of backups and search (0.65):** Visor Disk
   Utility makes Visor with Spotlight off (`mdutil -i off /Volumes/Visor`
   after `diskutil apfs addVolume`, one administrator prompt; VolumeGuard
@@ -779,14 +733,18 @@ removed (still only when `agentProxy` is set).
   The link stays through 0.66, whose socket file may move again, to the
   app group's container (below). **Remove in 0.67:** the links
   (VisorServer.linkLegacySockets, `legacySocketLinks`, and the legacy
-  socket in MacServerAgent.otherServerGone). Uninstall… removes `~/.visor`.
-- **Sandboxed Visor (0.66 prep; the switch in 0.67).** docs/sandboxed.md is
-  the design Logan agreed (22 Nov 2026): Visor.app sandboxed, with the
-  server and container sessions in it; Visor Agent Utility, unsandboxed,
-  for native sessions' agent hosts; the app groups `group.com.LoganShire.Visor`
-  and `group.com.LoganShire.Shireworks` (Logan, 23 Nov 2026, in place of
-  `group.com.LoganShire.Applications`), the keychain group still
-  `<team>.com.LoganShire.Visor`. 0.66, still unsandboxed, prepares:
+  socket in MacServerAgent.otherServerGone).
+- **Visor on the Mac (0.66's groundwork; the design of 24 Nov 2026).**
+  docs/sandboxed.md is Logan's model: Visor.app bundles its notarized
+  server background process (the server agent), which runs native and
+  container sessions itself, container files only on the Visor, Sessions
+  and Sources volumes. It replaced the 22 Nov design (a sandboxed
+  Visor.app with its server in-process, and Visor Agent Utility for native
+  sessions), which is dropped. What 0.66 laid down for it still holds: the
+  app groups `group.com.LoganShire.Visor` and
+  `group.com.LoganShire.Shireworks` (Logan, 23 Nov 2026, in place of
+  `group.com.LoganShire.Applications`), the keychain group
+  `<team>.com.LoganShire.Visor`, and:
   - **Sockets in the app group's container**, behind a setting until
     every profile grants the group (`defaults write com.LoganShire.Visor
     VisorGroupSockets -bool true`, or VISOR_GROUP_SOCKETS=1; MacPlaces'
@@ -816,46 +774,27 @@ removed (still only when `agentProxy` is set).
     for a rollback through the prep release (0.66.1, or the update
     watcher's undo, read them alone): nothing is ever deleted or updated
     there, since a legacy-flavoured delete reaches the group's item (#502)
-    and an update may too. They go stale after the prep release, and
-    Uninstall… removes them; sandboxed Visor can't read or delete them.
+    and an update may too. They go stale after the prep release, and stay
+    until a person removes them in Keychain Access (there's no Uninstall…
+    since 24 Nov 2026); sandboxed Visor can't read or delete them.
     The server's own items keep #502's move. Without the group (signed ad
     hoc) the client's stay where they are.
   - **The agent hosts' spawner** (AgentHostSpawner): AgentChildren and
     HostedChild start a host through one, given an AgentHostSpawnRequest
     (libraries/agent_host_wire: the session, folder, harness, command,
     environment, JWT or token file, socket; JSON, documented there).
-    Today's is the server's own (ProcessAgentHostSpawner, as before);
-    Agent Utility's, over a socket in the group's container, plugs in in
+    The one there is is the server's own (ProcessAgentHostSpawner, as
+    before): the server runs native sessions itself, and no other takes
     its place.
-- **Uninstall…** (0.65; Visor Disk Utility's toolbar, or `Visor Disk
-  Utility uninstall`, a dry run unless `--yes`): libraries/visor_uninstall
-  plans, from what's there, everything Visor left on the Mac outside its
-  volumes, and Visor Disk Utility runs it (UninstallRunner): Visor quit;
-  the server agent stopped and unregistered (`Visor server-agent
-  unregister`: an app can't unregister another's), 0.64's server plist
-  and agent-proxy's job and plist removed, the agents' hosts still running
-  ended; both keychain services' items (`com.LoganShire.Visor.server` and
-  `com.LoganShire.Visor`), in the login keychain and, under Visor's access
-  group (which a Developer ID build of Visor Disk Utility is signed with
-  too: its own profile must grant it), the data-protection keychain, the
-  app key and the admin token there; the defaults domains of both apps and
-  their Saved State; `tccutil reset All com.LoganShire.Visor`; the
-  `authorized_keys` lines Visor added (`visor:<device>`, and 0.64's
-  `visor`); `~/.visor`, and what's left in Application Support (`Visor`,
-  `com.LoganShire.Visor`), `~/Library/Logs/Visor-*`, the system's Caches
-  and HTTPStorages of both apps, and `/tmp/visor-relaunch.log`. Listed and
-  never removed: `~/.claude/projects/-Volumes-Sessions-…`, Claude Code's
-  own, which Move Back left. Only when asked (`--delete-volumes`), with
-  "delete Sessions, Sources and Visor" typed: the three volumes, by their
-  APFS volume UUIDs through the administrator prompt (VolumeGuard lets
-  those roles alone through). Not asked, the dry run says so on a line of
-  its own ("Kept: /Volumes/Visor (Visor's data, containers, logs): removed
-  with --delete-volumes"). Last, Visor.app and Visor Disk Utility to the
-  Trash. Printed, never run: how to undo a hand-run `tailscale serve` of
-  7433, and the line of `~/.zshrc` that exports `VISOR_ADMIN_TOKEN` (its
-  number, never the token). What no app can remove goes by itself: the
-  unified log expires, and LaunchServices' and notifications' entries drop
-  when the app is deleted.
+- **No Uninstall… (Logan, 24 Nov 2026):** "as long as everything is self
+  contained they can just delete the volumes in Disk Utility". Visor Disk
+  Utility's Uninstall… (libraries/visor_uninstall) and `Visor server-agent
+  unregister`, which it ran, are gone: a person removes Visor by quitting
+  it, moving the apps to the Trash and deleting Sessions, Sources and
+  Visor in Apple's Disk Utility. What's still outside the volumes (the
+  server agent's registration, the keychain items, the apps' defaults, the
+  `authorized_keys` lines, which Forget This Device takes out) is for
+  Visor's own self-containment to bring onto them or drop.
 - **`Visor admin-token`** prints the admin token to standard output, from
   the keychain (MacAdminTokenCommand), for a script, so `.zshrc` needn't
   export it: from 0.65 Visor.app keeps the token itself beside its hash, in
@@ -1089,7 +1028,7 @@ container agents.
   runs: it compiles, and traps on the first callback
   (`_dispatch_assert_queue_fail`). The staging server and the probes are
   how that is found before a deploy.
-- Build: `bazel build //applications/visor_menubar //applications/visor_macos`
+- Build: `bazel build //applications/visor_mac //applications/visor_disk_utility`
   (fastbuild). `bazel-bin` points at the LAST configuration built — always
   locate outputs with `bazel cquery [-c opt] --output=files <target>`.
 - Build on Linux (a container, say): the same targets, with no Xcode. The
@@ -1343,10 +1282,14 @@ container agents.
     `Visor-Disk-Utility-<version>-macos.zip` (no disk image), with its own
     builds.json line (tools/ci/sign_builds.sh); `alpha-launch` and
     `release-launch` check it's signed and opens
-    (tools/ci/mac_app_opens.sh). So is Visor Client
-    (applications/visor_macos, sandboxed: docs/visor-client.md),
-    `Visor-Client-<version>-macos.zip`, checked sandboxed too
-    (`mac_app_opens.sh --sandboxed`). The agent
+    (tools/ci/mac_app_opens.sh). Nothing else: the separate Mac client
+    app retired (Logan, 24 Nov 2026), so no release carries its .zip, icon
+    or builds.json line. Every release, drafts included,
+    still carries builds.json, with Visor's lines (iOS and macOS, their
+    `urlSchemes` naming `visor`) and Visor Disk Utility's, and each app's
+    icon, `Visor-<version>-icon.png` and
+    `Visor-Disk-Utility-<version>-icon.png`, which Shireworks'
+    Applications tab is drawn from. The agent
     image of that version follows when tools/containers/ changed
     (`agent-image`, built with buildah on GitHub's arm64 Ubuntu, arm64
     alone). A branch's builds are experiments only (Logan, 12 Nov 2026):
@@ -1788,10 +1731,10 @@ to step anyway; a phone away on another network is where it showed.
   and the user's yes (System Settings → Privacy & Security → Local
   Network). Without it macOS refuses its connections with "No route to
   host" (errno 65) and never asks, while Terminal reaches the same address:
-  the Mac client's LAN paths failed that way until 0.23.
+  Visor's LAN paths on the Mac failed that way until 0.23.
 - The client's connection log is in UserDefaults while it runs
-  (`defaults read com.LoganShire.VisorClient.macOS visor.connectionLog`),
-  and a failed keychain call is in the system log
+  (`defaults read com.LoganShire.Visor visor.connectionLog`), and a failed
+  keychain call is in the system log
   (`log show --predicate 'subsystem == "com.LoganShire.VisorClient"'`).
 
 - A subagent's plain `sleep` is blocked by the harness; use

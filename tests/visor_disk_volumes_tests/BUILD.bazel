@@ -2,15 +2,14 @@ load("@rules_swift//swift:swift.bzl", "swift_test")
 load("//tools/swift:defs.bzl", "STRICT_SWIFT")
 
 # Visor's three volumes (libraries/visor_disk_volumes): diskutil's plists
-# parsed (fixtures from a macOS 27 VM), the adopt-or-create decision, the
-# guard that never lets Sessions be erased (nor any volume deleted unless
-# asked for), volumes.json as Visor reads it (0.64's `containers` as
-# `visor`), Visor's folders on the Visor volume and the move onto it, in
-# scratch folders, and a case-insensitive Sessions or Sources converted
-# (Stage's, Swap In's and unswap's commands, refusals and guard, the
-# marker, and copy-staged's copy and check on scratch folders, `cp -a`
-# standing in for ditto where there's none). On Linux, in //tests:linux,
-# and on a Mac.
+# parsed (fixtures from a macOS 27 VM), the adopt-or-create decision and
+# what a volume that isn't as it should be is told (its case, where it's
+# mounted, its owner), the guard that lets only a volume's creation, its
+# owner's fix and Visor's Spotlight exclusion run (Sessions never erased,
+# no volume ever deleted), volumes.json as Visor reads it (0.64's
+# `containers` as `visor`), and Visor's folders on the Visor volume and
+# the move onto it, in scratch folders. On Linux, in //tests:linux, and on
+# a Mac.
 swift_test(
     name = "visor_disk_volumes_tests",
     copts = STRICT_SWIFT,

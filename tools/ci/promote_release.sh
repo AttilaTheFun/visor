@@ -22,7 +22,7 @@
 # plan: the release's builds.json saved in <state>, and <state>/packages
 # written, a package a line: the Apple builds in <apple dir> (an .ipa,
 # Visor.app's .zip, its Linux programs in it, and Visor Disk Utility's
-# and Visor Client's .zips when release-apple built them), unless the release has them as
+# .zip when release-apple built it), unless the release has them as
 # Production already, and the APK in <android dir> when release-android
 # built one. merge, after the Sign step signed them into <assets>: with
 # nothing signed, the release's builds.json as it is; with Apple's left as
@@ -52,12 +52,11 @@ plan)
     gh release download "$tag" --repo "$repo" --pattern builds.json --dir "$state" || fail "$tag has no builds.json"
     # Apple's signed already: the release's builds.json lists a Production
     # .ipa and a Production .zip of each Mac app built (Visor.app's, and
-    # Visor Disk Utility's and Visor Client's when there are) of this commit (a re-run,
+    # Visor Disk Utility's when there is one) of this commit (a re-run,
     # after Android's failed). All, not some: a first run that died
     # between them is signed again whole.
     mac_apps=(com.LoganShire.Visor)
     [ ! -f "$apple/visor_disk_utility.zip" ] || mac_apps+=(com.LoganShire.Visor.DiskUtility)
-    [ ! -f "$apple/visor_macos.zip" ] || mac_apps+=(com.LoganShire.VisorClient.macOS)
     promoted="$(python3 -I - "$state/builds.json" "$commit" "${mac_apps[@]}" << 'PY'
 import json, sys
 builds = json.load(open(sys.argv[1]))
@@ -79,7 +78,6 @@ PY
         [ "$ipas" -gt 0 ] && [ -f "$apple/visor_mac.zip" ] || fail "$apple has no iPhone .ipa or no visor_mac.zip"
         echo "$apple/visor_mac.zip" >> "$state/packages"
         [ ! -f "$apple/visor_disk_utility.zip" ] || echo "$apple/visor_disk_utility.zip" >> "$state/packages"
-        [ ! -f "$apple/visor_macos.zip" ] || echo "$apple/visor_macos.zip" >> "$state/packages"
     else
         echo "promote_release: $tag's Apple builds are Production already, left as they are"
     fi

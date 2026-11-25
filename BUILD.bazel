@@ -60,7 +60,7 @@ xcodeproj(
                 "simulator",
             ],
         ),
-        "//applications/visor_macos",
+        "//applications/visor_mac",
         "//applications/visor_menubar",
     ],
 )

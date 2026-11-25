@@ -1,7 +1,7 @@
 load("//tools/swift:defs.bzl", "STRICT_SWIFT")
 load("@rules_swift//swift:swift.bzl", "swift_binary")
 
-# Pictures of the Mac client on the screenshot fixture, for the site:
+# Pictures of Visor's window on the Mac on the screenshot fixture, for the site:
 #
 #   bazel run //tools/mac_screenshots -- <screen> <out.png> [dark|light]
 #

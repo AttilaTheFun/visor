@@ -4,16 +4,15 @@
 # the hardened runtime, accepted by Gatekeeper (`spctl`) and its
 # notarization stapled (`stapler validate`); then opened as a user opens
 # it (`open`), and still running a few seconds later. CI runs it on
-# Visor Disk Utility's and Visor Client's signed .zips on an `xcode-27` Mac
-# (ci.yml's alpha-launch and release-launch, beside Visor.app's
-# launch_check), before their release assets are proposed or attached, and
-# on the proof's ad hoc Visor Client (proof-mac). It's then quit.
+# Visor Disk Utility's signed .zip on an `xcode-27` Mac (ci.yml's
+# alpha-launch and release-launch, beside Visor.app's launch_check), before
+# its release assets are proposed or attached. It's then quit.
 #
 #   tools/ci/mac_app_opens.sh [--ad-hoc] [--sandboxed] [--hold <seconds>] <app .zip or .app>
 #
 # --sandboxed: its signature carries the App Sandbox
-# (com.apple.security.app-sandbox, Visor Client's), and once open its
-# container is there, ~/Library/Containers/<bundle id>.
+# (com.apple.security.app-sandbox), and once open its container is there,
+# ~/Library/Containers/<bundle id>.
 # --hold: how long it must stay up once running (10 seconds). --ad-hoc: a
 # local build's ad hoc signature (a leased VM's bazel build), with no
 # Developer ID, Gatekeeper or notarization to check: never in CI.
@@ -21,7 +20,6 @@
 # Opening Visor Disk Utility only reads the disks (`diskutil apfs list` and
 # `info`) and writes volumes.json for Visor in the user's Application
 # Support; it changes no volume without an administrator's password.
-# Opening Visor Client asks to notify, and reaches no computer: it has none.
 # Run it on a CI Mac or a leased VM. macOS alone.
 set -euo pipefail
 fail() { echo "mac_app_opens: $*" >&2; exit 1; }

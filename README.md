@@ -1,17 +1,31 @@
 # Visor
 
-Remote agent sessions: Visor Server, a Mac menu bar app (or `visor-server`,
-the same server as a command for Linux and Windows), runs Claude Code, Codex
-and the openrouter CLI as subprocesses on the host and serves them to your
-devices over whatever reaches the host — a LAN, a VPN, a reverse proxy, a
-tunnel; a SwiftUI client for iPhone, iPad and Mac adds a computer from its
-connection code, starts sessions, chats with them and watches their
-progress.
+Remote agent sessions. Visor is Visor.app, on iOS and macOS. On the Mac it
+bundles Visor's server, notarized with it, as a background process: it runs
+Claude Code, Codex and the openrouter CLI as sessions, natively or in the
+containers it manages, whose files are only on the Visor, Sessions and
+Sources volumes, and serves them to your devices over whatever reaches the
+Mac — a LAN, a VPN, a reverse proxy, a tunnel. Visor on the iPhone, iPad
+and Mac adds a computer from its connection code, starts sessions, chats
+with them and watches their progress. Visor Disk Utility creates the three
+volumes and checks they're as they should be. (`visor-server` is the same
+server as a command for Linux and Windows.)
 
 ## Parts
 
-- **applications/visor_menubar** — the host, Visor Server
-  (`com.LoganShire.VisorServer.macOS`). A menu bar app (`LSUIElement`)
+- **applications/visor_mac** — Visor.app on the Mac
+  (`com.LoganShire.Visor`): a menu bar app whose window is Visor (the
+  same client as the iPhone's, below), with Visor's server under it. The
+  same executable is the server's background process (`--server`, a
+  launchd job registered from the bundle), which runs sessions natively
+  or in the Sessions container it manages (docs/containers.md), their
+  files on the Visor, Sessions and Sources volumes.
+- **applications/visor_disk_utility** — Visor Disk Utility: creates the
+  Sessions, Sources and Visor volumes (case-sensitive APFS) and checks
+  they're as they should be, and writes volumes.json for Visor.
+- **applications/visor_menubar** — the older host, Visor Server
+  (`com.LoganShire.VisorServer.macOS`), whose sources Visor.app shares.
+  A menu bar app (`LSUIElement`)
   running `VisorServer`: one listener (port 7433) for the WebSocket at `/`
   and the REST side under `/api`, on loopback alone or on every interface
   when opened to the network, plain or over TLS with a PKCS#12 identity.
@@ -23,8 +37,8 @@ progress.
   the network setting, the address a front of your own
   gives, and the TLS identity. The server knows nothing of what reaches
   it: a LAN, a VPN, a reverse proxy and a tunnel are all the same to it.
-- **applications/visor_ios**, **applications/visor_macos** — the client on
-  shared host sources: an inset grouped sidebar with a section per
+- **applications/visor_ios** — Visor on the iPhone and iPad, on host
+  sources Visor.app on the Mac shares: an inset grouped sidebar with a section per
   computer (its connection state in the header, its sessions, its
   settings last), the transcript and composer from AgentUI. A computer
   is added by pasting its connection code or scanning its QR code
@@ -51,9 +65,7 @@ progress.
   its own service registers an `AgentServerProvider` with its own
   `AgentServer`, and an `AgentServerProviderUI` with its own sign-in
   view; a new session goes to the one connected server, or to the one
-  picked. On the Mac, applications/visor_macos is
-  Visor Client, sandboxed, for a Mac that runs no server
-  (docs/visor-client.md).
+  picked.
 - **libraries/visor_protocol** — the wire format (docs/protocol.md) and its
   own small JSON, with no Foundation, so the same code runs wherever the
   client is carried.
@@ -95,7 +107,7 @@ progress.
 Bazel with rules_swift, rules_apple and rules_xcodeproj; AgentUI comes in
 through rules_swift_package_manager from third_party/swift_packages.
 
-    bazel build //applications/visor_menubar //applications/visor_macos
+    bazel build //applications/visor_mac //applications/visor_disk_utility
     bazel build --ios_multi_cpus=sim_arm64 //applications/visor_ios
     bazel test //tests/...
     bazel run //:xcodeproj     # generates Visor.xcodeproj for Xcode (not committed)

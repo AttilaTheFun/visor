@@ -15,6 +15,10 @@ import Testing
         #expect(state.notes.count == 1)
         #expect(state.notes[0].contains("case-insensitive"))
         #expect(state.notes[0].contains("never reformatted"))
+        // How to remake it, by hand: Visor Disk Utility converts nothing.
+        #expect(state.notes[0].contains("should be case-sensitive"))
+        #expect(state.notes[0].contains("delete Sessions in Apple's Disk Utility, then Create it here again"))
+        #expect(!state.notes[0].contains("convert"))
         // Nothing would make it again.
         #expect(throws: DiskVolumesError.self) { try state.createCommands(reserve: 0, quota: 0, user: "someone") }
     }

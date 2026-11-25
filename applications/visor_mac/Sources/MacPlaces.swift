@@ -77,8 +77,7 @@ enum MacPlaces {
 
     /// The default that puts the sockets in the app group's container
     /// (VisorPlaces: `r/server.sock`, the Sessions container's relay and
-    /// driver sockets, the agents' hosts' `h-<8 hex>.sock`), as Visor's
-    /// sandboxed release will (docs/DEVELOPMENT.md, "Sandboxed Visor").
+    /// driver sockets, the agents' hosts' `h-<8 hex>.sock`: docs/sandboxed.md).
     /// Off unless set (`defaults write com.LoganShire.Visor
     /// VisorGroupSockets -bool true`, or VISOR_GROUP_SOCKETS=1 in the
     /// environment) until the Developer ID profiles grant the group.

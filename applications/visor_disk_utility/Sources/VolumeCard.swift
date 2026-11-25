@@ -1,6 +1,5 @@
 // One volume: whether it's there, what it is, its space, and what can be
-// done. No volume is ever erased here: Visor's has its data on it, so its
-// Erase Containers… empties only the container's folder.
+// done: Create, Fix, and Visor's exclusions. No volume is ever erased here.
 
 import DiskVolumes
 import SwiftUI
@@ -8,7 +7,6 @@ import SwiftUI
 struct VolumeCard: View {
     @Bindable var model: VolumesModel
     let role: VolumeRole
-    @State private var confirmingErase = false
 
     private var state: VolumeState? { model.states[role] }
 
@@ -59,8 +57,6 @@ struct VolumeCard: View {
                                 .disabled(model.isBusy)
                                 .help("Spotlight is turned off on it; Time Machine's settings open, to add it under Options… › +.")
                         }
-                        Button("Erase Containers…", role: .destructive) { confirmingErase = true }
-                            .disabled(model.isBusy || state?.isMountedInPlace != true)
                     }
                     Button("Create") { Task { await model.create(role) } }
                         .disabled(model.isBusy || !canCreate)
@@ -69,13 +65,6 @@ struct VolumeCard: View {
             .padding(6)
         } label: {
             Text(role.volumeName).font(.headline)
-        }
-        .confirmationDialog("Erase Containers?", isPresented: $confirmingErase) {
-            Button("Erase Containers", role: .destructive) { Task { await model.eraseContainers() } }
-        } message: {
-            Text("The Containers folder on Visor is emptied: the container's image, root filesystem, caches and logs, "
-                 + "all fetched and made again when it next starts. Stop the Sessions container first (Visor's Settings). "
-                 + "Visor's data on the volume, Sessions and Sources aren't touched.")
         }
     }
 

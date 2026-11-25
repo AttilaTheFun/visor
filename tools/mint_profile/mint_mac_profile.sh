@@ -1,5 +1,5 @@
 #!/bin/bash
-# Mints the Mac client's Developer ID provisioning profile, with the
+# Mints a Mac app's Developer ID provisioning profile, with the
 # capabilities its entitlements ask for (push): archives a throwaway one-file
 # Mac app with automatic signing, then exports it for Developer ID, which is
 # when Xcode makes the profile ("Mac Team Direct Provisioning Profile: <bundle
@@ -8,7 +8,7 @@
 # when there is one (see mint_profile.sh), else Xcode's own account.
 #
 #   tools/mint_profile/mint_mac_profile.sh <bundle id> <team id> <entitlements>
-# (applications/visor_macos/app.entitlements; the team in .bazelrc.user)
+# (the app's entitlements file; the team in .bazelrc.user)
 set -euo pipefail
 BUNDLE="${1:?bundle id}"
 TEAM="${2:?Apple team id, as VISOR_TEAM_ID in .bazelrc.user}"
