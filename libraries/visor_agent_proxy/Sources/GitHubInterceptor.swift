@@ -4,7 +4,8 @@
 // uploads.github.com on port 443 is opened here with a leaf of agent-proxy's
 // own authority (AgentProxyCA), and each request in it is read as far as
 // GitHubGate needs, decided, checked against GitHub where the gate says, and
-// either sent on with the configured auth token (ConfiguredGitHubToken) or answered with
+// either sent on with the configured GitHub credential (PreferredGitHubToken:
+// the GitHub App's installation token, or the auth token) or answered with
 // a refusal in its client's own form. The token never reaches the container:
 // it is added on the way out, and masked should GitHub's answer echo it.
 // Each request is a line of the egress log (route `github`): its method, its

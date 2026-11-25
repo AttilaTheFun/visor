@@ -3,8 +3,10 @@
 // Proxy keeps, a GitHub credential of the owner's choosing (a fine-grained
 // personal access token, a bot account's, an App's installation token kept
 // fresh by something else), one for every agent, which none of them sees.
-// It replaces Shireworks' GitHubAppTokens (logan-shire-agent's JWT and
-// installation tokens). Read as it is kept now at each request (the host
+// It replaced Shireworks' GitHubAppTokens (logan-shire-agent's JWT and
+// installation tokens), which are back in 0.71.1 as a choice that comes
+// before it when the App's key and id are kept (GitHubAppTokens,
+// PreferredGitHubToken). Read as it is kept now at each request (the host
 // reads its secret at most once a minute), so a new one is taken without a
 // restart. Without one, a request that needs a token is refused: container
 // sessions have no GitHub through the proxy but what the gate lets through

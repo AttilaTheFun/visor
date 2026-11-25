@@ -14,16 +14,20 @@
 // Moved from Shireworks' v0.15.1 (Sources/AgentProxyHost), without what was
 // Shireworks' own: the `shireworks.agent.internal` forward and
 // `/mcp/shireworks` (with its agent key), logan-shire-agent's App key (the
-// gate attaches the auth token Settings keep instead), and the relay token
-// handed over on standard input (it's the server's secret alone).
+// gate attached the auth token Settings keep instead; from 0.71.1 the App's
+// key may be kept here, a choice, below), and the relay token handed over on
+// standard input (it's the server's secret alone).
 //
 // Its secrets (ProxySecretStore: the server's `agent-proxy/` items), each
 // read again at most once a minute (KeptSecret), so one imported with
 // `agent-proxy secret-set` is taken without a restart:
 // - `relay-token`, which every relayed stream's PROXY v2 header must carry
 //   (TLV 0xE2): made here the first time, kept;
-// - `github-token`, the GitHub credential the gate attaches; none: what
-//   needs one is refused;
+// - `github-app/key`, `github-app/id` and, optional,
+//   `github-app/installation`: the GitHub App whose installation tokens the
+//   gate attaches, minted here, when its key and id are both kept;
+// - `github-token`, the GitHub credential the gate attaches otherwise; none
+//   (and no App): what needs one is refused;
 // - `claude/oauth-token`, the Claude credential the Anthropic interceptor
 //   attaches (Settings › Sessions Container); none: each request to
 //   api.anthropic.com is refused, saying where to sign in;
@@ -172,9 +176,15 @@ public enum AgentProxyHost {
             log("egressAllow lists this computer's networks: on macOS that needs Visor's Local Network permission (\(EgressProxy.localNetworkHint))")
         }
         let githubToken = KeptSecret(AgentProxySettings.githubTokenName, in: secrets)
+        let appKey = KeptSecret(AgentProxySettings.githubAppKeyName, in: secrets)
+        let appID = KeptSecret(AgentProxySettings.githubAppIDName, in: secrets)
+        let appInstallation = KeptSecret(AgentProxySettings.githubAppInstallationName, in: secrets)
+        let app: @Sendable () -> GitHubAppSecrets? = {
+            GitHubAppSecrets(key: appKey.value, id: appID.value, installation: appInstallation.value)
+        }
         let gateRules = settings.gateRules ?? (FileManager.default.fileExists(atPath: places.gateRules) ? places.gateRules : nil)
         let interceptor = GitHubInterceptor.make(secrets: store, caCertificate: settings.caCertificate ?? places.caCertificate,
-                                                 gateRules: gateRules, token: { githubToken.value }, egress: egress, log: log)
+                                                 gateRules: gateRules, token: { githubToken.value }, app: app, egress: egress, log: log)
         let claudeToken = KeptSecret(AgentProxySettings.claudeTokenName, in: secrets)
         let anthropic = AnthropicInterceptor.make(secrets: store, caCertificate: places.anthropicCertificate, token: { claudeToken.value },
                                                   egress: egress, log: log)
@@ -206,7 +216,8 @@ public enum AgentProxyHost {
         log("the relay listener is on loopback port \(port), answering DNS, logging egress to \(egressPath)"
             + (listed.isEmpty ? ", egress to the internet alone" : ", egress to the internet and \(listed.joined(separator: ", "))")
             + initial.map { ", \($0.host):\($0.port) to loopback port \($0.hostPort)" }.joined()
-            + (githubToken.isSet ? "" : "; no auth token for GitHub (agent-proxy secret-set github-token): what needs one is refused"))
+            + (githubToken.isSet || app() != nil ? ""
+                : "; no auth token for GitHub (agent-proxy secret-set github-token, or github-app/key and github-app/id): what needs one is refused"))
         return (relay, interceptor, anthropic)
     }
 
