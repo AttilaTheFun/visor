@@ -123,8 +123,18 @@ struct DriverService: AgentProtocol_V1_AgentDriver.ServiceProtocol {
         // The agent's MCP server ("visor", through its wrapper), as its
         // session's: this connection's, as the wrapper's relay is. In a
         // container, Visor's own tools alone; on a native runner, the
-        // computer's passed-on servers too, as a native session has.
-        let mcp = DrivenMCP(session: hello.agent.uuid, server: server, passesOn: !inContainer) { sending.yield($0) }
+        // computer's passed-on servers too, as a native session has. An
+        // agent of the Sessions container's reaches those from agent-proxy's
+        // pass-through instead, with a token of its own it asks for here.
+        let passThroughToken: (@Sendable () async -> String?)?
+        if await MainActor.run(body: { server.containerRunner.holds(agent) }) {
+            passThroughToken = { await MainActor.run { server.containerRunner.passThroughToken(for: agent) } }
+        } else {
+            passThroughToken = nil
+        }
+        let mcp = DrivenMCP(session: hello.agent.uuid, server: server, passesOn: !inContainer, passThroughToken: passThroughToken) {
+            sending.yield($0)
+        }
         VisorServer.log("driver: \(hello.agent.uuid) connected from \(hello.hostName.isEmpty ? "a wrapper" : hello.hostName)")
         // Down the stream, as the session sends: a task of its own, ended
         // with the connection.

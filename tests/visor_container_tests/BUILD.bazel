@@ -12,7 +12,8 @@ load("//tools/swift:defs.bzl", "STRICT_SWIFT")
 # own relay listener (relay-client check's health answer); the driver link
 # (carried in, no header, no agent-proxy needed) and startWrapper's argv and
 # environment; a stop on purpose held, a restart, and the container
-# runner's agent exec'd (VisorContainerRunner). No VM: on Linux, in
+# runner's agent exec'd (VisorContainerRunner), and agent-proxy's MCP
+# pass-through's servers put in its Claude's file. No VM: on Linux, in
 # //tests:linux, and on a Mac.
 swift_test(
     name = "visor_container_tests",
@@ -20,6 +21,7 @@ swift_test(
     srcs = [
         "AssetsTests.swift",
         "EngineTests.swift",
+        "EngineTests+ClaudeMCP.swift",
         "EngineTests+Runner.swift",
         "EngineTests+Wrapper.swift",
         "FakeBackend.swift",

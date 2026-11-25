@@ -5,7 +5,10 @@
 // port, byte for byte (gRPC's HTTP/2 included), where the egress proxy
 // refuses this computer's addresses. Only the ports a server was given here
 // are reached; any other name under `agent.internal` is refused, never
-// looked up. Moved from MultiPass (Logan, 2026-11-14); its names
+// looked up. One is agent-proxy's own, never the settings':
+// `mcp.agent.internal:80`, the MCP pass-through (0.72.1: a container's
+// agents get the servers a native session gets). Moved from MultiPass
+// (Logan, 2026-11-14); its names
 // (`<name>.multipass.internal`) are no longer answered (2026-11-19: no live
 // configuration used them, MultiPass archived).
 
@@ -15,6 +18,20 @@ public struct DialIn: Codable, Equatable, Sendable {
     public static let domain = "agent.internal"
     /// Every domain whose names are the agent proxy's own.
     public static let domains = [domain]
+
+    /// The MCP pass-through's own dial-in, which agent-proxy makes itself
+    /// wherever it runs the pass-through beside the relay:
+    /// `mcp.agent.internal:80`, joined to the pass-through's loopback port
+    /// (7439 unless said), so a container's agents reach
+    /// `http://mcp.agent.internal/mcp/<name>`. Nothing else on this
+    /// computer's loopback is reached by that name.
+    public static let passThroughName = "mcp"
+    public static let passThroughPort = 80
+
+    /// The pass-through's dial-in, to its loopback port `hostPort`.
+    public static func passThrough(to hostPort: Int) -> DialIn {
+        DialIn(name: passThroughName, port: passThroughPort, hostPort: hostPort)
+    }
 
     /// The server's name (`visor`), its first label.
     public var name: String

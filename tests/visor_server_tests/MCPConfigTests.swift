@@ -51,6 +51,11 @@ extension ServerTests {
         let visor = try #require((json["mcpServers"] as? [String: Any])?["visor"] as? [String: Any])
         #expect((visor["env"] as? [String: String]) == ["VISOR_APPROVALS": "1"])
         #expect((visor["args"] as? [String]) != nil, "still the server to run")
+        // A native session's servers are Visor's alone, as before the Sessions container's agents were given
+        // agent-proxy's pass-through (0.72.1): its passed-on servers come through that one, never by
+        // mcp.agent.internal, and nothing asks for headers.
+        #expect((json["mcpServers"] as? [String: Any])?.keys.sorted() == ["visor"])
+        #expect(!config.contains("mcp.agent.internal") && !config.contains("headersHelper"))
     }
 
     /// A CLI that gives its MCP servers only what its config says (the
