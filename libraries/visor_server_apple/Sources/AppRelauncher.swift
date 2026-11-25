@@ -28,7 +28,9 @@ import VisorServer
 /// launchd's KeepAlive leaves alone: the watcher, not launchd, brings it
 /// back, and the two never race. Not wanted, or launchd not starting it,
 /// and it is opened as before (`open -a`, its `--without-agent` telling it
-/// not to hand itself to launchd again).
+/// not to hand itself to launchd again). Either way the app comes back with
+/// its window if one was open as it went, and in the menu bar alone if none
+/// was (the agent's `presentMarker`, written just before each start).
 public struct AppRelauncher: ServerLifecycle {
     /// How long a new build has to stay up before it is trusted.
     public static let watch = 120
@@ -46,10 +48,15 @@ public struct AppRelauncher: ServerLifecycle {
         /// The app's command that starts it from the bundle in place
         /// (`app-agent start`): exits 0 once launchd runs the app.
         public var command: [String]
+        /// The marker that has the app launchd starts show its window,
+        /// written when one was open as the app went (an update then gives
+        /// back the window it found).
+        public var presentMarker: String?
 
-        public init(label: String, command: [String]) {
+        public init(label: String, command: [String], presentMarker: String? = nil) {
             self.label = label
             self.command = command
+            self.presentMarker = presentMarker
         }
     }
 
@@ -129,6 +136,8 @@ public struct AppRelauncher: ServerLifecycle {
         let executable = (destination as NSString).appendingPathComponent(
             "Contents/MacOS/" + Self.executableName(of: build.flatMap { $0.isEmpty ? nil : ($0 as NSString).expandingTildeInPath }))
         let serving = VisorServer.shared.listening
+        // A window of the app's open as it goes: shown again once it's back.
+        let windowOpen = NSApplication.shared.windows.contains { $0.isVisible && $0.styleMask.contains(.titled) }
         // One watch at a time (RelaunchWatchLock).
         let watch = AppRelaunchWatch(appPID: ProcessInfo.processInfo.processIdentifier, destination: destination, backup: backup,
                                      install: install, accept: accept, start: start(executable: executable, open: open),
@@ -136,7 +145,7 @@ public struct AppRelauncher: ServerLifecycle {
                                      answers: serving ? AppRelaunchWatch.portAnswers() : AppRelaunchWatch.socketAnswers(VisorServer.socketPath),
                                      answersWhere: serving ? "on port \(Envelope.defaultPort)" : "at its socket file",
                                      note: VisorServer.rollbackNoteURL.path, newVersion: newVersion, oldVersion: Self.version(of: Bundle.main),
-                                     lock: RelaunchWatchLock.url.path)
+                                     lock: RelaunchWatchLock.url.path, present: windowOpen ? agent?.presentMarker : nil)
         let script = watch.script()
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/sh")

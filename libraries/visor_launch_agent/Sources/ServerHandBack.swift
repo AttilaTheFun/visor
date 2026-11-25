@@ -7,7 +7,8 @@
 // 1. Nothing there (no agent registered, no 0.64 plist, launchd running
 //    none) and nothing answering at the socket file or on the port: the
 //    server starts in the app, nothing else done.
-// 2. An update's watch still holding its lock (RelaunchWatchLock: the
+// 2. An update's watch still holding its lock (RelaunchWatchLock, its
+//    holder checked to be that watcher, RelaunchWatchHolder: the
 //    agent's own watcher, from the build before, watching the new build
 //    as the agent): waited for, since an agent gone mid-watch would be
 //    taken for a crash and the update undone.
@@ -59,16 +60,20 @@ public enum ServerHandBack {
                 await steps.pause(poll)
                 waited += poll
             }
-            log("hand-back: the server agent unregistered and stopped (it steps aside, the agents' hosts left running)")
-            switch await steps.remove() {
+            log("hand-back: unregistering and stopping the server agent")
+            let action = await steps.remove()
+            switch action {
             case .refuse(let why), .hold(let why):
+                let kind = action == .refuse(why) ? "refused" : "held"
+                log("hand-back: the server agent wasn't removed: \(kind) (\(why))")
                 if await steps.serverAnswers() {
-                    log("hand-back: the server agent is left as it is (\(why)): this app is its client")
+                    log("hand-back: the server agent is left serving: this app is its client")
                     return .elsewhere("the server agent is left serving: \(why)")
                 }
-                log("hand-back: the server agent couldn't be removed (\(why)), and nothing answers: the server starts in the app")
+                log("hand-back: nothing answers: the server starts in the app")
+                return .inApp("the server agent wasn't removed (\(why)), and nothing answered")
             default:
-                break
+                log("hand-back: the server agent is unregistered and stopped (it steps aside, the agents' hosts left running)")
             }
         } else {
             log("hand-back: no server agent, but a server answers at the socket file or on the port: waited for to go")
@@ -107,7 +112,8 @@ public protocol ServerHandBackSteps: Sendable {
     /// approval), 0.64's plist, or launchd runs it.
     func agentThere() async -> Bool
     /// Seconds an update's watch holding its lock has left; nil when none
-    /// does.
+    /// does (a lock whose pid now names another process holds nothing:
+    /// RelaunchWatchHolder).
     func watching() async -> Int?
     /// The agent unregistered and stopped (TERM: it steps aside), and
     /// 0.64's plist removed: what was done.

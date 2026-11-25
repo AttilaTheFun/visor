@@ -3,6 +3,8 @@
 // can be, so launchd starts it again after a crash (AppAgentJob;
 // docs/DEVELOPMENT.md, The server in the app).
 //
+// - A lock that can't be had at all (its file can't be opened): this copy
+//   runs as a client alone, no server, and says so loudly (failing closed).
 // - Another instance holds the lock (InstanceLock): this one exits 0 at
 //   once, so launchd's KeepAlive doesn't start it again, and the first is
 //   brought forward with its window, unless launchd started this one (a
@@ -20,9 +22,11 @@
 //   here.
 // - The window: a person's open shows it, and so does launchd's process
 //   that a person's open was handed to (a marker beside the lock, written
-//   before launchd is asked and taken away by launchd's process); launchd's
-//   own launches, at login and after a crash, keep to the menu bar
-//   (AppAgentJob.showsWindow; Logan, 25 Nov 2026).
+//   before launchd is asked and taken away by launchd's process), and an
+//   update's relaunch when a window was open as the app went (the watcher
+//   writes the same marker: AppRelauncher); launchd's own launches, at
+//   login and after a crash, keep to the menu bar (AppAgentJob.showsWindow;
+//   Logan, 25 Nov 2026).
 // - `Visor app-agent start` (the update's watcher, AppRelauncher): the
 //   same start, waited out as long as a registration takes, ending 0 once
 //   launchd runs the app; 1 when it doesn't, or the agent isn't wanted (it's
@@ -48,6 +52,10 @@ enum MacAppInstance {
     /// Whether launchd started this process as the app's agent: read once,
     /// before the variable is taken out of the environment.
     private(set) static var fromAgent = false
+
+    /// Why the instance lock couldn't be had at all, if it couldn't: then
+    /// this copy runs no server (LocalServer), failing closed.
+    private(set) static var lockProblem: String?
 
     /// Whether Visor's window shows at this launch: a person's open, or
     /// one handed to launchd, does; launchd's own, at login or after a
@@ -86,16 +94,18 @@ enum MacAppInstance {
         unsetenv(AppAgentJob.environmentVariable)
         if arguments.contains("-visor.fixture") { return }
         let marker = AppAgentJob.presentMarker(bundleID: MacPlaces.own)
-        if fromAgent {
-            // A person's open handed to launchd asked for the window; taken
-            // away, so a crash's restart later doesn't show it.
+        let withoutAgent = arguments.contains(AppRelauncher.withoutAgent)
+        if fromAgent || withoutAgent {
+            // A person's open handed to launchd, or an update's relaunch
+            // with a window open, asked for the window; taken away, so a
+            // crash's restart later doesn't show it.
             let asked = AppAgentJob.askedAt(try? String(contentsOfFile: marker, encoding: .utf8))
             showsWindow = AppAgentJob.showsWindow(fromAgent: true, askedAt: asked, now: Int(Date().timeIntervalSince1970))
             try? FileManager.default.removeItem(atPath: marker)
         }
         let path = lockPath
         let launch = AppAgentJob.launch(lockHeld: heldByAnother(path), fromAgent: fromAgent,
-                                        withoutAgent: arguments.contains(AppRelauncher.withoutAgent), wanted: AppAgentService.wanted,
+                                        withoutAgent: withoutAgent, wanted: AppAgentService.wanted,
                                         installProblem: LaunchAgentJob.installProblem(LaunchAgentJob.ownExecutable))
         switch launch {
         case .second(let showFirst):
@@ -119,10 +129,20 @@ enum MacAppInstance {
         case .run:
             break
         }
-        var taken = InstanceLock.take(path)
-        for _ in 0..<5 where taken == nil {
-            Thread.sleep(forTimeInterval: 0.1)
-            taken = InstanceLock.take(path)
+        var taken: InstanceLock?
+        do {
+            taken = try InstanceLock.take(path)
+            for _ in 0..<5 where taken == nil {
+                Thread.sleep(forTimeInterval: 0.1)
+                taken = try InstanceLock.take(path)
+            }
+        } catch {
+            // Failing closed: with no lock, this copy can't know it's the
+            // only one, so it runs as a client alone (LocalServer).
+            let problem = "\(error)"
+            lockProblem = problem
+            NSLog("Visor: %@: Visor runs as a client alone, with no server of its own, so two servers never run on this Mac's data", problem)
+            return
         }
         guard let lock = taken else {
             // launchd's process took it meanwhile, after all.

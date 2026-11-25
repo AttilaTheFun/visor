@@ -24,14 +24,25 @@ public final class InstanceLock: Sendable {
         self.descriptor = descriptor
     }
 
+    /// Why the lock couldn't be had at all (its file can't be opened, or
+    /// can't be locked for a reason other than another holder): failing
+    /// closed, the caller runs no server, since it can't know it's alone.
+    public struct Unavailable: Error, CustomStringConvertible {
+        public let path: String
+        public let code: Int32
+
+        public var description: String { "the instance lock \(path) can't be had (\(String(cString: strerror(code))))" }
+    }
+
     /// The lock taken, this process's id written in it; nil when another
-    /// process holds it. A file that can't be opened holds nothing: the
-    /// caller runs, unguarded, rather than not at all.
-    public static func take(_ path: String) -> InstanceLock? {
+    /// process holds it. Throws when it can't be had at all.
+    public static func take(_ path: String) throws(Unavailable) -> InstanceLock? {
         let descriptor = open(path, O_RDWR | O_CREAT | O_CLOEXEC, 0o600)
-        guard descriptor >= 0 else { return InstanceLock(descriptor: -1) }
+        guard descriptor >= 0 else { throw Unavailable(path: path, code: errno) }
         guard flock(descriptor, LOCK_EX | LOCK_NB) == 0 else {
+            let code = errno
             close(descriptor)
+            guard code == EWOULDBLOCK else { throw Unavailable(path: path, code: code) }
             return nil
         }
         let text = "\(getpid())\n"
@@ -40,7 +51,8 @@ public final class InstanceLock: Sendable {
         return InstanceLock(descriptor: descriptor)
     }
 
-    /// Whether another process holds it now. Asked without keeping it.
+    /// Whether another process holds it now. Asked without keeping it; a
+    /// file that can't be opened isn't held (and `take` says why).
     public static func isHeld(_ path: String) -> Bool {
         let descriptor = open(path, O_RDWR | O_CREAT | O_CLOEXEC, 0o600)
         guard descriptor >= 0 else { return false }
@@ -58,7 +70,6 @@ public final class InstanceLock: Sendable {
 
     /// Let go (a test's; the app holds it until it ends).
     public func release() {
-        guard descriptor >= 0 else { return }
         _ = flock(descriptor, LOCK_UN)
         close(descriptor)
     }

@@ -7,6 +7,7 @@
 import Foundation
 import Testing
 @testable import VisorLaunchAgent
+import VisorServer
 
 @Suite struct AppAgentJobTests {
     let bundleID = "com.LoganShire.Visor"
@@ -117,14 +118,14 @@ import Testing
         let path = path()
         defer { try? FileManager.default.removeItem(atPath: path) }
         #expect(!InstanceLock.isHeld(path))
-        let first = try #require(InstanceLock.take(path))
+        let first = try #require(try InstanceLock.take(path))
         #expect(InstanceLock.isHeld(path), "asked by another open of it, as another process asks")
-        #expect(InstanceLock.take(path) == nil, "a second can't take it")
+        #expect(try InstanceLock.take(path) == nil, "a second can't take it")
         #expect(InstanceLock.holder(path) == ProcessInfo.processInfo.processIdentifier, "the holder's process id, for the second to bring forward")
         #expect(InstanceLock.isHeld(path), "asking let nothing go")
         first.release()
         #expect(!InstanceLock.isHeld(path), "let go when its holder ends")
-        let second = try #require(InstanceLock.take(path))
+        let second = try #require(try InstanceLock.take(path))
         second.release()
     }
 
@@ -133,12 +134,69 @@ import Testing
         defer { try? FileManager.default.removeItem(atPath: path) }
         try "4242\n".write(toFile: path, atomically: true, encoding: .utf8)
         #expect(!InstanceLock.isHeld(path), "a crashed holder's file: the lock went with its process")
-        let taken = try #require(InstanceLock.take(path))
+        let taken = try #require(try InstanceLock.take(path))
         #expect(InstanceLock.holder(path) == ProcessInfo.processInfo.processIdentifier)
         taken.release()
     }
 
+    /// NCH's check of #537: a lock that can't be opened held nothing and
+    /// let the copy run its server unguarded. It fails closed now: not
+    /// held, and taking it throws, so the copy runs no server.
+    @Test func aLockThatCantBeOpenedFailsClosed() throws {
+        let path = path()
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        // A folder where the file should be: open(2) refuses it.
+        try FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)
+        #expect(!InstanceLock.isHeld(path), "not held: nobody holds it")
+        #expect(throws: InstanceLock.Unavailable.self, "and not taken: never a lock that holds nothing") {
+            _ = try InstanceLock.take(path)
+        }
+        let missing = path + "/no/such/folder/visor.lock"
+        #expect(throws: InstanceLock.Unavailable.self) { _ = try InstanceLock.take(missing) }
+    }
+
     @Test func itsInTheUsersTemporaryFolder() {
         #expect(InstanceLock.path(bundleID: "com.LoganShire.Visor", temporary: "/var/folders/xy/T") == "/var/folders/xy/T/com.LoganShire.Visor.instance.lock")
+    }
+}
+
+/// NCH's check of #537: an update watch's lock left behind, its pid since
+/// reused by another process, held the hand-back up for a whole watch. Its
+/// holder must have started when the lock says its watcher did.
+@Suite(.serialized) struct RelaunchWatchHolderTests {
+    /// A process running now, for as long as the test needs it.
+    private func running() throws -> Process {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sleep")
+        process.arguments = ["30"]
+        try process.run()
+        return process
+    }
+
+    @Test func aWatcherThatStartedWhenItsLockSaysHoldsIt() throws {
+        let watcher = try running()
+        defer { watcher.terminate() }
+        let now = Int(Date().timeIntervalSince1970)
+        let started = try #require(RelaunchWatchHolder.startTime(watcher.processIdentifier), "the system says when it started")
+        #expect(abs(started - now) <= 5)
+        #expect(RelaunchWatchHolder.remaining("\(watcher.processIdentifier) \(now)\n", now: now) != nil, "its watch is waited for")
+    }
+
+    @Test func aReusedPidHoldsNothing() throws {
+        let other = try running()
+        defer { other.terminate() }
+        let now = Int(Date().timeIntervalSince1970)
+        // The lock says its watcher started an hour ago; the process with
+        // that pid now started just now: another process.
+        let lock = "\(other.processIdentifier) \(now - 3_600)\n"
+        #expect(RelaunchWatchLock.remaining(lock, now: now, isRunning: { _ in true }) != nil, "a live pid alone would have held it")
+        #expect(RelaunchWatchHolder.remaining(lock, now: now) == nil, "it's stale: not waited for")
+        #expect(!RelaunchWatchHolder.isWatcher(other.processIdentifier, recorded: now - 3_600))
+    }
+
+    @Test func aGoneWatcherHoldsNothing() {
+        #expect(RelaunchWatchHolder.remaining("4242 1795000000", now: 1_795_000_100, started: { _ in nil }) == nil)
+        #expect(RelaunchWatchHolder.remaining(nil, now: 0) == nil)
+        #expect(RelaunchWatchHolder.remaining("nonsense", now: 0) == nil)
     }
 }

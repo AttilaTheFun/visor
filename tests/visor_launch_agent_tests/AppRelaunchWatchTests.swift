@@ -14,6 +14,7 @@ import Foundation
 import Glibc
 #endif
 import Testing
+import VisorLaunchAgent
 import VisorServer
 
 @Suite(.serialized) struct AppRelaunchWatchTests {
@@ -28,6 +29,9 @@ import VisorServer
         var answering: String { root + "/answering" }
         var started: String { root + "/started" }
         var lock: String { root + "/relaunch-watch.lock" }
+        var present: String { root + "/com.LoganShire.Visor.present" }
+        /// What the marker said as each start ran: "none", or its time.
+        var seen: String { root + "/seen" }
 
         init() throws {
             root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-app-watch-" + UUID().uuidString).path
@@ -62,8 +66,9 @@ import VisorServer
         /// The watch, launchd played: the app is the destination's
         /// executable, run in the background, its pid in a file; each start
         /// counted.
-        func watch(update: Bool, beforeUndo: String = "") -> AppRelaunchWatch {
-            let start = "echo x >> '\(started)'; ( '\(destination)/Contents/MacOS/Visor' >/dev/null 2>&1 & echo $! > '\(pidFile)' )"
+        func watch(update: Bool, beforeUndo: String = "", windowOpen: Bool = false) -> AppRelaunchWatch {
+            let start = "echo x >> '\(started)'; { cat '\(present)' 2>/dev/null || echo none; } >> '\(seen)'; rm -f '\(present)'; "
+                + "( '\(destination)/Contents/MacOS/Visor' >/dev/null 2>&1 & echo $! > '\(pidFile)' )"
             return AppRelaunchWatch(appPID: Self.gonePID(), destination: destination, backup: update ? backup : nil,
                                     install: update ? install(backup: backup) : "", start: start,
                                     stop: "\(beforeUndo)kill $(cat '\(pidFile)' 2>/dev/null) 2>/dev/null; rm -f '\(pidFile)'; sleep 0.2",
@@ -71,7 +76,8 @@ import VisorServer
                                     pid: "q=$(cat '\(pidFile)' 2>/dev/null); [ -n \"$q\" ] && kill -0 $q 2>/dev/null "
                                         + "&& ! grep -q '^State:.*Z' /proc/$q/status 2>/dev/null && echo $q",
                                     answers: "[ -f '\(answering)' ]", answersWhere: "at its socket file", note: note,
-                                    newVersion: "0.72.2", oldVersion: "0.72.1", seconds: 4, firstAnswer: 4, settle: 1, lock: lock)
+                                    newVersion: "0.72.2", oldVersion: "0.72.1", seconds: 4, firstAnswer: 4, settle: 1, lock: lock,
+                                    present: windowOpen ? present : nil)
         }
 
         /// A process that has ended: the app the watcher waits for.
@@ -209,6 +215,34 @@ import VisorServer
         #expect(output.contains("was left as it is"), "\(output)")
         #expect(scene.read(scene.destination + "/name") == "later", "the later update's bundle is untouched")
         #expect(scene.read(scene.backup + "/name") == "old", "and this watch's copy kept")
+    }
+
+    /// An update gives back the window it found (Logan, 25 Nov 2026): with
+    /// one open as the app went, the marker that has the app show it is
+    /// written just before each start; with none, nothing is, and the new
+    /// build keeps to the menu bar.
+    @Test func aWindowOpenAsTheAppWentIsShownAgain() throws {
+        let scene = try Scene()
+        defer { scene.cleanUp() }
+        try update(scene, newBody: scene.crashes)
+        let before = Int(Date().timeIntervalSince1970)
+        _ = try scene.run(scene.watch(update: true, windowOpen: true))
+        let seen = (scene.read(scene.seen) ?? "").split(separator: "\n").map(String.init)
+        #expect(seen.count == 2, "the new build's start, and the rollback's")
+        for time in seen {
+            let asked = try #require(AppAgentJob.askedAt(time), "the marker was there at each start: \(seen)")
+            #expect(asked >= before && AppAgentJob.showsWindow(fromAgent: true, askedAt: asked, now: Int(Date().timeIntervalSince1970)))
+        }
+    }
+
+    @Test func noWindowOpenKeepsTheNewBuildInTheMenuBar() throws {
+        let scene = try Scene()
+        defer { scene.cleanUp() }
+        try update(scene, newBody: scene.serves)
+        let output = try scene.run(scene.watch(update: true, windowOpen: false))
+        #expect(output.contains("stayed up"), "\(output)")
+        #expect(scene.read(scene.seen) == "none\n", "no marker at its start")
+        #expect(!AppAgentJob.showsWindow(fromAgent: true, askedAt: nil, now: Int(Date().timeIntervalSince1970)))
     }
 
     /// What the app's own watch asks on a Mac: the port from the new

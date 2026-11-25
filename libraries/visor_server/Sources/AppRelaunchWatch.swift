@@ -60,10 +60,15 @@ public struct AppRelaunchWatch: Sendable {
     /// The lock that keeps one watch at a time (RelaunchWatchLock); nil:
     /// none (a test's).
     public var lock: String?
+    /// The marker that has the app that's started show its window
+    /// (Visor.app's `<bundle id>.present`, AppAgentJob.showsWindow): the
+    /// time, written just before each start, when a window was open as the
+    /// app went; nil: none, and the app keeps to the menu bar.
+    public var present: String?
 
     public init(appPID: Int32, destination: String, backup: String?, install: String, accept: String = "", start: String, stop: String,
                 pid: String, answers: String, answersWhere: String, note: String, newVersion: String, oldVersion: String,
-                seconds: Int = 120, firstAnswer: Int = 600, settle: Int = 3, lock: String? = nil) {
+                seconds: Int = 120, firstAnswer: Int = 600, settle: Int = 3, lock: String? = nil, present: String? = nil) {
         self.appPID = appPID
         self.destination = destination
         self.backup = backup
@@ -81,6 +86,7 @@ public struct AppRelaunchWatch: Sendable {
         self.firstAnswer = firstAnswer
         self.settle = settle
         self.lock = lock
+        self.present = present
     }
 
     /// Shell: succeeds when the server's port answers `/api/hello` (any
@@ -105,7 +111,7 @@ public struct AppRelaunchWatch: Sendable {
         sleep 0.5
         \(install.isEmpty ? "" : install + "\n")\(accept.isEmpty ? "" : accept + "\n")installed=$(cat \(Self.quoted(destination))/Contents/MacOS/* 2>/dev/null | cksum)
         echo "$(date): starting \(newVersion)"
-        \(start)
+        \(starting)
         sleep \(settle)
         why=""; served=0; i=0; up=0; first=""
         while :; do
@@ -142,7 +148,7 @@ public struct AppRelaunchWatch: Sendable {
             return """
             echo "$(date): \(newVersion) did not come up ($why); starting it once more"
             \(stop)
-            \(start)
+            \(starting)
             """
         }
         let words = "Visor Server \(newVersion) did not stay up after the update ($why), so \(oldVersion) was put back."
@@ -157,8 +163,14 @@ public struct AppRelaunchWatch: Sendable {
         else
           echo "$(date): \(newVersion) did not stay up ($why), but \(destination) was left as it is: this watch's copy of \(oldVersion) is gone, or the bundle there isn't the one it installed"
         fi
-        \(start)
+        \(starting)
         """
+    }
+
+    /// Shell: the app started, its window asked for first when one was open.
+    private var starting: String {
+        guard let present else { return start }
+        return "date +%s > \(Self.quoted(present))\n\(start)"
     }
 
     /// The build it replaced, gone once the new one has stayed up (no

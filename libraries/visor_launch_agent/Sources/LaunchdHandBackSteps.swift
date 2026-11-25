@@ -45,8 +45,10 @@ public struct LaunchdHandBackSteps: ServerHandBackSteps {
     }
 
     public func watching() async -> Int? {
+        // Its holder must be the watcher that took it, not a process that
+        // reused its pid since (RelaunchWatchHolder).
         let text = try? String(contentsOfFile: lock, encoding: .utf8)
-        return RelaunchWatchLock.remaining(text, now: Int(Date().timeIntervalSince1970), isRunning: { kill($0, 0) == 0 })
+        return RelaunchWatchHolder.remaining(text, now: Int(Date().timeIntervalSince1970))
     }
 
     public func remove() async -> LaunchAgentJob.Action {

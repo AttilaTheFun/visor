@@ -110,14 +110,18 @@ public enum AppAgentJob {
     /// Whether the window shows at the launch (Logan, 25 Nov 2026: at login
     /// and after a crash, the menu bar alone):
     ///
-    /// | started by                                  | window |
-    /// |---------------------------------------------|--------|
-    /// | a person (the Finder, the Dock, `open`)     | yes    |
-    /// | launchd, at login or after a crash          | no     |
-    /// | launchd, handed a person's open (`askedAt`) | yes    |
+    /// | started by                                       | window |
+    /// |--------------------------------------------------|--------|
+    /// | a person (the Finder, the Dock, `open`)          | yes    |
+    /// | launchd, at login or after a crash               | no     |
+    /// | launchd, handed a person's open (`askedAt`)      | yes    |
+    /// | an update's relaunch, a window open (`askedAt`)  | yes    |
+    /// | an update's relaunch, no window open             | no     |
     ///
-    /// A person's open handed to launchd leaves a marker first, the time it
-    /// was written (`presentMarker`), which launchd's process reads and
+    /// A person's open handed to launchd, or an update's relaunch with a
+    /// window open (its watcher, just before it starts the app: AppRelauncher),
+    /// leaves a marker first, the time it was written (`presentMarker`),
+    /// which the process started (launchd's, or the watcher's open) reads and
     /// takes away; one older than `presentWithin` seconds (a hand-off that
     /// came to nothing), or from the future, says nothing.
     public static func showsWindow(fromAgent: Bool, askedAt: Int?, now: Int) -> Bool {
@@ -126,9 +130,10 @@ public enum AppAgentJob {
         return askedAt <= now && now - askedAt <= presentWithin
     }
 
-    /// How long a hand-off's marker holds: longer than a hand-off takes
-    /// (a registration afresh, about 20 seconds at most).
-    public static let presentWithin = 60
+    /// How long a marker holds: longer than a start through launchd takes
+    /// (a registration afresh, its refusals waited out: about two minutes
+    /// at most after an update).
+    public static let presentWithin = 180
 
     /// The marker of a person's open handed to launchd: beside the instance
     /// lock, in this user's temporary folder.

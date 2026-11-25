@@ -49,7 +49,7 @@ struct VisorMacApp: App {
         // for it: made here, or once the server agent is handed back
         // (LocalServer, MacServer).
         let agentMayBeThere = LocalServer.agentMayBeThere
-        let missing = MacServer.prepare(runsServer: !agentMayBeThere, client: true)
+        let missing = MacServer.prepare(runsServer: !agentMayBeThere && MacAppInstance.lockProblem == nil, client: true)
         MacServer.logToFile()
         // Started by launchd (at login, the Visor volume can come after it)
         // with the data on a volume that isn't mounted: it ends rather than

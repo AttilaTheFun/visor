@@ -634,9 +634,20 @@ longer a place it runs, and the `ServerAsAgent` default isn't read.
   `.suppressed`). A person's open shows it, and so does launchd's process
   a person's open was handed to: the opener writes a marker beside the
   lock (`<bundle id>.present`, the time) before it asks launchd, and
-  launchd's process reads it and takes it away; one older than a minute
-  says nothing. Opening Visor again while it runs shows the window, as
-  before (applicationShouldHandleReopen).
+  launchd's process reads it and takes it away; one older than three
+  minutes says nothing. An update's relaunch gives back the window it
+  found: with a window open as the app went, the watcher writes the same
+  marker just before each start (AppRelauncher, AppRelaunchWatch's
+  `present`); with none, the new build keeps to the menu bar. Opening
+  Visor again while it runs shows the window, as before
+  (applicationShouldHandleReopen).
+- **Failing closed** (NCH's check of #537): an instance lock that can't
+  be had at all (its file can't be opened or locked) has that copy run as
+  a client alone, with no server of its own, saying why in the menu,
+  Settings and the system log: it can't know it's the only one. A lock
+  left by an update's watch whose process id now names another process
+  (its start time, from the system, isn't when the lock says the watcher
+  started: RelaunchWatchHolder) holds the hand-back up for nothing.
 - **Quitting** (Quit Visor in the menu; ⌘Q in the window only closes it):
   the server ends its agents (`/api/quit`), then the app exits 0, which the
   agent leaves stopped until the next login or the next time Visor is

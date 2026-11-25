@@ -17,7 +17,8 @@ struct AppLifecycle: ServerLifecycle {
     /// it's there).
     private let relauncher = AppRelauncher(logPath: MacPlaces.log("visor-relaunch.log"),
                                            agent: AppRelauncher.Agent(label: AppAgentJob.label(bundleID: MacPlaces.own),
-                                                                      command: [AppAgentJob.command, "start"]))
+                                                                      command: [AppAgentJob.command, "start"],
+                                                                      presentMarker: AppAgentJob.presentMarker(bundleID: MacPlaces.own)))
 
     @MainActor
     func relaunch(installing build: String?, carrying sessions: String) -> String? {
