@@ -15,6 +15,10 @@
 // 7. Move Back with its conversation (the hand-back), into this
 //    computer's Claude folder, and the session carries on from it here.
 //
+// And its MCP from agent-proxy's pass-through (0.72.1): its harness given a
+// token of its agent's own, for MCP alone, over its stream; the pass-through
+// taking it as its session's while its agent runs, and no other.
+//
 // And its lifecycle: an agent that ends is started again, three quick ends
 // stop it, a container held stopped stops it, Stop Agent and Start Agent,
 // and a move refused, or one whose agent can't start coming straight back.
@@ -385,6 +389,67 @@ extension ServerTests {
         let tools = parseJSON(listing.json)?["result"]["tools"].array?.compactMap { $0["name"].string } ?? []
         #expect(tools.contains("send_message") && tools.contains("read_inbox") && tools.contains("list_sessions"))
         #expect(!tools.contains { $0.contains("__") }, "no passed-on tools: \(tools)")
+        wrapper.finish()
+    }
+
+    /// Its MCP from agent-proxy's pass-through (0.72.1): its harness asks its own stream for the headers to show it
+    /// (`visor-agent-host mcp-headers`, Claude's headersHelper, sends `visor/passThroughHeaders` through the wrapper),
+    /// and is given a fresh token of its agent's, for MCP alone: the pass-through takes it as its session's while its
+    /// agent runs, and it never opens the driver's Connect. An expired, forged or other session's token, a native
+    /// session's, another agent's, or one of an agent let go, is no one's.
+    @Test func itsHarnessIsGivenATokenOfItsOwnForThePassThrough() async throws {
+        let (started, wrapper, _) = try await placed("pass")
+        let agent = started.agent.agent
+        func ask(_ id: String) {
+            wrapper.send(.with { $0.mcp = .with {
+                $0.id = id
+                $0.json = #"{"jsonrpc":"2.0","id":"h","method":"visor/passThroughHeaders"}"#
+                $0.client = "helper"
+            } })
+        }
+        ask("w-headers")
+        let answer = try #require(await eventually { wrapper.down.first { $0.mcp.id == "w-headers" }?.mcp })
+        #expect(answer.client == "helper")
+        let parsed = try #require(parseJSON(answer.json))
+        #expect(parsed["id"].string == "h", "answered under the helper's own id")
+        let token = try #require(parsed["result"]["headers"]["X-Visor-Proxy"].string)
+        #expect(server.passThroughSession(for: token) == "pass")
+        guard case .success(let claims) = server.agentTokens.verify(token, as: .runnerAgent, agent: agent, scope: .mcp) else {
+            Issue.record("its token isn't its agent's")
+            return
+        }
+        #expect(claims.sub == "pass" && claims.scope == ["mcp"], "its session's, for MCP alone")
+        #expect(!token.isEmpty && started.agent.token != token, "a fresh one, not its wrapper's")
+        // The wrapper's own (its job's) is its agent's too.
+        #expect(server.passThroughSession(for: started.agent.token) == "pass")
+
+        // Never for Connect: shown as its agent's, it's refused.
+        let other = Wrapper()
+        let call = other.connect(port: port, token: token)
+        other.send(hello(agent, folder: started.agent.workingDirectory, session: "x"))
+        other.finish()
+        await call.value
+        #expect(other.state.withLock { $0.code } == .unauthenticated)
+
+        // No one's: expired, forged, another session's, a native session's, another agent's, nonsense.
+        let tokens = server.agentTokens
+        let kid = try #require(tokens.keys.current?.kid)
+        let forged = try JWT.sign(claims, key: Data(repeating: 7, count: 32), kid: kid)
+        for refused in [tokens.mint(.runnerAgent, session: "pass", agent: agent, scope: [.mcp], now: Date().addingTimeInterval(-7200)),
+                        forged,
+                        tokens.mint(.runnerAgent, session: "someone-else", agent: agent, scope: [.mcp]),
+                        tokens.mint(.session, session: "pass"),
+                        tokens.mint(.runnerAgent, session: "pass", agent: UUID().uuidString, scope: [.mcp]),
+                        "a.b.c", "sessions-token"] {
+            #expect(server.passThroughSession(for: refused) == nil, "\(refused)")
+        }
+
+        // Its agent let go: its token is no one's, and it's given none.
+        server.containerRunner.release(agent)
+        #expect(server.passThroughSession(for: token) == nil)
+        ask("w-again")
+        let again = try #require(await eventually { wrapper.down.first { $0.mcp.id == "w-again" }?.mcp })
+        #expect(parseJSON(again.json)?["error"]["code"].int == -32601, "\(again.json)")
         wrapper.finish()
     }
 

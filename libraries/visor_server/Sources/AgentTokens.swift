@@ -50,12 +50,16 @@ package final class AgentTokens {
     }
 
     /// A new token for `audience`, acting as `session` (and, for a runner's
-    /// agent, as `agent`), signed with the current key.
-    package func mint(_ audience: AgentTokenAudience, session: String, agent: String? = nil, now: Date = Date()) -> String {
+    /// agent, as `agent`), signed with the current key. `scope`: less than
+    /// the audience may do (a container agent's token for the MCP
+    /// pass-through: `.mcp` alone); never more.
+    package func mint(_ audience: AgentTokenAudience, session: String, agent: String? = nil, scope: [AgentTokenScope]? = nil,
+                      now: Date = Date()) -> String {
         let issued = Int(now.timeIntervalSince1970)
+        let allowed = scope.map { asked in audience.scope.filter { asked.contains($0) } } ?? audience.scope
         let claims = AgentTokenClaims(iss: issuer, aud: audience.rawValue, sub: session,
                                       agent: audience == .runnerAgent ? agent.map(Self.agentKey) : nil,
-                                      scope: audience.scope.map(\.rawValue), iat: issued, exp: issued + Int(lifetime(of: audience)),
+                                      scope: allowed.map(\.rawValue), iat: issued, exp: issued + Int(lifetime(of: audience)),
                                       jti: UUID().uuidString.lowercased())
         guard let current = keys.current else {
             VisorServer.log("agent tokens: none minted for \(session): \(keys.problem ?? "no signing key")")

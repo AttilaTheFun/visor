@@ -11,7 +11,9 @@
 // this server's driver (agent_protocol's AgentDriver, 127.0.0.1:7434); and
 // agent-proxy's authorities' certificates (GitHub's, at agentProxy's
 // `caCertificate` or the data folder's `agent-proxy/ca.pem`, and Anthropic's
-// beside it), which its guest trusts. The sessions placed in it (the server's
+// beside it), which its guest trusts; and the servers of agent-proxy's MCP
+// pass-through, for its Claude (the container's Claude folder on Sessions).
+// The sessions placed in it (the server's
 // container runner) have their agent-wrappers started in it, and keep it
 // from its idle stop.
 
@@ -42,6 +44,7 @@ final class MacSessionsContainer: SessionsContainer {
         // In the app group's container instead, when the sockets go there.
         let group = MacPlaces.groupPlaces
         let volumes = DiskVolumes.locate(dataDirectory: status)
+        let sessionsFolder = volumes.sessions.path
         let images = ContainerizationBackend()
         let token = KeptSecret(AgentProxySettings.relayTokenName, in: ServerPlatform.current.secrets)
         let resources = Bundle.main.resourceURL
@@ -65,7 +68,8 @@ final class MacSessionsContainer: SessionsContainer {
             assets: images,
             backend: ContainerizationMachines(images: images),
             configuration: {
-                Self.configuration(kept.current, manifest: manifest, sources: DiskVolumes.locate(dataDirectory: status).sources.readyPath)
+                Self.configuration(kept.current, manifest: manifest, sources: DiskVolumes.locate(dataDirectory: status).sources.readyPath,
+                                   sessions: sessionsFolder)
             },
             placedSessions: placed,
             log: { ServerPlatform.current.log($0) }))
@@ -73,8 +77,10 @@ final class MacSessionsContainer: SessionsContainer {
 
     /// The settings as the engine takes them, for this Mac: the checkouts'
     /// folder the setting's, else the Sources volume when it's mounted
-    /// (`sources`), shared at the same path.
-    static func configuration(_ settings: ServerSettings, manifest: ContainerManifest?, sources: String?) -> ContainerEngineConfiguration {
+    /// (`sources`), shared at the same path; and agent-proxy's MCP
+    /// pass-through's servers for the Claude folder on Sessions (`sessions`).
+    static func configuration(_ settings: ServerSettings, manifest: ContainerManifest?, sources: String?,
+                              sessions: String) -> ContainerEngineConfiguration {
         let container = settings.container ?? ContainerSettings()
         let info = ProcessInfo.processInfo
         return ContainerEngineConfiguration(
@@ -84,7 +90,9 @@ final class MacSessionsContainer: SessionsContainer {
             idleMinutes: container.idleMinutes,
             image: ContainerAssets.image(manifest: manifest, override: container.imageDigest),
             relayPort: settings.agentProxy?.relayPort,
-            checkouts: container.checkouts ?? sources)
+            checkouts: container.checkouts ?? sources,
+            claudeMCP: ContainerClaudeMCP(folder: VisorServer.containerClaudeFolder(sessions: sessions),
+                                          servers: VisorServer.containerMCPServers(settings.agentProxy)))
     }
 
     func status() async -> ContainerStatus { await engine.status() }

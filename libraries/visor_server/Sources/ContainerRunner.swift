@@ -163,10 +163,40 @@ package final class ContainerRunner: DrivenAgentDirectory {
         tokens.expiry(of: token)
     }
 
+    // MARK: - The MCP pass-through
+
+    /// A token for `agent`'s calls to agent-proxy's MCP pass-through, which
+    /// its harness asks its wrapper's stream for (DrivenMCP): an hour's, as
+    /// its session, for MCP alone, so it can't Connect as the agent. Nil for
+    /// an agent not running here (gone, or let go).
+    package func passThroughToken(for agent: String) -> String? {
+        let id = Self.key(agent)
+        guard let placed = agents[id], !placed.released else { return nil }
+        let token = tokens.mint(.runnerAgent, session: placed.session, agent: id, scope: [.mcp])
+        return token.isEmpty ? nil : token
+    }
+
+    /// The session a call to the MCP pass-through acts as, when `token` is
+    /// one of this runner's agents' own: this server's, for
+    /// `visor.runner-agent`, unexpired, allowed MCP, naming an agent that
+    /// runs here now (not let go) and that agent's session, which is live.
+    /// Nil for any other: another server's, forged, expired, a native
+    /// session's, another session's, or one of an agent that has gone.
+    package func passThroughSession(for token: String, now: Date = Date()) -> String? {
+        guard let parts = JWT.parts(of: token), let named = try? JSONDecoder().decode(AgentTokenClaims.self, from: parts.payload),
+              let agent = named.agent else { return nil }
+        let id = Self.key(agent)
+        guard let placed = agents[id], !placed.released,
+              case .success(let claims) = tokens.verify(token, as: .runnerAgent, agent: id, scope: .mcp, now: now),
+              claims.sub == placed.session, liveSession(claims.sub) == true else { return nil }
+        return claims.sub
+    }
+
     package var tokenRefreshLead: TimeInterval { tokens.runnerAgentLifetime / 6 }
 
     /// Always: the container is the agent's sandbox, and its session gets
-    /// Visor's own MCP tools alone.
+    /// Visor's own MCP tools alone from the driver (the servers passed on
+    /// come from agent-proxy's pass-through: passThroughToken).
     package func runsInContainer(_ agent: String) -> Bool { true }
 
     /// An agent's id as it's kept: in lower case, however its wrapper

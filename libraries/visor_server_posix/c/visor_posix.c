@@ -423,6 +423,11 @@ void visor_shutdown_write(int socket) {
     shutdown(socket, SHUT_WR);
 }
 
+void visor_set_receive_timeout(int socket, int seconds) {
+    struct timeval patience = {seconds, 0};
+    setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, &patience, sizeof patience);
+}
+
 void visor_ignore_broken_pipes(void) {
     signal(SIGPIPE, SIG_IGN);
 }

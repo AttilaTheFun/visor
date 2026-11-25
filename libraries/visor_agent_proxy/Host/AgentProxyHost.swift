@@ -42,6 +42,13 @@
 // pass-through's `/mcp/gh` (GitHubMCP) where `mcp` has no upstream named
 // gh; with `gh` and no `mcp`, the pass-through listens on its own port
 // (7439) for it alone.
+//
+// From 0.72.1, with the pass-through and the relay both run, the relay has
+// a dial-in of agent-proxy's own, `mcp.agent.internal:80`, to the
+// pass-through's port (DialIn.passThrough): the Sessions container's agents
+// reach it there, each with its own token (`agentSession`: where the
+// container runs, the server in this same process says whose a token is),
+// never `mcp/token`.
 
 import Crypto
 import Foundation
@@ -119,8 +126,12 @@ public enum AgentProxyHost {
     /// agent-proxy started from `settings`: each listener configured, and
     /// what couldn't listen said. Nil when nothing is configured.
     /// `settingsFile` is read again at each dial-in's CONNECT, so a dial-in
-    /// added needs no restart.
+    /// added needs no restart. `agentSession`: the session a container
+    /// agent's own token acts as, while its agent runs (the server's, where
+    /// agent-proxy runs inside the server that runs the container); none:
+    /// the pass-through takes the sessions' token alone.
     public static func start(_ settings: AgentProxySettings, places: Places, secrets: any SecretStore, version: String,
+                             agentSession: (@Sendable (String) async -> String?)? = nil,
                              log: @escaping @Sendable (String) -> Void) -> Running? {
         guard settings.relayPort != nil || settings.mcp != nil || settings.gh != nil else {
             log("agentProxy has neither `mcp`, `gh` nor `relayPort`: nothing to serve")
@@ -138,7 +149,8 @@ public enum AgentProxyHost {
         }
         var nativeMCP: NativeMCPProxy?
         if settings.mcp != nil || settings.gh != nil {
-            nativeMCP = startMCP(settings.mcp ?? AgentProxySettings.MCP(), gh: settings.gh, places: places, secrets: secrets, log: log)
+            nativeMCP = startMCP(settings.mcp ?? AgentProxySettings.MCP(), gh: settings.gh, places: places, secrets: secrets,
+                                 agentSession: agentSession, log: log)
             failed = failed || nativeMCP == nil
         }
         let serving = [relay == nil ? nil : "the relay listener", nativeMCP == nil ? nil : "the MCP pass-through"].compactMap { $0 }
@@ -200,9 +212,11 @@ public enum AgentProxyHost {
         }
         let resolver = DNSForwarder(routes: { [dns] in dns.routes() }, exchange: NIODNSExchange(), log: log)
         let initial = dialIns(settings, log: log)
+        // The pass-through's own, as it was started (a port changed takes a restart, as the pass-through's does).
+        let own = passThroughDialIn(settings).map { [$0] } ?? []
         let settingsFile = places.settingsFile
         guard let relay = RelayListener(port: port, relayToken: { relayToken.value }, proxy: proxy, dns: resolver,
-                                        dialIns: { (try? configured(at: settingsFile)).flatMap { $0 }.map { Self.dialIns($0, log: nil) } ?? initial },
+                                        dialIns: { ((try? configured(at: settingsFile)).flatMap { $0 }.map { Self.dialIns($0, log: nil) } ?? initial) + own },
                                         maxConnections: maxConnections, maxConnectionsPerLease: maxConnectionsPerLease, log: log) else {
             log("loopback port \(port) can't be had for the relay listener (another listener on it?)")
             interceptor?.stop()
@@ -215,7 +229,7 @@ public enum AgentProxyHost {
         }
         log("the relay listener is on loopback port \(port), answering DNS, logging egress to \(egressPath)"
             + (listed.isEmpty ? ", egress to the internet alone" : ", egress to the internet and \(listed.joined(separator: ", "))")
-            + initial.map { ", \($0.host):\($0.port) to loopback port \($0.hostPort)" }.joined()
+            + (initial + own).map { ", \($0.host):\($0.port) to loopback port \($0.hostPort)" }.joined()
             + (githubToken.isSet || app() != nil ? ""
                 : "; no auth token for GitHub (agent-proxy secret-set github-token, or github-app/key and github-app/id): what needs one is refused"))
         return (relay, interceptor, anthropic)
@@ -224,6 +238,7 @@ public enum AgentProxyHost {
     /// The native sessions' MCP pass-through, with gh_mcp answered in it
     /// when `gh` is set and no upstream is named gh.
     private static func startMCP(_ mcp: AgentProxySettings.MCP, gh: AgentProxySettings.GH?, places: Places, secrets: any SecretStore,
+                                 agentSession: (@Sendable (String) async -> String?)?,
                                  log: @escaping @Sendable (String) -> Void) -> NativeMCPProxy? {
         guard (1...65535).contains(mcp.port) else {
             log("agentProxy.mcp's port \(mcp.port) isn't a port: no MCP pass-through")
@@ -248,7 +263,7 @@ public enum AgentProxyHost {
                                          secret: { upstream, header in
                                              secrets.get(AgentProxySettings.secretKey(AgentProxySettings.mcpSecretName(upstream: upstream,
                                                                                                                        header: header)))
-                                         }, inProcess: inProcess, inProcessWithheld: inProcessWithheld) else {
+                                         }, inProcess: inProcess, inProcessWithheld: inProcessWithheld, agentSession: agentSession) else {
             log("loopback port \(mcp.port) can't be had for the MCP pass-through (another listener on it?)")
             return nil
         }
@@ -256,20 +271,36 @@ public enum AgentProxyHost {
         let served = upstreams.map { "/mcp/\($0.name)" } + inProcess.keys.sorted().map { "/mcp/\($0) (in-process)" }
         log("the MCP pass-through is on loopback port \(mcp.port): "
             + (served.isEmpty ? "no upstreams" : served.joined(separator: ", "))
-            + (token.isSet ? "" : "; no sessions' token yet (agent-proxy secret-set mcp/token): every call refused"))
+            + (token.isSet ? "" : "; no sessions' token yet (agent-proxy secret-set mcp/token): every native session's call refused")
+            + (agentSession == nil ? "" : "; the Sessions container's agents each with a token of its own"))
         return proxy
     }
 
     /// The settings' dial-ins, each name a DNS label and each port one; any
-    /// other passed over (said in the log, at the start).
+    /// other passed over (said in the log, at the start), and so is one named
+    /// as the pass-through's own (`mcp`).
     static func dialIns(_ settings: AgentProxySettings, log: (@Sendable (String) -> Void)?) -> [DialIn] {
         settings.dialIns.compactMap { given in
             guard DialIn.isName(given.name), (1...65535).contains(given.port), (1...65535).contains(given.hostPort) else {
                 log?("dial-in \(given.name):\(given.port) passed over: a name of lower-case letters, digits and hyphens, and ports from 1 to 65535")
                 return nil
             }
+            guard given.name != DialIn.passThroughName else {
+                log?("dial-in \(given.name):\(given.port) passed over: \(given.name).\(DialIn.domain) is the MCP pass-through's own")
+                return nil
+            }
             return DialIn(name: given.name, port: given.port, hostPort: given.hostPort)
         }
+    }
+
+    /// The pass-through's own dial-in (`mcp.agent.internal:80`, to its
+    /// loopback port), where `settings` run the pass-through on a port; nil
+    /// otherwise. Only beside the relay listener: it's the relay's.
+    static func passThroughDialIn(_ settings: AgentProxySettings) -> DialIn? {
+        guard settings.mcp != nil || settings.gh != nil else { return nil }
+        let port = (settings.mcp ?? AgentProxySettings.MCP()).port
+        guard (1...65535).contains(port) else { return nil }
+        return DialIn.passThrough(to: port)
     }
 
     // MARK: The settings, as agent-proxy reads them

@@ -11,7 +11,9 @@
 //   server agent's (`Visor --server`, until then): folded in, as on Linux.
 //   The job is stopped and removed first, then the proxy started inside the
 //   server when `agentProxy` is set, and started again when it changes
-//   (`refold`: the Sessions container turned on gives it a relay port).
+//   (`refold`: the Sessions container turned on gives it a relay port). Here,
+//   beside the Sessions container, its MCP pass-through takes each container
+//   agent's own token too, the server saying whose it is.
 
 import Foundation
 import VisorAgentProxyHost
@@ -47,6 +49,9 @@ enum MacAgentProxy {
     /// it's folded in.
     private static var folded: AgentProxyHost.Running?
     private static var foldedDigest: String?
+    /// Whose a container agent's token is, as the server in this process
+    /// says (VisorServer.passThroughSession), once it's folded in.
+    private static var agentSession: (@Sendable (String) async -> String?)?
 
     /// In the server: the job gone (its ports are the proxy's here),
     /// then the proxy started in this process, with the server's secrets,
@@ -56,9 +61,11 @@ enum MacAgentProxy {
         await AgentProxyJob.settle(bundleID: MacPlaces.own, version: VisorMacApp.bundleVersion, places: places, folded: true,
                                    logs: MacPlaces.folders.logs.path, log: { ServerPlatform.current.log($0) })
         foldedDigest = AgentProxyHost.digest(server.settings.agentProxy)
+        let session: @Sendable (String) async -> String? = { token in await server.passThroughSession(for: token) }
+        agentSession = session
         guard let settings = server.settings.agentProxy else { return }
         folded = AgentProxyHost.start(settings, places: places, secrets: ServerPlatform.current.secrets, version: VisorMacApp.bundleVersion,
-                                      log: log)
+                                      agentSession: session, log: log)
     }
 
     /// In the server, once folded in: started again with `settings`
@@ -72,6 +79,6 @@ enum MacAgentProxy {
         guard let settings else { return }
         ServerPlatform.current.log("agent-proxy: its settings changed: started again")
         folded = AgentProxyHost.start(settings, places: places, secrets: ServerPlatform.current.secrets, version: VisorMacApp.bundleVersion,
-                                      log: { ServerPlatform.current.log("agent-proxy: \($0)") })
+                                      agentSession: agentSession, log: { ServerPlatform.current.log("agent-proxy: \($0)") })
     }
 }

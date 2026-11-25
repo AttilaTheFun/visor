@@ -46,7 +46,8 @@ extension VisorServer {
             if envelope.mode == "mcp_tools" {
                 reply.text = "[]"
             } else {
-                reply.error = "This session's agent runs in a container: it gets Visor's own tools, not the MCP servers this computer passes on."
+                reply.error = "This session's agent runs in a container: it gets Visor's own tools here, Nimbus's MCP from "
+                    + "agent-proxy's pass-through (mcp.agent.internal), and GitHub as the gh CLI."
             }
             return reply
         }
