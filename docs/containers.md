@@ -456,7 +456,11 @@ environment), so none goes in.
   App's on GitHub, as its pushes are. agent-proxy finds it (`GET /app` for
   the slug, `GET /users/<slug>%5Bbot%5D` for the id) once for the App's
   secrets, at its start, and the server asks it as each agent starts
-  (waiting ten seconds at most). Without the App (the auth token alone), or
+  (waiting ten seconds at most). The agents carried on at the server's
+  start wait for agent-proxy too, folded in just after it (0.73: before,
+  they had none): the server is told before it starts that agent-proxy is
+  to come, and the ten seconds cover its fold-in and its answer. Without
+  the App (the auth token alone), or
   when GitHub didn't answer, none is set, as before, and agent-proxy's log
   says why, once: `agent-proxy: github: no git identity for container
   agents: <why>`; such an agent sets its own (`git config user.name` and

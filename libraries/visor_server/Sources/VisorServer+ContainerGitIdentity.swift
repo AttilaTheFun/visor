@@ -15,6 +15,14 @@
 // it's kept, so it's there at once); past that, it starts without one,
 // said, and the finding goes on for the next. Sessions on this Mac keep
 // its user's own git config.
+//
+// agent-proxy is folded in after the server's start (MacServer.run), and
+// the container's sessions are carried on at it: the agents started then
+// had none (0.72.3, Container Test: "agent-proxy: github: commits as …"
+// logged just after they started). So the server is told before it starts
+// that the asking is to come (`containerGitIdentityExpected`), and a start
+// before it's set waits for it, its fold-in and its answer within the same
+// ten seconds.
 
 import Foundation
 
@@ -34,29 +42,71 @@ public struct ContainerGitIdentity: Equatable, Sendable {
     }
 }
 
+/// A start waiting for `containerGitIdentity` to be set: given it once
+/// it is, or none once its wait is over (`timer`).
+struct ContainerGitIdentityWaiter {
+    let continuation: CheckedContinuation<VisorServer.ContainerGitIdentityAsk?, Never>
+    let timer: Task<Void, Never>
+}
+
 extension VisorServer {
-    /// How long an agent's start waits for its git identity.
-    nonisolated static let containerGitIdentityWait: Duration = .seconds(10)
+    /// How the agent-proxy in this process is asked.
+    typealias ContainerGitIdentityAsk = @Sendable () async -> ContainerGitIdentity?
 
     /// Who a container agent starting now commits as: agent-proxy's
-    /// answer, or none once `containerGitIdentityWait` has gone by (said).
+    /// answer, waited for while it's expected and not yet folded in, or
+    /// none once `containerGitIdentityWait` has gone by (said).
     func containerGitIdentityForStart() async -> ContainerGitIdentity? {
-        guard let ask = containerGitIdentity else { return nil }
+        guard containerGitIdentity != nil || containerGitIdentityExpected else { return nil }
+        let wait = containerGitIdentityWait
+        let clock = ContinuousClock()
+        let began = clock.now
+        let said = "container: no git identity from agent-proxy within \(wait): this agent starts without one"
+        guard let ask = await containerGitIdentitySet(within: wait) else {
+            Self.log(said)
+            return nil
+        }
+        let left = wait - (clock.now - began)
         let (answers, answering) = AsyncStream.makeStream(of: ContainerGitIdentity?.self)
         // Asked on its own: one past the wait still ends, and is kept for the next.
         Task {
             answering.yield(await ask())
             answering.finish()
         }
-        let wait = Self.containerGitIdentityWait
         let timer = Task {
-            try await Task.sleep(for: wait)
-            Self.log("container: no git identity from agent-proxy within \(wait): this agent starts without one")
+            try await Task.sleep(for: left)
+            Self.log(said)
             answering.yield(nil)
             answering.finish()
         }
         defer { timer.cancel() }
         for await answer in answers { return answer }
         return nil
+    }
+
+    /// `containerGitIdentity`, at once when it's set; else once it is, or
+    /// none if it isn't within `wait`.
+    private func containerGitIdentitySet(within wait: Duration) async -> ContainerGitIdentityAsk? {
+        if let containerGitIdentity { return containerGitIdentity }
+        let key = UUID()
+        return await withCheckedContinuation { continuation in
+            let timer = Task { @MainActor [weak self] in
+                try? await Task.sleep(for: wait)
+                guard !Task.isCancelled else { return }
+                self?.containerGitIdentityWaiters.removeValue(forKey: key)?.continuation.resume(returning: nil)
+            }
+            containerGitIdentityWaiters[key] = ContainerGitIdentityWaiter(continuation: continuation, timer: timer)
+        }
+    }
+
+    /// `containerGitIdentity` set: the starts waiting for it go on, each
+    /// asking it.
+    func containerGitIdentityGiven(_ ask: @escaping ContainerGitIdentityAsk) {
+        let waiting = containerGitIdentityWaiters.values
+        containerGitIdentityWaiters = [:]
+        for waiter in waiting {
+            waiter.timer.cancel()
+            waiter.continuation.resume(returning: ask)
+        }
     }
 }
