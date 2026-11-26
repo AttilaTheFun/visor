@@ -39,7 +39,7 @@ extension VisorServer {
             client.clientID = envelope.client
             // An address locked out for wrong passwords is told so, whatever
             // it shows (PasswordThrottle).
-            if !client.trusted, let wait = passwordThrottle.retryAfter(client.peer) {
+            if !client.trusted, let wait = passwordThrottle.retryAfter(client.clientAddress) {
                 Self.log("\(describe(client)) was refused: its address is locked out for wrong passwords")
                 client.sendLast(.error(Self.lockedOut(retryAfter: wait)))
                 return
@@ -54,11 +54,11 @@ extension VisorServer {
             guard client.trusted || vouched || byPassword || byToken || byAdminToken else {
                 Self.log("\(describe(client)) was refused: wrong password or token")
                 let showed = !(envelope.password ?? "").isEmpty || !(envelope.token ?? "").isEmpty
-                if !settings.asksNothing, showed { wrongPassword(from: client.peer) }
+                if !settings.asksNothing, showed { wrongPassword(from: client.clientAddress) }
                 client.sendLast(.error("Wrong password"))
                 return
             }
-            if byPassword || byToken || byAdminToken { passwordThrottle.succeeded(client.peer) }
+            if byPassword || byToken || byAdminToken { passwordThrottle.succeeded(client.clientAddress) }
             client.authenticated = true
             if vouched, let front { client.user = front.person(client.headers).id }
             Self.log("\(describe(client)) signed in\(client.user.map { " as \($0)" } ?? "") (\(signedIn) signed in now)")

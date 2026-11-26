@@ -83,9 +83,9 @@ public final class HTTPServer {
     }
 
     private func write(_ response: HTTPResponse, to stream: any ByteStream) {
-        let reason = [200: "OK", 202: "Accepted", 204: "No Content", 400: "Bad Request", 401: "Unauthorized", 404: "Not Found", 405: "Method Not Allowed",
-                      409: "Conflict", 410: "Gone", 413: "Content Too Large", 429: "Too Many Requests", 500: "Internal Server Error",
-                      503: "Service Unavailable"][response.status] ?? "OK"
+        let reason = [200: "OK", 202: "Accepted", 204: "No Content", 400: "Bad Request", 401: "Unauthorized", 403: "Forbidden", 404: "Not Found",
+                      405: "Method Not Allowed", 409: "Conflict", 410: "Gone", 413: "Content Too Large", 429: "Too Many Requests",
+                      500: "Internal Server Error", 503: "Service Unavailable"][response.status] ?? "OK"
         let body = Data(response.body.utf8)
         var head = "HTTP/1.1 \(response.status) \(reason)\r\n"
         head += "Content-Type: application/json\r\nContent-Length: \(body.count)\r\nConnection: close\r\n"

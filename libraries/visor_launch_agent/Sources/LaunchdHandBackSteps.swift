@@ -23,12 +23,17 @@ public struct LaunchdHandBackSteps: ServerHandBackSteps {
     /// The update watch's lock file (RelaunchWatchLock.url).
     public let lock: String
     public let port: UInt16
+    /// The running app's version ("0.72.2 (3)": VisorMacApp.bundleVersion),
+    /// for the log's word of why the agent goes. 0.72.1 and 0.72.2 said
+    /// "0.72.1", a constant, whatever build ran (NCH's lease test of
+    /// 0.72.2).
+    public let version: String
     /// `/api/quit`, as the app's client: what went wrong, or nil.
     public let askToQuit: @Sendable () async -> String?
     public let log: @Sendable (String) -> Void
 
     public init(job: LaunchAgentJob, bundleID: String, executable: String? = LaunchAgentJob.ownExecutable, sockets: [String], lock: String,
-                port: UInt16 = Envelope.defaultPort, askToQuit: @escaping @Sendable () async -> String?,
+                port: UInt16 = Envelope.defaultPort, version: String, askToQuit: @escaping @Sendable () async -> String?,
                 log: @escaping @Sendable (String) -> Void) {
         self.job = job
         self.bundleID = bundleID
@@ -36,6 +41,7 @@ public struct LaunchdHandBackSteps: ServerHandBackSteps {
         self.sockets = sockets
         self.lock = lock
         self.port = port
+        self.version = version
         self.askToQuit = askToQuit
         self.log = log
     }
@@ -53,7 +59,7 @@ public struct LaunchdHandBackSteps: ServerHandBackSteps {
 
     public func remove() async -> LaunchAgentJob.Action {
         await ServerAgentService.settle(wanted: false, job: job, bundleID: bundleID, executable: executable,
-                                        why: "the server runs in the app (0.72.1)", log: log)
+                                        why: "the server runs in the app\(version.isEmpty ? "" : " (\(version))")", log: log)
     }
 
     public func serverAnswers() async -> Bool {

@@ -20,7 +20,8 @@ final class RelaunchScriptSyntaxTests: XCTestCase {
         AppRelaunchCommands(executable: destination + "/Contents/MacOS/Visor",
                             open: AppRelaunchCommands.opening(destination, sessions: "all", withoutAgent: true),
                             agent: .init(label: "com.LoganShire.Visor.app", command: ["app-agent", "start"],
-                                         instanceLock: "/var/folders/xy/abc/T/com.LoganShire.Visor.instance.lock"))
+                                         instanceLock: "/var/folders/xy/abc/T/com.LoganShire.Visor.instance.lock",
+                                         quitMarker: "/var/folders/xy/abc/T/com.LoganShire.Visor.quit"))
     }
 
     /// The app's watch as AppRelauncher builds it: an update or a plain
@@ -31,6 +32,7 @@ final class RelaunchScriptSyntaxTests: XCTestCase {
                                 install: update ? AppRelaunchCommands.replacing(destination, with: "/Users/me/Downloads/Visor 0.72.2/Visor.app",
                                                                                 keptAt: backup, sessions: "all") : "",
                                 accept: AppRelaunchCommands.accept(destination), start: commands.start, stop: commands.stop, pid: commands.pid,
+                                quit: commands.quit,
                                 answers: serving ? AppRelaunchWatch.portAnswers() : AppRelaunchWatch.socketAnswers("/Volumes/Visor/run/server.sock"),
                                 answersWhere: serving ? "on port 7433" : "at its socket file", note: support + "/relaunch-rollback.txt",
                                 newVersion: "0.72.2", oldVersion: "0.72.1", lock: support + "/relaunch-watch.lock",
@@ -60,7 +62,7 @@ final class RelaunchScriptSyntaxTests: XCTestCase {
     /// bash 3.2 went wrong.
     func testEachCommandReadsInsideASubstitution() throws {
         let each = commands
-        for (name, words) in [("start", each.start), ("stop", each.stop), ("pid", each.pid), ("holder", each.holder),
+        for (name, words) in [("start", each.start), ("stop", each.stop), ("pid", each.pid), ("holder", each.holder), ("quit", each.quit),
                               ("appProcesses", each.appProcesses)] {
             try assertReads("x=$(\(words))\necho \"$x\"\n", name)
         }
