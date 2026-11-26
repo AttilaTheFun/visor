@@ -10,8 +10,11 @@
 // - AGENT_DRIVER_URL http://127.0.0.1:7434: relay-client's forward on the
 //   guest's loopback to the driver link, so the same as on the Mac and
 //   never through agent-proxy;
-// - AGENT_TOKEN, the agent's JWT, there alone (never in AGENT_JOB or argv;
-//   the wrapper unsets it once read);
+// - the agent's JWT on the wrapper's standard input, AGENT_TOKEN_FD=0
+//   (agent_protocol#17): the exec writes it and closes the input, and the
+//   wrapper reads it to the end. Never in an environment (whose start any
+//   process of the user reads, at /proc/<pid>/environ: the agents all run
+//   as root), AGENT_JOB, argv or a file;
 // - AGENT_SESSIONS_DIR, Sessions (a job with no folder works in
 //   `<Sessions>/Claude/<id>`), and AGENT_SOURCES_DIR when given;
 // - TMPDIR /tmp: the wrapper's MCP socket (agent-mcp-*/mcp.sock, which
@@ -31,8 +34,8 @@ extension ContainerEngine {
     /// The variables the wrapper's contract is made of: a session's own
     /// `environment` never sets these.
     public static let wrapperContract: Set<String> = [
-        "AGENT_ID", "AGENT_JOB", "AGENT_DISPATCHER_URL", "AGENT_DRIVER_URL", "AGENT_RUNNER", "AGENT_TOKEN", "AGENT_SESSIONS_DIR",
-        "AGENT_SOURCES_DIR", "AGENT_WRAPPER_CLAUDE", "AGENT_MCP_SOCKET",
+        "AGENT_ID", "AGENT_JOB", "AGENT_DISPATCHER_URL", "AGENT_DRIVER_URL", "AGENT_RUNNER", "AGENT_TOKEN", "AGENT_TOKEN_FD",
+        "AGENT_TOKEN_FILE", "AGENT_SESSIONS_DIR", "AGENT_SOURCES_DIR", "AGENT_WRAPPER_CLAUDE", "AGENT_MCP_SOCKET",
     ]
 
     /// `session`'s agent-wrapper started in the container (started first
@@ -48,9 +51,10 @@ extension ContainerEngine {
     }
 
     /// What `startWrapper` runs: agent-wrapper's argv, its environment over
-    /// the image's, and its working folder (the session's, where it's under
-    /// Sessions or the checkouts' folder, the guest seeing it at the same
-    /// path; else the image's, and the wrapper makes the folder).
+    /// the image's, its token as its standard input, and its working folder
+    /// (the session's, where it's under Sessions or the checkouts' folder,
+    /// the guest seeing it at the same path; else the image's, and the
+    /// wrapper makes the folder).
     public nonisolated static func wrapperExec(_ session: ContainerSession, sessions: String,
                                                checkouts: String? = nil) -> ContainerExec {
         var environment = session.environment.filter { !wrapperContract.contains($0.key) }
@@ -63,13 +67,17 @@ extension ContainerEngine {
         environment["AGENT_SESSIONS_DIR"] = sessions
         if let reportsTo = session.reportsTo, !reportsTo.isEmpty { environment["AGENT_DISPATCHER_URL"] = reportsTo }
         if let sources = session.sourcesDirectory, !sources.isEmpty { environment["AGENT_SOURCES_DIR"] = sources }
-        if let token = session.token, !token.isEmpty { environment["AGENT_TOKEN"] = token }
+        var input: Data?
+        if let token = session.token, !token.isEmpty {
+            environment["AGENT_TOKEN_FD"] = "0"
+            input = Data(token.utf8)
+        }
         if let claude = session.claudeProgram, !claude.isEmpty { environment["AGENT_WRAPPER_CLAUDE"] = claude }
         let flags = session.skipPermissions == false ? [] : ["--skip-permissions"]
         let folder = session.workingDirectory.flatMap { folder in
             [sessions, checkouts].compactMap { $0 }.contains { Self.isInside(folder, $0) } ? folder : nil
         }
-        return ContainerExec(id: session.id, arguments: [agentWrapper] + flags, environment: environment, workingDirectory: folder)
+        return ContainerExec(id: session.id, arguments: [agentWrapper] + flags, environment: environment, workingDirectory: folder, input: input)
     }
 
     /// Whether `path` is `folder` or under it, with no `..` to leave it.
