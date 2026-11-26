@@ -13,6 +13,18 @@
 // - Deleting refs: REST's `DELETE /repos/*/git/refs/*`; GraphQL's
 //   `deleteRef`; a push that updates a ref to the zero commit
 //   (GitPushCommands' commands, read before the pack goes on).
+// - Deleting releases (NCH's conditions for agents' release proposals,
+//   26 Nov 2026): REST's `DELETE /repos/*/releases/*` (a release, a draft
+//   among them, or its asset); GraphQL's `deleteRelease`, were GitHub to
+//   have it.
+// - Cancelling a release's run: its cancel is a check (GateChecker+Actions)
+//   that refuses a run of a published release and a dispatch on the
+//   default branch (a release's proposal), whatever gate.json says;
+//   force-cancel is no write the gate knows.
+//
+// A release's proposal is a dispatch on main (gate.json's mainDispatch):
+// its workflow builds and signs main's code and proposes a draft, and
+// Logan's Release publishes it.
 //
 // MultiPass let a merge through once its checks passed (GateChecker+Merge,
 // kept for update-branch's checks); it refused the rest too, in other words.
@@ -35,6 +47,10 @@ extension GitHubGate {
             "deleting a branch or any other ref is Logan's alone, never an agent's (\(what))"
         }
 
+        static func deletingRelease(_ what: String) -> String {
+            "deleting a release, a draft or its asset is Logan's alone, never an agent's (\(what)): a draft proposed stays for him to publish or remove"
+        }
+
         static func reopening(_ what: String) -> String {
             "reopening an issue or a pull request is Logan's alone, an agent's own included (\(what)): an agent only closes what it opened"
         }
@@ -53,6 +69,7 @@ extension GitHubGate {
         if method == "DELETE", rest.count >= 2, rest[0] == "git", rest[1] == "refs" {
             return Owner.deleting(rest.dropFirst(2).joined(separator: "/").isEmpty ? "git/refs" : "refs/" + rest.dropFirst(2).joined(separator: "/"))
         }
+        if method == "DELETE", rest.first == "releases" { return Owner.deletingRelease("DELETE …/" + rest.joined(separator: "/")) }
         return nil
     }
 }
