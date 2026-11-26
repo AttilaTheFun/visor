@@ -206,6 +206,18 @@ public enum AppAgentJob {
         (temporary as NSString).appendingPathComponent(bundleID + ".present")
     }
 
+    /// The marker of a Quit: the app's own process id, written by the
+    /// instance that holds the lock as AppKit ends it (Quit Visor,
+    /// `/api/quit`: an exit of 0, which KeepAlive leaves stopped), never by
+    /// a crash. Beside the lock, as the present marker is. An update's
+    /// watch that sees the process it follows go asks it
+    /// (AppRelaunchCommands.quit), so a Quit is left alone, not taken for a
+    /// start that failed (NCH's lease test of 0.72.2: a Quit within two
+    /// minutes of the hand-off's restart was started again).
+    public static func quitMarker(bundleID: String, temporary: String = InstanceLock.userTemporaryFolder) -> String {
+        (temporary as NSString).appendingPathComponent(bundleID + ".quit")
+    }
+
     /// The time a marker says it was written (seconds since 1970); nil when
     /// it says nothing readable.
     public static func askedAt(_ text: String?) -> Int? {

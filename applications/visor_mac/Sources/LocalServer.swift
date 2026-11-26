@@ -263,7 +263,8 @@ final class LocalServer {
         let log: @Sendable (String) -> Void = { ServerPlatform.current.log($0) }
         let steps = LaunchdHandBackSteps(job: Self.job, bundleID: MacPlaces.own,
                                          sockets: [VisorServer.socketPath, VisorServer.legacySocketPath],
-                                         lock: RelaunchWatchLock.url.path, askToQuit: { await LocalServer.quitOther() }, log: log)
+                                         lock: RelaunchWatchLock.url.path, version: VisorMacApp.bundleVersion,
+                                         askToQuit: { await LocalServer.quitOther() }, log: log)
         let outcome = await ServerHandBack.run(steps: steps, log: log)
         // The setting that put the server in the agent: read no more.
         UserDefaults.standard.removeObject(forKey: ServerAgentJob.defaultsKey)

@@ -16,8 +16,12 @@ final class ClientConnection {
     /// The client id its login gave (a Visor client's own), for the log.
     var clientID: String?
     /// The address it came from, where the system says (never on the
-    /// socket file): what wrong passwords at its login are counted by.
+    /// socket file).
     var peer: String?
+    /// Who wrong passwords at its login are counted by: the client a front
+    /// on this computer names in the upgrade's headers (`tailscale serve`'s
+    /// X-Forwarded-For, ForwardedFor), else `peer`.
+    var clientAddress: String? { ForwardedFor.client(peer: peer, headers: headers) }
     /// Its upgrade's headers (names in lower case): what a front said of it.
     var headers: [String: String] = [:]
     /// Who it is, where a front named them (FrontTrust): their id.

@@ -18,6 +18,15 @@
 // first line, while it's held: the app writes it as it takes the lock,
 // however it was started). The full path finds only a copy that was
 // opened (the fallback's `open -a`), to stop it.
+//
+// A Quit is told from a crash by a marker the app writes as AppKit ends it
+// (AppAgentJob.quitMarker: its own pid), not by launchd's word: `launchctl
+// print`'s "last exit code" is a job's, not a process's (the fallback's
+// opened copy is no job's, and a registration afresh, as `app-agent start`
+// makes, starts the job over), and launchctl's own manual says that output
+// "is NOT API in any sense at all". The marker names the very process the
+// watch follows, by the pid it follows it by, and the tests run it as they
+// run the rest.
 
 import Foundation
 
@@ -32,11 +41,16 @@ public struct AppRelaunchCommands: Sendable {
         public var command: [String]
         /// The app's instance lock, whose first line is its holder's pid.
         public var instanceLock: String?
+        /// The marker of a Quit, whose first line is the pid of the app
+        /// that quit (AppAgentJob.quitMarker); nil: none, and any end is
+        /// taken for a failure.
+        public var quitMarker: String?
 
-        public init(label: String, command: [String], instanceLock: String? = nil) {
+        public init(label: String, command: [String], instanceLock: String? = nil, quitMarker: String? = nil) {
             self.label = label
             self.command = command
             self.instanceLock = instanceLock
+            self.quitMarker = quitMarker
         }
     }
 
@@ -67,9 +81,11 @@ public struct AppRelaunchCommands: Sendable {
         guard let agent else { return open }
         let command = ([executable] + agent.command).map(AppRelaunchWatch.quoted).joined(separator: " ")
         // Its copy may come up after `app-agent start` has given up: then
-        // it runs, and no second is opened.
+        // it runs, and no second is opened. A Quit's marker from before is
+        // taken away first: only the app this start brings writes the next.
+        let forget = agent.quitMarker.map { "rm -f \(AppRelaunchWatch.quoted($0)); " } ?? ""
         return """
-        \(command); st=$?
+        \(forget)\(command); st=$?
         if [ $st = 0 ]; then :
         elif [ $st != 1 ]; then why="it didn't run (app-agent start ended with status $st)"; echo "$(date): \(agent.command.first ?? "app-agent") start ended with status $st: the build doesn't run"
         elif [ -n "$(\(holder))" ]; then echo "$(date): launchd's copy came up after all"
@@ -92,6 +108,13 @@ public struct AppRelaunchCommands: Sendable {
         q=$(\(holder)); if [ -n "$q" ]; then kill $q 2>/dev/null; n=0; while kill -0 $q 2>/dev/null && [ $n -lt 50 ]; do sleep 0.2; n=$((n+1)); done; kill -0 $q 2>/dev/null && kill -9 $q 2>/dev/null; sleep 0.5; kill -0 $q 2>/dev/null && echo "$(date): the app (process $q) couldn't be stopped: it still runs"; fi
         \(others)
         """
+    }
+
+    /// Shell: succeeds when the app's process the watch followed (`$first`)
+    /// ended at a Quit: the marker names it. Without a marker, never.
+    public var quit: String {
+        guard let marker = agent?.quitMarker else { return "false" }
+        return "[ -n \"$first\" ] && [ \"$(head -1 \(AppRelaunchWatch.quoted(marker)) 2>/dev/null | tr -dc 0-9)\" = \"$first\" ]"
     }
 
     /// Shell: the app's process id: the instance lock's holder, while it

@@ -19,7 +19,8 @@ struct AppLifecycle: ServerLifecycle {
                                            agent: AppRelauncher.Agent(label: AppAgentJob.label(bundleID: MacPlaces.own),
                                                                       command: [AppAgentJob.command, "start"],
                                                                       presentMarker: AppAgentJob.presentMarker(bundleID: MacPlaces.own),
-                                                                      instanceLock: InstanceLock.path(bundleID: MacPlaces.own)))
+                                                                      instanceLock: InstanceLock.path(bundleID: MacPlaces.own),
+                                                                      quitMarker: AppAgentJob.quitMarker(bundleID: MacPlaces.own)))
 
     @MainActor
     func relaunch(installing build: String?, carrying sessions: String) -> String? {
