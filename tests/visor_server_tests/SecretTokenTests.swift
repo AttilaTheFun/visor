@@ -28,5 +28,34 @@ extension ServerTests {
         #expect(!SecretToken.same("", ""), "no token matches an empty one")
         #expect(!SecretToken.same("b" + kept.dropFirst(), "a" + kept.dropFirst()))
     }
+
+    /// The bytes as the strings are: the password's words (UTF-8, not
+    /// characters), a hash beside another.
+    @Test func testBytesAreTheSameOnlyWhole() {
+        #expect(SecretToken.same(Array("pearl-grove".utf8), Array("pearl-grove".utf8)))
+        #expect(!SecretToken.same(Array("pearl-grovf".utf8), Array("pearl-grove".utf8)), "the last byte")
+        #expect(!SecretToken.same(Array("qearl-grove".utf8), Array("pearl-grove".utf8)), "the first byte")
+        #expect(!SecretToken.same(Array("pearl".utf8), Array("pearl-grove".utf8)), "a prefix")
+        #expect(!SecretToken.same(Array("pearl-grove-".utf8), Array("pearl-grove".utf8)), "longer")
+        #expect(!SecretToken.same([], []))
+        #expect(!SecretToken.same([0], []))
+        #expect(!SecretToken.same([], [0]))
+        #expect(SecretToken.same("café", "café"))
+        #expect(!SecretToken.same("cafe\u{301}", "café"), "the bytes, not the characters")
+    }
+
+    /// One among many: `hello`'s tokens, every one looked at.
+    @Test func testATokenIsFoundAmongThemOnlyWhole() {
+        let kept = (0..<8).map { _ in SecretToken.mint() }
+        #expect(SecretToken.any(kept, is: kept[0]))
+        #expect(SecretToken.any(kept, is: kept[7]))
+        #expect(SecretToken.any(Set(kept), is: kept[3]))
+        #expect(!SecretToken.any(kept, is: String(kept[3].dropLast())))
+        #expect(!SecretToken.any(kept, is: SecretToken.mint()))
+        #expect(!SecretToken.any(kept, is: ""))
+        #expect(!SecretToken.any(kept, is: nil))
+        #expect(!SecretToken.any([String](), is: kept[0]))
+        #expect(!SecretToken.any([""], is: ""))
+    }
 }
 }

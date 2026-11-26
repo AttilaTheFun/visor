@@ -20,6 +20,11 @@ final class NetworkStream: ByteStream {
         return String("\(host)".split(separator: "%").first ?? "")
     }
 
+    var remoteAddress: String? {
+        guard case .hostPort(let host, _) = connection.endpoint else { return nil }
+        return String("\(host)".split(separator: "%").first ?? "")
+    }
+
     func receive(_ chunk: @escaping @MainActor (Data?) -> Void) {
         connection.stateUpdateHandler = { [weak self] state in
             MainActor.assumeIsolated {

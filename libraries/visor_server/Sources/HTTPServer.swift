@@ -31,6 +31,7 @@ public final class HTTPServer {
                 return
             }
             request.trusted = trusted
+            request.peer = trusted ? nil : stream.remoteAddress
             exchange.answered = true
             if request.method == "OPTIONS" {
                 self.write(HTTPResponse(204), to: stream)
@@ -83,10 +84,12 @@ public final class HTTPServer {
 
     private func write(_ response: HTTPResponse, to stream: any ByteStream) {
         let reason = [200: "OK", 202: "Accepted", 204: "No Content", 400: "Bad Request", 401: "Unauthorized", 404: "Not Found", 405: "Method Not Allowed",
-                      409: "Conflict", 410: "Gone", 413: "Content Too Large", 500: "Internal Server Error", 503: "Service Unavailable"][response.status] ?? "OK"
+                      409: "Conflict", 410: "Gone", 413: "Content Too Large", 429: "Too Many Requests", 500: "Internal Server Error",
+                      503: "Service Unavailable"][response.status] ?? "OK"
         let body = Data(response.body.utf8)
         var head = "HTTP/1.1 \(response.status) \(reason)\r\n"
         head += "Content-Type: application/json\r\nContent-Length: \(body.count)\r\nConnection: close\r\n"
+        for (name, value) in response.headers.sorted(by: { $0.key < $1.key }) { head += "\(name): \(value)\r\n" }
         head += "Access-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, DELETE, OPTIONS\r\n"
         head += "Access-Control-Allow-Headers: Authorization, Content-Type\r\nAccess-Control-Allow-Private-Network: true\r\n"
         head += "Access-Control-Max-Age: 600\r\n\r\n"

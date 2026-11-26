@@ -8,6 +8,9 @@ public struct HTTPRequest {
     /// it is let in without a bearer, while SSH clients are or for the app
     /// (VisorServer.trusts).
     public var trusted = false
+    /// The address it came from, where the system says (never on the
+    /// socket file): what wrong passwords are counted by (PasswordThrottle).
+    public var peer: String?
 
     /// The bearer token; "" for a bare `Bearer` (no password).
     public var authorization: String? {

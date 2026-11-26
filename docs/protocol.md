@@ -60,6 +60,19 @@ in the same way, with the password the connection code carries. The API
 reads the same under a mount path a front forwards whole
 (`/visor/api/sessions`).
 
+Every secret shown is compared whole, in a time that doesn't say how
+much of it matched (`SecretToken.same`). Wrong passwords are counted by
+the address they came from (an IPv6 one by its /64): the fifth within a
+minute locks that address out for five minutes, when everything it asks
+with a bearer is answered `429` with `Retry-After` (seconds) and the
+socket's `login` an `error` saying when to try again, whatever it shows.
+Only that address: a stranger on the network can't lock out the owner.
+This computer (loopback, so a front on it too) and the socket file are
+never counted; a right password, token or admin token forgets an
+address's wrong ones. A server keeps at most 1,024 addresses, forgetting
+the one heard from longest ago. The Windows server is given no client's
+address by its system yet, and counts none.
+
 No agent's token is ever taken here, on any route (401, saying so),
 even where the server asks nothing: not a native session's (below,
 "Agents' tokens"), and not a runner's agent's (agent_protocol's
@@ -369,7 +382,7 @@ and `subscribe` and stream the rest.
 
 | type | fields | meaning |
 |---|---|---|
-| `login` | `token` (from `hello`, or the admin token) or `password` (or the admin token); neither on the socket file | Must be the first message. Neither accepted: `error` "Wrong password", then the socket closes. |
+| `login` | `token` (from `hello`, or the admin token) or `password` (or the admin token); neither on the socket file | Must be the first message. Neither accepted: `error` "Wrong password", then the socket closes. From an address locked out for wrong passwords (above): `error` saying when to try again, then the socket closes. |
 | `start` | `id`, `agent` (`claude`/`codex`/`openrouter`), `cwd`, `title`, `skipPermissions` | Create a session (the client picks the id; an empty title means the agent's name, numbered). Nothing is spawned until the first `send`. The client is subscribed to it. With `container: true` (a session in a container of its own, removed in 0.50), answered with `error` and nothing made. |
 | `contain` | `session`, `container` | Removed in 0.50 (it moved a session's agent into a container of its own, or out of it): answered with `error`. |
 | `fork` | `id`, `parent`, `origin` (`fork`/`branch`/`subagent`), `at`?, `text`?, `title`?, `subagent`? | A fork or branch of `parent` (docs/sub-sessions.md): a session of its own on the parent's folder, computer, agent, model and permissions, showing the parent's conversation (up to `at`, a row's id, for a branch). Its agent copies the conversation under an id of its own when it starts: with `text` at once (a fork's prompt), else with the first `send`. An empty title means "Fork of …" / "Branch of …". With the `subagent` origin, the conversation is that of `subagent`, one of the parent's subagents that has finished (Claude Code's: a copy of its transcript made a session of its own; Codex's: its own thread, resumed), titled with what the subagent was sent to do; it takes the subagent's place under the parent, and `text` is said to it at once. |

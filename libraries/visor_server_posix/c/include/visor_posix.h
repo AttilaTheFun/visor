@@ -88,6 +88,10 @@ int visor_accept(int listener);
 /// `out` (of `size`); "" for a socket file or when unknown.
 void visor_local_address(int socket, char *out, size_t size);
 
+/// The address of a connected socket's other end, as text into `out` (of
+/// `size`); "" for a socket file or when unknown.
+void visor_remote_address(int socket, char *out, size_t size);
+
 /// Ends both directions of a socket, waking whoever is blocked on it.
 void visor_shutdown(int socket);
 
