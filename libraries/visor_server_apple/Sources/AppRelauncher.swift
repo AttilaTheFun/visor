@@ -15,10 +15,11 @@ import VisorServer
 /// no password to listen with). If it quits, crashes or never answers, the
 /// shell ends it, puts the previous bundle back, writes why to the rollback
 /// note (VisorServer+Rollback.swift) and starts the previous build. A plain
-/// restart that does not come up is started once more. The script is
-/// AppRelaunchWatch's, and what it runs to start, stop and find the app
-/// AppRelaunchCommands': run on Linux with stand-ins, and read by macOS's
-/// own /bin/sh (bash 3.2) in the Mac's tests.
+/// restart that does not come up is started once more, and watched again;
+/// one that was quit (Quit Visor during its watch) is left stopped. The
+/// script is AppRelaunchWatch's, and what it runs to start, stop and find
+/// the app AppRelaunchCommands': run on Linux with stand-ins, and read by
+/// macOS's own /bin/sh (bash 3.2) in the Mac's tests.
 ///
 /// With an `agent` (Visor.app from 0.72.1: its own launchd agent, which
 /// starts it at login and again after a crash), the app is started through
@@ -67,12 +68,17 @@ public struct AppRelauncher: ServerLifecycle {
         /// path relative to the bundle, which no search by its absolute
         /// path finds).
         public var instanceLock: String?
+        /// The marker the app writes as it's quit, its pid
+        /// (AppAgentJob.quitMarker): a plain restart's watch leaves a Quit
+        /// alone rather than start the app again.
+        public var quitMarker: String?
 
-        public init(label: String, command: [String], presentMarker: String? = nil, instanceLock: String? = nil) {
+        public init(label: String, command: [String], presentMarker: String? = nil, instanceLock: String? = nil, quitMarker: String? = nil) {
             self.label = label
             self.command = command
             self.presentMarker = presentMarker
             self.instanceLock = instanceLock
+            self.quitMarker = quitMarker
         }
     }
 
@@ -141,7 +147,7 @@ public struct AppRelauncher: ServerLifecycle {
         let app = commands(executable: executable, open: open)
         // One watch at a time (RelaunchWatchLock).
         let watch = AppRelaunchWatch(appPID: ProcessInfo.processInfo.processIdentifier, destination: destination, backup: backup,
-                                     install: install, accept: accept, start: app.start, stop: app.stop, pid: app.pid,
+                                     install: install, accept: accept, start: app.start, stop: app.stop, pid: app.pid, quit: app.quit,
                                      answers: serving ? AppRelaunchWatch.portAnswers() : AppRelaunchWatch.socketAnswers(VisorServer.socketPath),
                                      answersWhere: serving ? "on port \(Envelope.defaultPort)" : "at its socket file",
                                      note: VisorServer.rollbackNoteURL.path, newVersion: newVersion, oldVersion: Self.version(of: Bundle.main),
@@ -170,7 +176,9 @@ public struct AppRelauncher: ServerLifecycle {
     /// (AppRelaunchCommands: the same words the tests run).
     func commands(executable: String, open: String) -> AppRelaunchCommands {
         AppRelaunchCommands(executable: executable, open: open,
-                            agent: agent.map { AppRelaunchCommands.Agent(label: $0.label, command: $0.command, instanceLock: $0.instanceLock) })
+                            agent: agent.map {
+                                AppRelaunchCommands.Agent(label: $0.label, command: $0.command, instanceLock: $0.instanceLock, quitMarker: $0.quitMarker)
+                            })
     }
 
     /// The executable's name in the bundle at `path` (the running one's

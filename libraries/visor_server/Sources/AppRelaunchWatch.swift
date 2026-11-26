@@ -12,10 +12,20 @@
 // started another after a crash) or never answers, it's stopped, the
 // previous bundle is put back, the rollback note says why
 // (VisorServer+Rollback), and it's started again. A plain restart that
-// doesn't come up is started once more. Once the new build has stayed up,
-// the one it replaced is removed. A start that finds the new build can't
-// run at all (Visor.app's `app-agent start` ending other than 0 or 1:
-// AppRelaunchCommands) says why, and it's undone at once.
+// doesn't come up is started once more and watched again, the watch ending
+// either way with its word ("stayed up", or "did not come up again"). A
+// plain restart's app that was quit (its Quit marker names it:
+// AppRelaunchCommands.quit) is left stopped, as launchd leaves an exit of
+// 0 (NCH's lease test of 0.72.2: a Quit within two minutes of the
+// hand-off's restart was taken for a failed start and started again). Once
+// the new build has stayed up, the one it replaced is removed. A start
+// that finds the new build can't run at all (Visor.app's `app-agent start`
+// ending other than 0 or 1: AppRelaunchCommands) says why, and it's undone
+// at once.
+//
+// What it says goes to the relauncher's own log (`visor-relaunch.log` in
+// Visor's logs, AppLifecycle), not the server's: the app it watches has
+// gone, or is another process.
 //
 // `served` starts at 0 whatever the app was doing: an answer from the new
 // process is what the watch waits for. (Until 0.72.1 it started at 1 for a
@@ -55,6 +65,11 @@ public struct AppRelaunchWatch: Sendable {
     public var stop: String
     /// Shell: prints the app's process id while it runs, else nothing.
     public var pid: String
+    /// Shell: succeeds when the process it followed (`$first`), gone, was
+    /// quit (AppRelaunchCommands.quit); "false": any end is a failure.
+    /// Asked of a plain restart alone: an update's new build that goes
+    /// within its watch is undone, quit or not.
+    public var quit: String
     /// Shell: succeeds when process `$p` answers.
     public var answers: String
     /// Where it's asked, for the log and the note ("on port 7433").
@@ -87,7 +102,7 @@ public struct AppRelaunchWatch: Sendable {
     public var present: String?
 
     public init(appPID: Int32, destination: String, backup: String?, install: String, accept: String = "", start: String, stop: String,
-                pid: String, answers: String, answersWhere: String, note: String, newVersion: String, oldVersion: String,
+                pid: String, quit: String = "false", answers: String, answersWhere: String, note: String, newVersion: String, oldVersion: String,
                 seconds: Int = 120, firstAnswer: Int = 120, appearWithin: Int = 600, endWithin: Int = 60, killAfter: Int = 10,
                 settle: Int = 3, lock: String? = nil, present: String? = nil) {
         self.appPID = appPID
@@ -98,6 +113,7 @@ public struct AppRelaunchWatch: Sendable {
         self.start = start
         self.stop = stop
         self.pid = pid
+        self.quit = quit
         self.answers = answers
         self.answersWhere = answersWhere
         self.note = note
@@ -172,30 +188,38 @@ public struct AppRelaunchWatch: Sendable {
         sleep 0.5
         \(install.isEmpty ? "" : install + "\n")\(accept.isEmpty ? "" : accept + "\n")installed=$(cat \(Self.quoted(destination))/Contents/MacOS/* 2>/dev/null | cksum)
         echo "$(date): starting \(newVersion)"
-        why=""
+        why=""; quit=""; round=1
         \(starting)
-        [ -z "$why" ] && sleep \(settle)
-        served=0; i=0; up=0; first=""; waited=0
-        while [ -z "$why" ]; do
-          p=$(\(pid))
-          if [ -z "$first" ]; then
-            if [ -z "$p" ]; then
-              waited=$((waited+1)); [ $waited -ge \(max(1, appearWithin / 2)) ] && { why="it never came up"; break; }
-              sleep 2; continue
+        while :; do
+          [ -z "$why" ] && sleep \(settle)
+          served=0; i=0; up=0; first=""; waited=0
+          while [ -z "$why" ]; do
+            p=$(\(pid))
+            if [ -z "$first" ]; then
+              if [ -z "$p" ]; then
+                waited=$((waited+1)); [ $waited -ge \(max(1, appearWithin / 2)) ] && { why="it never came up"; break; }
+                sleep 2; continue
+              fi
+              first="$p"
             fi
-            first="$p"
-          fi
-          if [ -z "$p" ] || [ "$p" != "$first" ]; then why="it quit or crashed"; break; fi
-          if \(answers); then served=1; fi
-          if [ $served = 1 ]; then
-            up=$((up+1)); [ $up -ge \(max(1, seconds / 2)) ] && break
-          else
-            i=$((i+1)); [ $i -ge \(max(1, firstAnswer / 2)) ] && break
-          fi
-          sleep 2
+            if [ -z "$p" ] || [ "$p" != "$first" ]; then
+              \(quitCheck)why="it quit or crashed"; break
+            fi
+            if \(answers); then served=1; fi
+            if [ $served = 1 ]; then
+              up=$((up+1)); [ $up -ge \(max(1, seconds / 2)) ] && break
+            else
+              i=$((i+1)); [ $i -ge \(max(1, firstAnswer / 2)) ] && break
+            fi
+            sleep 2
+          done
+          [ -n "$quit" ] && break
+          [ -z "$why" ] && [ $served = 0 ] && why="it never answered \(answersWhere)"
+        \(retry)  break
         done
-        [ -z "$why" ] && [ $served = 0 ] && why="it never answered \(answersWhere)"
-        if [ -n "$why" ]; then
+        if [ -n "$quit" ]; then
+          echo "$(date): \(newVersion) was quit (process $first ended at a Quit): left stopped, as launchd leaves it"
+        elif [ -n "$why" ]; then
         \(undo)
         else
           echo "$(date): \(newVersion) stayed up"
@@ -204,9 +228,34 @@ public struct AppRelaunchWatch: Sendable {
         """
     }
 
+    /// Shell, in the watch's loop: a plain restart's app that was quit
+    /// ends the watch, its process left stopped. An update's isn't asked.
+    private var quitCheck: String {
+        guard backup == nil else { return "" }
+        return "if \(quit); then quit=1; break; fi; "
+    }
+
+    /// Shell, in the watch's loop: a plain restart that didn't come up the
+    /// first time is stopped, started once more and watched again; an
+    /// update's is undone below.
+    private var retry: String {
+        guard backup == nil else { return "" }
+        return """
+          if [ -n "$why" ] && [ $round = 1 ]; then
+            echo "$(date): \(newVersion) did not come up ($why); starting it once more"
+            \(stop)
+            why=""; round=2
+            \(starting)
+            continue
+          fi
+
+        """
+    }
+
     /// The new build undone: stopped, the previous bundle back, the note
-    /// written and the app started; or, with nothing to put back, started
-    /// once more. The bundle in place is replaced only when this watch's
+    /// written and the app started; or, with nothing to put back (a plain
+    /// restart started once more already: `retry`), said, and left to
+    /// launchd. The bundle in place is replaced only when this watch's
     /// own copy of the previous one is there, whole, and the bundle in
     /// place is still the one it installed (another watch, or a person, may
     /// have put another there since): otherwise it's left as it is, and
@@ -214,9 +263,7 @@ public struct AppRelaunchWatch: Sendable {
     private var undo: String {
         guard let backup else {
             return """
-            echo "$(date): \(newVersion) did not come up ($why); starting it once more"
-            \(stop)
-            \(starting)
+            echo "$(date): \(newVersion) did not come up again ($why): left as it is"
             """
         }
         let words = "Visor Server \(newVersion) did not stay up after the update ($why), so \(oldVersion) was put back."

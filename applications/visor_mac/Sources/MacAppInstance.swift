@@ -60,6 +60,10 @@ enum MacAppInstance {
     /// Held for the process's life once Visor runs here.
     private static var held: InstanceLock?
 
+    /// Whether this process holds the lock: the Visor an update's watch
+    /// follows, and so the one whose Quit it's told of (AppAgentJob.quitMarker).
+    static var holdsLock: Bool { held != nil }
+
     /// Posted by a second instance for the first: its window, in front.
     static let showWindow = Notification.Name("com.LoganShire.Visor.showWindow")
 
