@@ -92,7 +92,7 @@ extension ServerTests {
         #expect(ServerControls.Settings(json: .object([:])).containerIdleMinutes == 30, "from a server before them")
     }
 
-    @Test func theLimitsAreThisComputers() throws {
+    @Test func theLimitsAreThisComputers() async throws {
         let limits = try #require(controls(await call("GET", "/api/settings"))?.containerLimits)
         #expect(limits.minimumCPUs == 1 && limits.maximumCPUs == 10 && limits.defaultCPUs == 8)
         #expect(limits.minimumMemoryGiB == 4 && limits.maximumMemoryGiB == 28 && limits.defaultMemoryCapGiB == 24)
