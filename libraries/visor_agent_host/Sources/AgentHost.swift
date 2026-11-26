@@ -83,6 +83,7 @@ public final class AgentHost {
         // reaches it.
         _ = setsid()
         visor_ignore_broken_pipes()
+        appendToLog()
         let listener = visor_listen_unix(options.socket)
         guard listener >= 0 else {
             log("cannot listen at \(options.socket): \(String(cString: strerror(errno)))")
@@ -124,6 +125,18 @@ public final class AgentHost {
         server?.shutdown()
         finished?.resume()
         finished = nil
+    }
+
+    /// Every host writes to the one hosts' log, each opened where the file
+    /// ended when it started: without appending, each wrote over the
+    /// others' lines from where it began (26 Nov 2026, when the log could
+    /// no longer say which agents had started). Appending, each line goes
+    /// at the end as it stands.
+    private func appendToLog() {
+        for descriptor in [STDOUT_FILENO, STDERR_FILENO] {
+            let flags = fcntl(descriptor, F_GETFL)
+            if flags >= 0, flags & O_APPEND == 0 { _ = fcntl(descriptor, F_SETFL, flags | O_APPEND) }
+        }
     }
 
     func log(_ line: String) {

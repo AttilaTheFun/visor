@@ -152,8 +152,18 @@ extension VisorServer {
         broadcastSessions()
     }
 
+    /// A message from a client for a session's agent. One that can't be
+    /// taken is said in the log, with the reason: the log said nothing of
+    /// a send, taken or not (26 Nov 2026).
     private func performSend(_ envelope: Envelope) {
-        guard let record = session(envelope.session), let text = envelope.text else { return }
+        guard let record = session(envelope.session) else {
+            Self.log("a message was not taken: there is no session \(envelope.session ?? "(none named)") here")
+            return
+        }
+        guard let text = envelope.text else {
+            Self.log("a message for \(record.info.title) (\(record.info.id)) was not taken: it had no text")
+            return
+        }
         // Writing to an archived session brings it back, same parameters.
         if record.info.archived { unarchive(record) }
         deliver(text, to: record, images: envelope.images ?? [])

@@ -272,6 +272,13 @@ public final class SessionTranscript {
         /// of them is this message, whatever its words (the same thing
         /// said twice is two messages).
         public var had: Set<String> = []
+        /// Why the computer never took it, once a send has failed: kept in
+        /// the thread, its words not lost, until it is sent again or let
+        /// go of (26 Nov 2026: messages dropped from the thread with
+        /// nothing said, and the agent never had them).
+        public var failure: String?
+        /// In the thread and on its way: sent, and not yet on the record.
+        var onItsWay: Bool { shown && failure == nil }
     }
     @ObservationIgnored private var _sending: [Outgoing] = []
     public var sending: [Outgoing] {
@@ -280,12 +287,24 @@ public final class SessionTranscript {
             // One more in the thread, for an idle agent: sending until the
             // server says the turn has moved on (one put there once its
             // turn is under way has got there).
-            let shown = Set(_sending.filter(\.shown).map(\.id))
-            if newValue.contains(where: { $0.shown && !shown.contains($0.id) }), !_busy, _toldTurn?.isIdle ?? true { awaitingTurn = true }
+            // One that was not sent is on its way nowhere.
+            let shown = Set(_sending.filter(\.onItsWay).map(\.id))
+            if newValue.contains(where: { $0.onItsWay && !shown.contains($0.id) }), !_busy, _toldTurn?.isIdle ?? true { awaitingTurn = true }
             _sending = newValue
-            if !_sending.contains(where: \.shown) { awaitingTurn = false }
+            if !_sending.contains(where: \.onItsWay) { awaitingTurn = false }
             changed()
         }
+    }
+
+    /// The messages the computer never took, oldest first.
+    public var unsent: [Outgoing] { sending.filter { $0.failure != nil } }
+
+    /// What the thread says of them while there are any: that they were
+    /// not sent, and why.
+    public var unsentWords: String? {
+        guard let last = unsent.last, let failure = last.failure else { return nil }
+        let count = unsent.count
+        return (count == 1 ? "A message was not sent" : "\(count) messages were not sent") + ": \(failure). Send them again from Not sent."
     }
 
     /// Where the turn stands, for the line under the thread: the server's
@@ -668,8 +687,9 @@ public final class SessionTranscript {
             if !busy { pendingApproval = nil }
         case "failure":
             error = envelope.message
-            // What was on its way did not arrive.
-            sending.removeAll()
+            // What was on its way did not arrive. One that was never sent
+            // stays, to be sent again.
+            sending.removeAll { $0.failure == nil }
         case "notice":
             take(notice: envelope.notice)
         case "approval":

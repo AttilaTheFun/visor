@@ -225,7 +225,7 @@ struct AgentScreen: View {
             // computer when it is down, which says more.
             status: connectionStatus == nil ? Self.turnLine(transcript.turnState) : [],
             activity: connectionStatus ?? transcript.turnState.words,
-            error: transcript.error,
+            error: transcript.error ?? transcript.unsentWords,
             emptyTitle: transcript.loaded ? (info?.archived == true ? "Archived" : "What should we do?") : "Loading…",
             emptyBody: transcript.loaded
                 ? "Write the first message below; \(info?.agent.title ?? "the agent") starts in \(info?.cwd ?? "its directory")."
@@ -339,6 +339,28 @@ struct AgentScreen: View {
                     .agentPillButton()
                     .accessibilityLabel("Looping")
                     .accessibilityIdentifier("loop")
+                }
+                // What the computer never took: in the thread still, to be
+                // sent again or let go of, never dropped unsaid.
+                if !transcript.unsent.isEmpty {
+                    let count = transcript.unsent.count
+                    Menu {
+                        Button { host.resend(sessionID) } label: {
+                            Label(count == 1 ? "Send it again" : "Send all \(count) again", systemImage: "arrow.clockwise")
+                        }
+                        Button(role: .destructive) { host.discardUnsent(sessionID) } label: {
+                            Label(count == 1 ? "Discard it" : "Discard all \(count)", systemImage: "trash")
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "exclamationmark.circle").font(.caption)
+                            AgentPillLabel("Not sent")
+                        }
+                    }
+                    .foregroundColor(.red)
+                    .agentPillButton()
+                    .accessibilityLabel(count == 1 ? "A message was not sent" : "\(count) messages were not sent")
+                    .accessibilityIdentifier("unsent")
                 }
                 // What the user has said while the agent works. It goes
                 // over when the turn ends; this is how to jump the queue
