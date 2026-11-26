@@ -1302,15 +1302,24 @@ container agents.
     tools/check_rules.py; the Linux client and blue Visor's APK built; the
     client's screens walked headless, `bazel test --config=headless
     //tests/feature_map_tests/...`; the command-line server built with
-    SwiftPM), and `container-apple` beside it on an `xcode-27` Mac (the
-    iPhone and Mac apps, the Mac's test bundles, libraries and servers). A
-    diff of documentation alone checks the rules and stops there; a newer
-    push cancels the run before. A fork's pull request runs them too, with
-    no secret and writing no cache.
-  - **Each commit on main** runs `populate` and `populate-apple`: the
-    merged tree built as the pull request's jobs build it and its screens
-    walked headless, into GitHub's cache and BuildBuddy's; nothing
-    published.
+    SwiftPM). A diff of documentation alone checks the rules and stops
+    there; a newer push cancels the run before. A fork's pull request runs
+    it too, with no secret and writing no cache. **No Mac at a pull
+    request** (Logan, 13 Nov 2026: Apple runners for release verification
+    alone, as they are the bottleneck): `container-apple` on an `xcode-27`
+    Mac (the iPhone and Mac apps, the Mac's test bundles, libraries and
+    servers) runs by hand on a branch that touches Apple code (`gh workflow
+    run ci.yml --ref <branch> -f run=container-apple`), and `verify` builds
+    and tests them all.
+  - **Each commit on main** runs `populate`: the merged tree built as the
+    pull request's Linux jobs build it and its screens walked headless,
+    into GitHub's cache and BuildBuddy's; nothing published.
+    `populate-apple`, the same for the Apple apps, runs **nightly** (06:00Z,
+    on main) and by hand (`-f run=populate`), not at each push: GitHub gives
+    a public repository's account 5 macOS runners in all, and a populate on
+    every merge held one while a prerelease waited (25 Nov 2026). A
+    `container-apple` by hand, and verify's Apple jobs, read the last
+    night's cache.
   - **By hand on main** (`gh workflow run ci.yml --ref main -f run=…`, or
     the gh tools' run_dispatch): `verify` runs the tests on Linux
     (`//tests:linux`, and the headless screens), those that need a Mac
