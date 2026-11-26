@@ -1,5 +1,7 @@
 // Settings' Sessions container section (docs/containers.md): its switch,
-// the readiness row under it — this Mac (macOS 26 or later, Apple silicon,
+// its CPUs and memory (the default, or a number within this Mac's, as the
+// server's `containerLimits` say: taken at its next start, which the
+// section says), the readiness row under them — this Mac (macOS 26 or later, Apple silicon,
 // virtualization), the Visor volume, and the assets on it — and the
 // container as the server's engine has it (`GET /api/container`: its state,
 // CPUs and memory, image, egress check and errors), with Start and Stop;
@@ -22,6 +24,9 @@ import VisorUI
 @MainActor
 struct ContainerSettingsSection: View {
     var settings: ServerControls.Settings
+    /// What the CPUs and memory may be set to on this Mac; nil from a
+    /// server that doesn't say, which shows no pickers.
+    var limits: ServerControls.ContainerLimits?
     var client: VisorAgentServer
     var send: (ServerControlsChange) -> Void
     @State private var readiness: ContainerReadiness?
@@ -37,6 +42,7 @@ struct ContainerSettingsSection: View {
             Toggle("Run sessions in a container", isOn: Binding(get: { readiness.isEnabled(setting: settings.containerEnabled) },
                                                                 set: { send(ServerControlsChange(containerEnabled: $0)) }))
                 .disabled(!readiness.canEnable)
+            resourcesRows
             ForEach(readiness.checks) { check in
                 HStack(alignment: .firstTextBaseline) {
                     Image(systemName: check.ok ? "checkmark.circle.fill" : "xmark.circle")
@@ -67,6 +73,53 @@ struct ContainerSettingsSection: View {
                 try? await Task.sleep(for: .seconds(status?.state == .starting ? 2 : 10))
             }
         }
+    }
+
+    /// Its CPUs and memory: the default, or a number within this Mac's,
+    /// each sent as it's picked; and when they're taken.
+    @ViewBuilder private var resourcesRows: some View {
+        if let limits {
+            Picker("CPUs", selection: Binding(get: { settings.containerCPUs }, set: { cpus in
+                send(ServerControlsChange(containerCPUs: cpus.map(ServerControlsChange.Amount.to) ?? .byDefault))
+            })) {
+                Text("Default (\(limits.defaultCPUs))").tag(Int?.none)
+                ForEach(Self.choices(limits.minimumCPUs, limits.maximumCPUs, set: settings.containerCPUs), id: \.self) { cpus in
+                    Text("\(cpus)").tag(Int?.some(cpus))
+                }
+            }
+            .accessibilityIdentifier("container-cpus")
+            Picker("Memory", selection: Binding(get: { settings.containerMemoryGiB }, set: { gib in
+                send(ServerControlsChange(containerMemoryGiB: gib.map(ServerControlsChange.Amount.to) ?? .byDefault))
+            })) {
+                Text("Default (half of what's free at its start, \(limits.minimumMemoryGiB)–\(limits.defaultMemoryCapGiB) GiB)")
+                    .tag(Int?.none)
+                ForEach(Self.choices(limits.minimumMemoryGiB, limits.maximumMemoryGiB, set: settings.containerMemoryGiB),
+                        id: \.self) { gib in
+                    Text("\(gib) GiB").tag(Int?.some(gib))
+                }
+            }
+            .accessibilityIdentifier("container-memory")
+            Text(resourcesNote).font(.caption).foregroundColor(.secondary)
+        }
+    }
+
+    /// What a picker offers: `least` to `most` (none where `most` is less),
+    /// and what's set if the settings file holds another.
+    static func choices(_ least: Int, _ most: Int, set: Int?) -> [Int] {
+        var choices = most >= least ? Array(least...most) : []
+        if let set, !choices.contains(set) { choices = (choices + [set]).sorted() }
+        return choices
+    }
+
+    /// When new CPUs and memory are taken, and what the running container
+    /// has until then.
+    private var resourcesNote: String {
+        let note = "CPUs and memory apply at the container's next start: after its idle stop, or Stop and Start. "
+            + "Visor doesn't restart it for them."
+        guard let status, status.state == .running || status.state == .noEgress, let cpus = status.cpus,
+              let memory = status.memoryGiB else { return note }
+        let changed = (settings.containerCPUs ?? cpus) != cpus || (settings.containerMemoryGiB ?? memory) != memory
+        return changed ? note + " It runs with \(cpus) CPUs and \(memory) GiB until then." : note
     }
 
     /// Whether the container's agents have a Claude credential (agent-proxy's),

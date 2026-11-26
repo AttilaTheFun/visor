@@ -229,20 +229,56 @@ none is the defaults, off:
 | Key | Default | |
 | --- | --- | --- |
 | `enabled` | `false` | Whether sessions may be placed in the container. It takes effect only where this Mac can run it. |
-| `cpus` | 8, leaving two of this Mac's | At most this Mac's cores. |
-| `memoryGiB` | Half of what's free when it starts, at least 4, at most 24 | At most all of this Mac's less 4 GiB. The cap minds that Nimbus will run VMs and containers on the Mini (32 GB) too; set it lower there if need be. Memory the guest frees isn't given back while it runs: the idle stop gives it back. |
-| `idleMinutes` | 30 | Minutes with no session in it before it's stopped. |
+| `cpus` | 8, leaving two of this Mac's | At least 1, at most this Mac's cores. |
+| `memoryGiB` | Half of what's free when it starts, at least 4, at most 24 | At least 4, at most all of this Mac's less 4 GiB. The default's cap of 24 leaves this Mac's own apps room; a setting may go past it. The Mini (32 GB) runs agents and Visor alone, with no Nimbus VMs (Logan, 26 Nov 2026), so 24 GiB of its 32 is fine there. Memory the guest frees isn't given back while it runs: the idle stop gives it back. |
+| `idleMinutes` | 30 | Minutes with no session in it before it's stopped: 1 to 1440. |
 | `imageDigest` | none | An agent image digest in place of the release's. |
 | `checkouts` | the Sources volume | A folder of this Mac's (an absolute path) shared read-write at the same path, for the checkouts; none set, the Sources volume, when it's mounted. |
 
-A value that isn't one (a tag for `imageDigest`, a CPU count of 0) reads as
-its default.
+A value in the file that isn't one (a tag for `imageDigest`, a CPU count
+of 0) reads as its default. One out of range that is a number is taken
+within this Mac's when the container starts (a `cpus` of 64 on a Mac of
+10 cores starts it with 10).
+
+### Changing them
+
+`PUT /api/settings` (an admin's, docs/protocol.md) changes them without
+editing the file or restarting Visor: `containerEnabled`,
+`containerCPUs`, `containerMemoryGiB` and `containerIdleMinutes`, each
+kept in the settings file at once. A number is checked against this
+Mac's (`activeProcessorCount` and `physicalMemory`, as the engine reads
+them) and the limits in the table, and one outside them is refused (400
+with `error` saying why, and nothing in the change taken), never clamped.
+`null`, or `"default"`, goes back to the default (the key left out of the
+file). `GET /api/settings` says them (`settings.containerCPUs` and
+`containerMemoryGiB`, `null` for the defaults, and
+`containerIdleMinutes`), with `containerLimits`: the least, the most and
+the default of each on this Mac, and `note`, when a change is taken.
+
+**When a change is taken:**
+
+- **CPUs and memory at the container's next start.** A running VM isn't
+  resized, and the server never restarts the container for them, idle or
+  not, so it cuts no session in it off: they're taken after the idle stop
+  (`idleMinutes` with nothing in it), a Stop and Start or a Restart
+  someone asks for (`POST /api/container/restart`; each ends what runs in
+  it), or Visor's own restart. Until then `GET /api/container` says what
+  the running container has; stopped, what it would start with now.
+- **The idle minutes at once:** the idle stop reads them each time it looks
+  (every 30 seconds).
+- **The switch at once:** turned off, the container is stopped.
 
 **Settings › Sessions Container** has the switch (`PUT /api/settings
-{containerEnabled}`), off and disabled unless this Mac can run it, and the
-readiness row: macOS 26 or later, Apple silicon, Virtualization, the
-Visor volume, and the assets on it (present, or what's missing: the
-engine fetches them when it first starts), with the image it would run.
+{containerEnabled}`), off and disabled unless this Mac can run it; the
+**CPUs** and **Memory** pickers (`containerCPUs`, `containerMemoryGiB`:
+Default, which says what it is, or a number within `containerLimits`),
+with the note that they apply at the container's next start (and what it
+runs with until then, when that differs); and the readiness row: macOS
+26 or later, Apple silicon, Virtualization, the Visor volume, and the
+assets on it (present, or what's missing: the engine fetches them when it
+first starts), with the image it would run. A computer's page in the
+iPhone's and the web's Settings shows only its container's Claude
+credential, not these.
 
 ## The engine
 
