@@ -100,6 +100,14 @@ public enum AppAgentJob {
         /// again), and this one ends once that one holds the lock; if it
         /// doesn't, Visor runs here after all.
         case handToLaunchd
+        /// As `handToLaunchd`, but an update's watch holds its lock
+        /// (RelaunchWatchLock): one from a build before 0.72.1, whose
+        /// watcher opened this process and follows it by its full path, so
+        /// a hand-off would read to it as a quit and undo the update over
+        /// launchd's copy (NCH's lease test of 0.72.1). Visor runs here,
+        /// and hands itself to launchd once the watch has ended
+        /// (LocalServer: a restart through its agent).
+        case runWhileWatched
     }
 
     /// What a launch does:
@@ -111,23 +119,58 @@ public enum AppAgentJob {
     /// | yes                  | a watcher's open     | any                                | second, quiet |
     /// | no                   | launchd              | any                                | run           |
     /// | no                   | a watcher's open     | any                                | run           |
-    /// | no                   | a person             | yes                                | handToLaunchd |
+    /// | no                   | a person, no watch   | yes                                | handToLaunchd |
+    /// | no                   | a person, a watch    | yes                                | runWhileWatched |
     /// | no                   | a person             | no                                 | run           |
     ///
     /// A watcher's open (`--without-agent`: AppRelauncher's) is its
     /// fallback once launchd didn't start the app, so it runs where it is.
-    /// A relaunch's open from a build before 0.72.1 is a person's: the app
-    /// it opens hands itself to launchd, registering the agent.
+    /// A relaunch's open from a build before 0.72.1 looks like a person's,
+    /// but its watcher holds the update watch's lock (`watched`): the app
+    /// it opens stays the process it opened while the watch lasts, then
+    /// hands itself to launchd (NCH's lease test of 0.72.1: 0.71.1's
+    /// watcher, which follows the app by its full path, took the hand-off
+    /// for a quit and put 0.71.1 back while launchd ran 0.72.1). The
+    /// server agent's watch (an update from a build before 0.72.1 that
+    /// ran its server as the agent) holds the same lock: the app runs here
+    /// through the hand-back too, then hands itself to launchd the same
+    /// way, so neither hand-off falls inside a watch.
     ///
     /// A second instance started by launchd or by a watcher's open is
     /// quiet (NCH's check of #537): mid-update, the window is the present
     /// marker's to ask for alone, never a copy that lost the race.
-    public static func launch(lockHeld: Bool, fromAgent: Bool, withoutAgent: Bool, wanted: Bool, installProblem: String?) -> Launch {
+    public static func launch(lockHeld: Bool, fromAgent: Bool, withoutAgent: Bool, wanted: Bool, installProblem: String?,
+                              watched: Bool = false) -> Launch {
         if lockHeld { return .second(showFirst: !(fromAgent || withoutAgent)) }
         if fromAgent || withoutAgent { return .run }
         guard wanted, installProblem == nil else { return .run }
-        return .handToLaunchd
+        return watched ? .runWhileWatched : .handToLaunchd
     }
+
+    /// What the app that runs while a watch lasted (`runWhileWatched`)
+    /// does about launchd, at each look.
+    public enum HandOff: Equatable, Sendable {
+        /// Looks again: the watch still runs (a live watcher holds its
+        /// lock), or the server doesn't run in this process yet (the
+        /// hand-back: a restart asked then would reach the server agent).
+        case wait
+        /// Hands itself to launchd now: a restart through its agent.
+        case now
+        /// Never: the agent isn't wanted any more (Start at Login turned
+        /// off meanwhile), or this copy may not register it.
+        case never
+    }
+
+    public static func handOff(watching: Bool, serverInApp: Bool, wanted: Bool, installProblem: String?) -> HandOff {
+        guard wanted, installProblem == nil else { return .never }
+        return !watching && serverInApp ? .now : .wait
+    }
+
+    /// How often the app that runs while a watch lasts looks at it, and how
+    /// many times a hand-off that's refused (a restart answered 409, the
+    /// server not yet up) is asked again.
+    public static let watchPoll: Duration = .seconds(5)
+    public static let handOffTries = 6
 
     /// Whether the window shows at the launch (Logan, 25 Nov 2026: at login
     /// and after a crash, the menu bar alone):

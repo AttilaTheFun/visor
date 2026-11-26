@@ -13,7 +13,9 @@
 // previous bundle is put back, the rollback note says why
 // (VisorServer+Rollback), and it's started again. A plain restart that
 // doesn't come up is started once more. Once the new build has stayed up,
-// the one it replaced is removed.
+// the one it replaced is removed. A start that finds the new build can't
+// run at all (Visor.app's `app-agent start` ending other than 0 or 1:
+// AppRelaunchCommands) says why, and it's undone at once.
 //
 // `served` starts at 0 whatever the app was doing: an answer from the new
 // process is what the watch waits for. (Until 0.72.1 it started at 1 for a
@@ -46,7 +48,8 @@ public struct AppRelaunchWatch: Sendable {
     /// accepts.
     public var accept: String
     /// Shell: starts the app (Visor.app: through its launchd agent, else
-    /// `open -a`).
+    /// `open -a`: AppRelaunchCommands). It may set `why` when what it
+    /// started can't run at all, and the watch then undoes it at once.
     public var start: String
     /// Shell: stops it, and keeps launchd from starting it again meanwhile.
     public var stop: String
@@ -169,10 +172,11 @@ public struct AppRelaunchWatch: Sendable {
         sleep 0.5
         \(install.isEmpty ? "" : install + "\n")\(accept.isEmpty ? "" : accept + "\n")installed=$(cat \(Self.quoted(destination))/Contents/MacOS/* 2>/dev/null | cksum)
         echo "$(date): starting \(newVersion)"
+        why=""
         \(starting)
-        sleep \(settle)
-        why=""; served=0; i=0; up=0; first=""; waited=0
-        while :; do
+        [ -z "$why" ] && sleep \(settle)
+        served=0; i=0; up=0; first=""; waited=0
+        while [ -z "$why" ]; do
           p=$(\(pid))
           if [ -z "$first" ]; then
             if [ -z "$p" ]; then

@@ -632,7 +632,19 @@ longer a place it runs, and the `ServerAsAgent` default isn't read.
   the person, a refusal), Visor runs where it is and says why in the system
   log. Launches by launchd, and the update watcher's fallback open
   (`--without-agent`), run where they are; as second instances they're
-  quiet, the window mid-update being the present marker's alone. A copy
+  quiet, the window mid-update being the present marker's alone. An open
+  while an update's watch holds `relaunch-watch.lock` (a live watcher, its
+  start time checked: RelaunchWatchHolder) doesn't hand itself to launchd
+  (AppAgentJob's `runWhileWatched`): that is the open of a build before
+  0.72.1's watcher, which follows the app by its full path and would take
+  the hand-off for a quit (NCH's lease test of 0.72.1, from 0.71.1: the
+  watcher put 0.71.1 back in /Applications while launchd ran 0.72.1 from
+  the replaced bundle), or the server agent's watch, which the hand-back
+  waits out. Visor runs as the process that was opened until the watch has
+  ended and the server runs in the app (after the hand-back, if there was
+  one), then hands itself to launchd with a restart through its agent
+  (LocalServer, AppAgentJob.handOff), which this build's watcher follows;
+  until then a crash isn't restarted, as before 0.72.1. A copy
   outside /Applications (a build to run here, one in Downloads) is a
   client alone, with no server and no lock, unless
   `ServesOutsideApplications` (a default) or
@@ -685,10 +697,25 @@ longer a place it runs, and the `ServerAsAgent` default isn't read.
   --without-agent`, in the background: `open -g`), as it does if launchd
   doesn't start it and its copy hasn't come up meanwhile. The app that goes
   has a minute to end, then TERM, then KILL ten seconds on (each logged).
-  The watch follows the app's process by the instance lock's holder (the
-  lock file's pid): launchd runs the app by a path relative to the bundle,
-  and a second copy that loses the race and exits 0 is never a crash (NCH's
-  check of #537). The pid stays in the file after its holder ends, and a
+  An `app-agent start` that ends other than 0 or 1 (an exit of 3, a crash)
+  is a build whose executable doesn't run at all: no open is tried, and it's
+  undone at once ("it didn't run"), not after ten minutes' wait for a
+  process (NCH's lease test of 0.72.1: a broken bundle was opened instead,
+  then nothing). The watch follows the app's process by its pid, the
+  instance lock's holder (the lock file's pid), never by its command line:
+  launchd runs the app by a path relative to the bundle
+  (`Contents/MacOS/Visor`), which no search by the full path finds, and a
+  second copy that loses the race and exits 0 is never a crash (NCH's
+  check of #537). The full path finds only an opened copy, for the stop.
+  What the watch runs to start, stop and find the app is
+  AppRelaunchCommands (libraries/visor_server, apart from AppKit): the
+  tests on Linux run those very words with stand-ins for launchctl and the
+  app, and the Mac's tests (visor_launch_agent_mac_tests, CI's test job)
+  read every script the watchers build with macOS's own `/bin/sh -n`. That
+  shell is bash 3.2, which reads a case's `pattern)` inside `$( … )` as
+  the substitution's end: 0.72.1's watcher died of it before it could say
+  a build stayed up or roll one back. Case patterns are written
+  `(pattern)`. The pid stays in the file after its holder ends, and a
   pid is reused, so a live process by that pid counts only while the lock
   is held (AppRelaunchWatch.lockHolder: a try to take it at once fails,
   `/usr/bin/lockf -t 0` on a Mac, util-linux's `flock -n` in the tests);
@@ -721,7 +748,9 @@ longer a place it runs, and the `ServerAsAgent` default isn't read.
   socket file or on 7433). It leaves its data where it is (MacPlaces.settle
   only once the server is its own), waits out an update's watch still
   holding `relaunch-watch.lock` (an agent gone mid-watch would be taken for
-  a crash and rolled back), unregisters the agent and boots it out of
+  a crash and rolled back; the app opened meanwhile runs where it is,
+  handing itself to launchd only after: One instance, above), unregisters
+  the agent and boots it out of
   launchd (TERM: it steps aside, leaving the agents' hosts running; not
   `/api/quit` first, which ends them), removes 0.64's plist, and waits up to
   40 seconds for the socket file and the port to be free; a server still

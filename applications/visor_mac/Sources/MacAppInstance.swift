@@ -17,6 +17,15 @@
 //   few seconds (Login Items waiting for the person, launchd refusing the
 //   bundle), Visor runs here after all, and says why in the system log:
 //   no crash restart until its next start through launchd.
+// - Opened that way while an update's watch holds its lock
+//   (RelaunchWatchLock, its holder checked to be that watcher:
+//   RelaunchWatchHolder): the open of a build before 0.72.1's watcher,
+//   which follows the app by its full path and would take a hand-off for
+//   a quit (NCH's lease test of 0.72.1: 0.71.1 put back in /Applications
+//   while launchd ran 0.72.1), or the server agent's watch, which the
+//   hand-back waits out. Visor runs here, as the process that was opened,
+//   and hands itself to launchd once the watch has ended
+//   (`handsOffAfterWatch`, LocalServer: a restart through its agent).
 // - Started by launchd (the agent's `VISOR_APP_AGENT`), or by the update
 //   watcher's open (`--without-agent`: it asked launchd already), it runs
 //   here.
@@ -68,6 +77,25 @@ enum MacAppInstance {
     /// crash, keeps to the menu bar (AppAgentJob.showsWindow).
     private(set) static var showsWindow = true
 
+    /// Whether this process was opened while an update's watch held its
+    /// lock, and runs here until it ends rather than hand itself to launchd
+    /// (AppAgentJob.Launch.runWhileWatched): LocalServer hands it to
+    /// launchd then.
+    private(set) static var handsOffAfterWatch = false
+
+    /// The update watch's lock (RelaunchWatchLock.url), where it is before
+    /// anything is settled: beside the server's data, as the watcher that
+    /// took it (of this build or the one before) found it.
+    static var watchLockPath: String { MacPlaces.data.appendingPathComponent("relaunch-watch.lock", isDirectory: false).path }
+
+    /// Whether a live watcher holds the update watch's lock: its process
+    /// started when the lock says (RelaunchWatchHolder), so a lock left
+    /// behind whose pid names another process holds nothing.
+    static func watchHeld(_ path: String) -> Bool {
+        let text = try? String(contentsOfFile: path, encoding: .utf8)
+        return RelaunchWatchHolder.remaining(text, now: Int(Date().timeIntervalSince1970)) != nil
+    }
+
     /// The lock's file.
     static var lockPath: String { InstanceLock.path(bundleID: MacPlaces.own) }
 
@@ -113,7 +141,7 @@ enum MacAppInstance {
         let installProblem = LaunchAgentJob.installProblem(LaunchAgentJob.ownExecutable)
         let launch = AppAgentJob.launch(lockHeld: heldByAnother(path), fromAgent: fromAgent,
                                         withoutAgent: withoutAgent, wanted: AppAgentService.wanted,
-                                        installProblem: installProblem)
+                                        installProblem: installProblem, watched: watchHeld(watchLockPath))
         switch launch {
         case .second(let showFirst):
             if showFirst { show(holder: InstanceLock.holder(path)) }
@@ -133,6 +161,9 @@ enum MacAppInstance {
             }
             try? FileManager.default.removeItem(atPath: marker)
             NSLog("Visor: launchd didn't start Visor as its agent: it runs here, with no restart after a crash until it's next started at login")
+        case .runWhileWatched:
+            handsOffAfterWatch = true
+            NSLog("Visor: an update's watch holds its lock: Visor runs here, the process it opened, and hands itself to launchd once the watch has ended")
         case .run:
             break
         }
