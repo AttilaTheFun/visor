@@ -204,8 +204,8 @@ and again on the copy:
   missing visor-server, relay-client, visor-agent-host or agent-wrapper.
 
 **agent-wrapper** is agent_protocol's (the version Package.resolved pins,
-0.5.0), a static program of its own (about 70 MB stripped) beside
-visor-server, not a name of it: agent_protocol 0.5.0 makes it only an
+0.6.0), a static program of its own (about 70 MB stripped) beside
+visor-server, not a name of it: agent_protocol 0.6.0 makes it only an
 executable (its `AgentWrapper` module is no library product, and its main is
 top-level code), so visor-server can't run it by a name as it runs
 relay-client. tools/linux_programs.sh builds it as a product of Visor's
