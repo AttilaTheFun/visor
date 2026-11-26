@@ -118,5 +118,38 @@ extension ServerTests {
         _ = throttle.failed("10.3.0.2")
         #expect(throttle.trackedCount <= 2)
     }
+
+    /// Who a request is taken as coming from: on loopback with
+    /// X-Forwarded-For (tailscale serve's), the header's right-most entry;
+    /// anywhere else, or without it, the connection's own address.
+    @Test func testTheClientAFrontOnThisComputerNames() {
+        let named = ["x-forwarded-for": "100.101.102.103"]
+        #expect(ForwardedFor.client(peer: "127.0.0.1", headers: named) == "100.101.102.103")
+        #expect(ForwardedFor.client(peer: "::1", headers: named) == "100.101.102.103")
+        #expect(ForwardedFor.client(peer: "::ffff:127.0.0.1", headers: named) == "100.101.102.103")
+        #expect(ForwardedFor.client(peer: "127.0.0.1", headers: ["x-forwarded-for": "10.0.0.1, 100.101.102.103"]) == "100.101.102.103")
+        #expect(ForwardedFor.client(peer: "127.0.0.1", headers: ["x-forwarded-for": "fd7a:115c:a1e0::1234"]) == "fd7a:115c:a1e0::1234")
+        #expect(ForwardedFor.client(peer: "127.0.0.1", headers: [:]) == "127.0.0.1")
+        #expect(ForwardedFor.client(peer: "127.0.0.1", headers: ["x-forwarded-for": " "]) == "127.0.0.1")
+        #expect(ForwardedFor.client(peer: "192.168.1.66", headers: named) == "192.168.1.66", "the network's word is not read")
+        #expect(ForwardedFor.client(peer: nil, headers: named) == nil, "the socket file")
+        // Counted as any address is: a loopback the header names is still
+        // this computer's own, an IPv6 one by its /64.
+        #expect(PasswordThrottle.key(ForwardedFor.client(peer: "127.0.0.1", headers: ["x-forwarded-for": "127.0.0.1"])) == nil)
+        #expect(PasswordThrottle.key(ForwardedFor.client(peer: "127.0.0.1", headers: ["x-forwarded-for": "2001:db8:0:7::1"])) == "2001:db8:0:7::/64")
+    }
+
+    @Test func testATailnetsIPv6AddressIsCountedWhole() {
+        #expect(PasswordThrottle.key("fd7a:115c:a1e0:ab12:4843:cd96:6265:6667") == "fd7a:115c:a1e0:ab12:4843:cd96:6265:6667")
+        #expect(PasswordThrottle.key("[FD7A:115C:A1E0::1]") == "fd7a:115c:a1e0:0:0:0:0:1", "one address, however written")
+        #expect(PasswordThrottle.key("fd7a:115c:a1e0:0:0:0:0:1") == "fd7a:115c:a1e0:0:0:0:0:1")
+        #expect(PasswordThrottle.key("fd7a:115c:a1e1::1") == "fd7a:115c:a1e1:0::/64", "outside the tailnet's /48")
+        let throttle = freshThrottle()
+        for _ in 0..<PasswordThrottle.allowed { _ = throttle.failed("fd7a:115c:a1e0:ab12:4843:cd96:6265:6667") }
+        #expect(throttle.retryAfter("fd7a:115c:a1e0:ab12:4843:cd96:6265:6667") == 300)
+        #expect(throttle.retryAfter("fd7a:115c:a1e0:ab12:4843:cd96:6265:6668") == nil, "another node")
+        for host in 1...PasswordThrottle.allowed { _ = throttle.failed("2001:db8:0:3::\(host)") }
+        #expect(throttle.retryAfter("2001:db8:0:3::abcd") == 300, "any other address by its /64")
+    }
 }
 }

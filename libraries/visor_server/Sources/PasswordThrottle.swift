@@ -3,9 +3,11 @@
 // reach of a guesser on the network that nothing slows. Kept per address,
 // never for the server as a whole, so a stranger on the network can't
 // shut its owner out: an IPv6 address by its /64, which one device holds
-// whole (it picks addresses within it as it likes). This computer
-// (loopback, where a front it sits behind comes from too) and the socket
-// file are never counted, nor a connection the system gives no address.
+// whole (it picks addresses within it as it likes), but a tailnet's by
+// itself (the tailnet's nodes share one /64). This computer (loopback,
+// where a front it sits behind comes from too, but for the client
+// `tailscale serve` names: ForwardedFor) and the socket file are never
+// counted, nor a connection the system gives no address.
 
 import Foundation
 import VisorSystem
@@ -93,7 +95,8 @@ struct PasswordThrottle {
     }
 
     /// What an address is counted under: an IPv4 address as it is, an
-    /// IPv6 one by its /64 (`2001:db8:0:1::/64`), one of IPv4 in IPv6
+    /// IPv6 one by its /64 (`2001:db8:0:1::/64`) but a tailnet's whole
+    /// (`fd7a:115c:a1e0:ab12:4843:cd96:6265:6667`), one of IPv4 in IPv6
     /// (`::ffff:192.168.1.5`) as the IPv4 address. Nil for what is never
     /// counted: none, loopback.
     static func key(_ address: String?) -> String? {
@@ -108,7 +111,17 @@ struct PasswordThrottle {
             return NetworkAddress.isLoopback(v4) ? nil : v4
         }
         if groups[0..<7].allSatisfy({ $0 == 0 }), groups[7] == 1 { return nil }
+        // A tailnet's node is given its one address by Tailscale's
+        // coordination server, and picks no other; its nodes all share a
+        // /64, which would count the whole tailnet as one.
+        if isTailnet(groups) { return groups.map { String($0, radix: 16) }.joined(separator: ":") }
         return groups[0..<4].map { String($0, radix: 16) }.joined(separator: ":") + "::/64"
+    }
+
+    /// Whether an IPv6 address (its eight groups) is a tailnet node's:
+    /// Tailscale's fd7a:115c:a1e0::/48 (net/tsaddr's TailscaleULARange).
+    static func isTailnet(_ groups: [UInt16]) -> Bool {
+        groups.count == 8 && groups[0] == 0xfd7a && groups[1] == 0x115c && groups[2] == 0xa1e0
     }
 
     /// An IPv6 address's eight groups, `::` filled and an IPv4 address at
