@@ -2,8 +2,11 @@
 // wrapper (AgentDriver.Conversation): the files a move to another computer
 // takes (SessionCatalog.conversationFiles: the conversation, and what its
 // subagents kept beside it), a folder's file by file, and the project's
-// memory (`memory/` beside the conversation), each with its place under
-// Claude's folder for the folder the session will work in there.
+// memory (where Claude Code keeps it here: ClaudeSessionFiles.memoryFolder,
+// beside the conversation or under the project of the folder's repository
+// or of the folder, a link to it followed), each with its place under
+// Claude's folder for the folder the session will work in there: the
+// memory under the project Claude Code keeps that folder's memory under.
 
 import ClaudeTranscript
 import Foundation
@@ -34,10 +37,10 @@ enum ConversationFiles {
                 if conversation == nil { conversation = file.url }
             }
         }
-        // The project's memory, beside the conversation.
-        if let conversation {
-            let memory = conversation.deletingLastPathComponent().appendingPathComponent("memory", isDirectory: true)
-            found += files(in: memory).map { File(place: "projects/\(project)/memory/\($0.relative)", url: $0.url) }
+        // The project's memory, where Claude Code keeps it.
+        if let conversation, let memory = ClaudeSessionFiles.memoryFolder(conversation: conversation, cwd: cwd) {
+            let there = ClaudeSessionFiles.memoryProjectDirectoryName(for: workingDirectory)
+            found += files(in: memory).map { File(place: "projects/\(there)/memory/\($0.relative)", url: $0.url) }
         }
         return found
     }

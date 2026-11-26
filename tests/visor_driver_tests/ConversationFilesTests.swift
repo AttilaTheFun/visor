@@ -1,7 +1,9 @@
 // A moved session's conversation as the driver hands it to the runner's
 // wrapper: the conversation, what its subagents kept beside it file by
-// file, and the project's memory, each placed under Claude's folder for the
-// folder the session will work in there.
+// file, and the project's memory (where Claude Code keeps it here, a link
+// followed), each placed under Claude's folder for the folder the session
+// will work in there, the memory under the project Claude Code keeps that
+// folder's memory under.
 
 import ClaudeTranscript
 @testable import VisorDriver
@@ -44,5 +46,43 @@ import Testing
             "projects/\(key)/memory/fact.md",
         ])
         #expect(ConversationFiles.of(resume: "nothing", cwd: "/Users/logan/Developer", for: "/w").isEmpty)
+    }
+
+    private func write(at file: URL, _ text: String) throws {
+        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(text.utf8).write(to: file)
+    }
+
+    private func project(_ cwd: String) -> URL {
+        ClaudeSessionFiles.projectsRoot(home: home).appendingPathComponent(ClaudeSessionFiles.projectDirectoryName(for: cwd), isDirectory: true)
+    }
+
+    /// Move to Container: a conversation begun in a folder of a repository,
+    /// kept under that folder's project, whose memory is under the
+    /// repository's (as Claude Code keeps it), goes down with that memory.
+    @Test func testTheMemoryOfARepositorysProjectGoesWithAConversationInOneOfItsFolders() throws {
+        let top = home.appendingPathComponent("Developer/app", isDirectory: true)
+        try FileManager.default.createDirectory(at: top.appendingPathComponent(".git"), withIntermediateDirectories: true)
+        let inside = top.appendingPathComponent("Sources", isDirectory: true).path
+        try write(at: project(inside).appendingPathComponent("c-1.jsonl"), "{}\n")
+        try write(at: project(top.path).appendingPathComponent("memory/MEMORY.md"), "- the repository's\n")
+        let files = ConversationFiles.of(resume: "c-1", cwd: inside, for: "/Volumes/Sessions/Claude/s8")
+        let key = ClaudeSessionFiles.projectDirectoryName(for: "/Volumes/Sessions/Claude/s8")
+        #expect(files.map(\.place).sorted() == ["projects/\(key)/c-1.jsonl", "projects/\(key)/memory/MEMORY.md"])
+    }
+
+    /// A memory that is a link (Overcast's, 26 Nov 2026) goes down as the
+    /// files of the folder it leads to.
+    @Test func testAMemoryThatIsALinkGoesAsItsFolder() throws {
+        let cwd = home.appendingPathComponent("Developer/overcast", isDirectory: true).path
+        try write(at: project(cwd).appendingPathComponent("c-2.jsonl"), "{}\n")
+        let target = home.appendingPathComponent("elsewhere/memory", isDirectory: true)
+        try write(at: target.appendingPathComponent("MEMORY.md"), "- linked\n")
+        try FileManager.default.createSymbolicLink(at: project(cwd).appendingPathComponent("memory"), withDestinationURL: target)
+        let files = ConversationFiles.of(resume: "c-2", cwd: cwd, for: "/Volumes/Sessions/Claude/s9")
+        let key = ClaudeSessionFiles.projectDirectoryName(for: "/Volumes/Sessions/Claude/s9")
+        #expect(files.map(\.place).sorted() == ["projects/\(key)/c-2.jsonl", "projects/\(key)/memory/MEMORY.md"])
+        let memory = try #require(files.first { $0.place.hasSuffix("MEMORY.md") })
+        #expect((try String(contentsOf: memory.url, encoding: .utf8)) == "- linked\n")
     }
 }

@@ -1,11 +1,14 @@
-// Claude Code's memory moved with a session: the memory of the project its
-// conversation is kept under (`~/.claude/projects/<key>/memory`: the
-// MEMORY.md index and the files it names), which no conversation file
-// holds. A move (and a backup) carries it as a packed folder with the id
-// `memory` and no place of its own, so a server from before this leaves it
-// be. Here it goes under the project of the session's new folder (or, on
-// a restore, its folder), unless that project has a memory already: one is
-// never overwritten or merged.
+// Claude Code's memory moved with a session: the memory of its
+// conversation's project (`~/.claude/projects/<key>/memory`: the MEMORY.md
+// index and the files it names), which no conversation file holds, found
+// where Claude Code keeps it (ClaudeSessionFiles.memoryFolder: beside the
+// transcript, else under the project of the folder's repository or of the
+// folder), a link to it followed. A move (and a backup) carries it as a
+// packed folder with the id `memory` and no place of its own, so a server
+// from before this leaves it be. Here it goes under the project Claude Code
+// keeps the memory of the session's new folder under (or, on a restore, its
+// folder's), unless that project has a memory already: one is never
+// overwritten or merged.
 
 import ClaudeTranscript
 import Foundation
@@ -15,17 +18,34 @@ extension VisorServer {
     /// The carried memory's id among a move's files.
     static let memoryFileID = "memory"
 
-    /// The memory beside a Claude conversation (`conversation`, its file),
-    /// packed into `folder`: nil when there is none, or none to pack.
-    static func packMemory(beside conversation: URL, into folder: URL) async -> (file: MigrationFile, url: URL)? {
-        let memory = conversation.deletingLastPathComponent().appendingPathComponent("memory", isDirectory: true)
-        guard let names = try? FileManager.default.contentsOfDirectory(atPath: memory.path), !names.isEmpty else { return nil }
+    /// The memory of a Claude conversation (`conversation`, its file) of a
+    /// session in `cwd`, packed into `folder` as a folder named `memory`:
+    /// nil when there is none, or none to pack. A memory reached through a
+    /// link is packed as the folder it leads to, never as the link (which
+    /// the other end refuses: it holds no folder).
+    static func packMemory(of conversation: URL, cwd: String, into folder: URL) async -> (file: MigrationFile, url: URL, source: URL)? {
+        guard let memory = ClaudeSessionFiles.memoryFolder(conversation: conversation, cwd: cwd) else { return nil }
         let archive = folder.appendingPathComponent("memory.tgz", isDirectory: false)
-        guard await pack(folder: memory, into: archive) == nil else {
+        // tar packs a folder by its own name: one by another name is copied
+        // in as `memory` first.
+        var packed = memory
+        let staged = folder.appendingPathComponent("memory-staged", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: staged) }
+        if memory.lastPathComponent != "memory" {
+            packed = staged.appendingPathComponent("memory", isDirectory: true)
+            do {
+                try FileManager.default.createDirectory(at: staged, withIntermediateDirectories: true)
+                try FileManager.default.copyItem(at: memory, to: packed)
+            } catch {
+                log("the memory at \(memory.path) could not be copied to pack: \(error.localizedDescription)")
+                return nil
+            }
+        }
+        guard await pack(folder: packed, into: archive) == nil else {
             try? FileManager.default.removeItem(at: archive)
             return nil
         }
-        return (MigrationFile(id: memoryFileID, place: "", size: fileSize(archive), packed: true), archive)
+        return (MigrationFile(id: memoryFileID, place: "", size: fileSize(archive), packed: true), archive, memory)
     }
 
     /// The memory a move carried, put under the project of `cwd` here
@@ -43,9 +63,10 @@ extension VisorServer {
         _ = await Self.putMemory(carried, of: move.offer.session.title, cwd: cwd, limits: limits)
     }
 
-    /// The folder of Claude's project for `cwd` here, which its memory is in.
+    /// The folder of Claude's project whose memory a session in `cwd` here
+    /// has: its repository's, or its own outside one.
     static func memoryProject(_ cwd: String) -> URL {
-        ClaudeSessionFiles.projectsRoot().appendingPathComponent(ClaudeSessionFiles.projectDirectoryName(for: cwd), isDirectory: true)
+        ClaudeSessionFiles.projectsRoot().appendingPathComponent(ClaudeSessionFiles.memoryProjectDirectoryName(for: cwd), isDirectory: true)
     }
 
     /// The memory packed at `archive` put under the project of `cwd` here

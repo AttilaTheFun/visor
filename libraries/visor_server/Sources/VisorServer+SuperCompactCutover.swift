@@ -12,6 +12,7 @@
 // allowed once the job is done and waiting for its review, never while the
 // old session is mid-turn, and once.
 
+import ClaudeTranscript
 import Foundation
 import VisorProtocol
 import VisorSystem
@@ -184,18 +185,15 @@ extension VisorServer {
         return .json(e.encoded())
     }
 
-    /// Claude's project memory for the old session (the `memory` folder
-    /// beside its conversation, or under the project of its folder) copied
-    /// under the project of `cwd`, unless that has one: what was copied, in
-    /// words, or nil when there was none.
+    /// Claude's project memory for the old session (where Claude Code keeps
+    /// it: ClaudeSessionFiles.memoryFolder, beside its conversation or under
+    /// the project of its folder's repository or its folder, a link to it
+    /// followed) copied under the project of `cwd`, unless that has one:
+    /// what was copied, in words, or nil when there was none.
     static func copyMemory(of old: SessionInfo, conversation: String, to cwd: String) -> String? {
         let files = FileManager.default
-        let beside = URL(fileURLWithPath: conversation, isDirectory: false).deletingLastPathComponent()
-            .appendingPathComponent("memory", isDirectory: true)
-        let candidates = [beside, memoryProject(old.cwd).appendingPathComponent("memory", isDirectory: true)]
-        guard let source = candidates.first(where: { ((try? files.contentsOfDirectory(atPath: $0.path)) ?? []).isEmpty == false }) else {
-            return nil
-        }
+        guard let source = ClaudeSessionFiles.memoryFolder(conversation: URL(fileURLWithPath: conversation, isDirectory: false), cwd: old.cwd)
+        else { return nil }
         let project = memoryProject(cwd)
         let destination = project.appendingPathComponent("memory", isDirectory: true)
         if let there = try? files.contentsOfDirectory(atPath: destination.path), !there.isEmpty {

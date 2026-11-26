@@ -2,8 +2,7 @@
 // backend: a stop on purpose held (Stop, turned off), so its sessions'
 // agents wait rather than starting it again, and a restart that isn't;
 // the server's ContainerAgent exec'd as agent-wrapper (its conversation,
-// its folder, its repositories cloned there, its Claude folder on
-// Sessions) and held as a ContainerAgentRun; and the folders it shares.
+// its folder, no repository cloned there, its Claude folder on Sessions) and held as a ContainerAgentRun; and the folders it shares.
 
 import Foundation
 import Testing
@@ -39,9 +38,7 @@ extension EngineTests {
         let id = "5f0c7a8e-2b1d-4c3e-9f4a-8b7c6d5e4f3a"
         let folder = sessions.path + "/Claude/" + id
         let agent = ContainerAgent(agent: id, session: "a-session", title: "Moved", model: "opus", workingDirectory: folder,
-                                   resumeSessionID: "c-1", skipPermissions: true,
-                                   sources: [ContainerAgent.Source(repository: "https://github.com/o/r.git", ref: "main", name: "r")],
-                                   sourcesDirectory: folder, token: "eyJ.runner.agent",
+                                   resumeSessionID: "c-1", skipPermissions: true, token: "eyJ.runner.agent",
                                    environment: ["CLAUDE_CONFIG_DIR": sessions.path + "/.claude"])
         let run = try await engine.startAgent(agent)
         let exec = try #require(await rig.machines.last?.execs.last)
@@ -49,14 +46,13 @@ extension EngineTests {
         #expect(exec.workingDirectory == folder)
         #expect(exec.environment["AGENT_ID"] == "\(id)@http://127.0.0.1:7434")
         #expect(exec.environment["AGENT_TOKEN"] == "eyJ.runner.agent")
-        #expect(exec.environment["AGENT_SOURCES_DIR"] == folder)
+        #expect(exec.environment["AGENT_SOURCES_DIR"] == nil, "nothing cloned: its agent clones what it needs")
         #expect(exec.environment["CLAUDE_CONFIG_DIR"] == sessions.path + "/.claude")
         #expect(exec.environment["AGENT_DISPATCHER_URL"] == nil, "it reports to no dispatcher: Visor drives it")
         let job = try #require(exec.environment["AGENT_JOB"])
         let object = try #require(try JSONSerialization.jsonObject(with: Data(job.utf8)) as? [String: Any])
         #expect(object["resumeSessionID"] as? String == "c-1" && object["workingDirectory"] as? String == folder)
-        let sources = try #require(object["sources"] as? [[String: String]])
-        #expect(sources == [["repository": "https://github.com/o/r.git", "ref": "main", "name": "r"]])
+        #expect(object["sources"] == nil, "no repositories in its job")
         #expect(!job.contains("eyJ.runner.agent"))
         await run.signal(15)
         #expect(await run.wait() == 128 + 15)
