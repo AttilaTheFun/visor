@@ -94,9 +94,9 @@ extension ServerTests {
     }
 
     private func request(_ path: String, bearer: String?, from peer: String?) -> HTTPRequest {
-        var request = request(path, bearer: bearer)
-        request.peer = peer
-        return request
+        var made = request(path, bearer: bearer)
+        made.peer = peer
+        return made
     }
 
     /// Five wrong passwords from one address within a minute and it is

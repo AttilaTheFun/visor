@@ -17,13 +17,12 @@ extension ServerTests {
 @Suite @MainActor struct PasswordThrottleTests {
     private let clock = SetClock()
 
-    private func throttle() -> PasswordThrottle {
-        let clock = clock
-        return PasswordThrottle(now: { clock.now })
+    private func freshThrottle() -> PasswordThrottle {
+        PasswordThrottle(now: { [clock] in clock.now })
     }
 
     @Test func testTheFifthWrongPasswordInAMinuteLocksTheAddressOut() {
-        var throttle = throttle()
+        var throttle = freshThrottle()
         for _ in 1..<PasswordThrottle.allowed {
             #expect(!throttle.failed("192.168.1.50"))
             #expect(throttle.retryAfter("192.168.1.50") == nil)
@@ -40,7 +39,7 @@ extension ServerTests {
     }
 
     @Test func testWrongPasswordsSpreadOverMoreThanAMinuteAreCountedAfresh() {
-        var throttle = throttle()
+        var throttle = freshThrottle()
         for _ in 1..<PasswordThrottle.allowed { #expect(!throttle.failed("10.0.0.7")) }
         clock.pass(PasswordThrottle.window)
         #expect(!throttle.failed("10.0.0.7"), "the window has gone by")
@@ -49,7 +48,7 @@ extension ServerTests {
     }
 
     @Test func testASuccessForgetsTheWrongOnes() {
-        var throttle = throttle()
+        var throttle = freshThrottle()
         for _ in 1..<PasswordThrottle.allowed { #expect(!throttle.failed("10.0.0.7")) }
         throttle.succeeded("10.0.0.7")
         for _ in 1..<PasswordThrottle.allowed { #expect(!throttle.failed("10.0.0.7")) }
@@ -58,7 +57,7 @@ extension ServerTests {
     }
 
     @Test func testThisComputerAndTheSocketFileAreNeverCounted() {
-        var throttle = throttle()
+        var throttle = freshThrottle()
         for address in ["127.0.0.1", "127.0.0.2", "::1", "0:0:0:0:0:0:0:1", "::ffff:127.0.0.1", "", nil] as [String?] {
             for _ in 0..<(PasswordThrottle.allowed * 2) { #expect(!throttle.failed(address)) }
             #expect(throttle.retryAfter(address) == nil)
@@ -81,7 +80,7 @@ extension ServerTests {
         #expect(PasswordThrottle.groups(ipv6: "1::2::3") == nil)
         #expect(PasswordThrottle.groups(ipv6: "12345::1") == nil)
 
-        var throttle = throttle()
+        var throttle = freshThrottle()
         // A device takes what addresses it likes within its /64: all one.
         for host in 1..<PasswordThrottle.allowed { #expect(!throttle.failed("2001:db8:0:1::\(host)")) }
         #expect(throttle.failed("2001:db8:0:1:ffff::1"))
@@ -90,7 +89,7 @@ extension ServerTests {
     }
 
     @Test func testNoMoreThanSoManyAddressesAreKeptTheOldestGoingFirst() {
-        var throttle = throttle()
+        var throttle = freshThrottle()
         // The first address, locked out, then as many more as are kept.
         for _ in 0..<PasswordThrottle.allowed { _ = throttle.failed("10.1.0.1") }
         #expect(throttle.retryAfter("10.1.0.1") != nil)
