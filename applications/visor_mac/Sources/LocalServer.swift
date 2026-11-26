@@ -223,7 +223,8 @@ final class LocalServer {
     /// app-agent start`) and this build's watcher follows, so a crash is
     /// answered from then on. Until then a crash isn't, as before 0.72.1.
     /// Not while the hand-back runs: a restart asked then would reach the
-    /// server agent. A refusal (a watch's 409) is asked again a few times.
+    /// server agent; nor while a session is mid-turn, as an update waits.
+    /// A refusal (a watch's 409) is asked again a few times.
     private func handOffOnceWatched() {
         guard MacAppInstance.handsOffAfterWatch, handingOff == nil else { return }
         let log: @Sendable (String) -> Void = { ServerPlatform.current.log($0) }
@@ -239,6 +240,8 @@ final class LocalServer {
                 case .never: return
                 case .now: break
                 }
+                // As an update waits (VisorUpdates): no session cut mid-turn.
+                if await busy() { continue }
                 log("the update's watch has ended: Visor hands itself to launchd (a restart through its agent)")
                 tries += 1
                 guard let problem = await restartServer() else { return }
