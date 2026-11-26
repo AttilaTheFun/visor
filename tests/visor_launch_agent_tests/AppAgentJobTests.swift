@@ -74,6 +74,48 @@ import VisorServer
         #expect(launch(problem: elsewhere) == .run, "a build to run here registers nothing")
     }
 
+    /// NCH's lease test of 0.72.1, updating from 0.71.1: 0.71.1's watcher
+    /// opened 0.72.1, which handed itself to launchd and exited 0; the
+    /// watcher, which follows the app by its full path (launchd runs it by
+    /// a relative one), took that for a quit and put 0.71.1 back while
+    /// launchd ran 0.72.1. Opened while an update's watch holds its lock,
+    /// the app stays the process that was opened, and hands itself to
+    /// launchd once the watch has ended and its server runs in the app.
+    @Test func anOpenDuringAnUpdatesWatchRunsHereUntilTheWatchEnds() {
+        func launch(held: Bool = false, agent: Bool = false, without: Bool = false, wanted: Bool = true,
+                    problem: String? = nil, watched: Bool) -> AppAgentJob.Launch {
+            AppAgentJob.launch(lockHeld: held, fromAgent: agent, withoutAgent: without, wanted: wanted, installProblem: problem,
+                               watched: watched)
+        }
+        // (a) a fresh 0.71.1, no server agent: its app's watcher opened this
+        // one; (b) an upgraded 0.71.1: the server agent's watcher holds the
+        // lock while the app of the build before reopens. Either way, the
+        // same: no hand-off inside a watch.
+        #expect(launch(watched: true) == .runWhileWatched)
+        #expect(launch(watched: false) == .handToLaunchd, "no watch: handed to launchd at once, as before")
+        // What decides it otherwise still does.
+        #expect(launch(held: true, watched: true) == .second(showFirst: true))
+        #expect(launch(agent: true, watched: true) == .run, "launchd's own: this build's watcher started it through its agent")
+        #expect(launch(without: true, watched: true) == .run, "this build's watcher's fallback")
+        #expect(launch(wanted: false, watched: true) == .run, "Start at Login off: nothing to hand off later")
+        #expect(launch(problem: "elsewhere", watched: true) == .run)
+        #expect(AppAgentJob.launch(lockHeld: false, fromAgent: false, withoutAgent: false, wanted: true, installProblem: nil) == .handToLaunchd,
+                "unsaid is no watch")
+    }
+
+    @Test func theAppThatRanThroughAWatchHandsItselfToLaunchdOnceItEnds() {
+        func handOff(watching: Bool = false, inApp: Bool = true, wanted: Bool = true, problem: String? = nil) -> AppAgentJob.HandOff {
+            AppAgentJob.handOff(watching: watching, serverInApp: inApp, wanted: wanted, installProblem: problem)
+        }
+        #expect(handOff() == .now, "the watch over, the server in the app: a restart through its agent")
+        #expect(handOff(watching: true) == .wait, "never inside the watch: it would read as a quit")
+        #expect(handOff(inApp: false) == .wait, "not mid hand-back: the restart would reach the server agent")
+        #expect(handOff(watching: true, inApp: false) == .wait)
+        #expect(handOff(wanted: false) == .never, "Start at Login turned off meanwhile")
+        #expect(handOff(watching: true, problem: "elsewhere") == .never)
+        #expect(AppAgentJob.watchPoll == .seconds(5) && AppAgentJob.handOffTries > 1)
+    }
+
     /// NCH's check of #537: a copy outside /Applications served this Mac's
     /// data whenever nothing held the lock. It's a client alone, unless a
     /// test's or a developer's setting says it may serve.

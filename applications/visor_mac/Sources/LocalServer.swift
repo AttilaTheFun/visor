@@ -15,6 +15,13 @@
 // with the agents' hosts left running, its socket and port waited for), and
 // the server made in the app once they're free, picking the hosts up.
 //
+// A launch opened while an update's watch held its lock (MacAppInstance:
+// a build before 0.72.1's watcher, or the server agent's) runs here rather
+// than hand itself to launchd, which that watcher would take for a quit;
+// once the watch has ended and the server runs in the app, it does
+// (`handOffOnceWatched`: a restart, which AppRelauncher makes through the
+// app's agent, watched by this build's own watcher).
+//
 // Either way the app is only ever the server's client: its window, its
 // menu, Settings, the welcome and its updates reach the server at its
 // socket file (`/Volumes/Visor/run/server.sock` on the Visor volume, else
@@ -69,6 +76,7 @@ final class LocalServer {
     /// it once it answers with a password set.
     @ObservationIgnored private var store: VisorStore?
     @ObservationIgnored private var watching: Task<Void, Never>?
+    @ObservationIgnored private var handingOff: Task<Void, Never>?
 
     /// The server, as the app's client reaches it: at its socket file, as
     /// this user, no password.
@@ -118,6 +126,7 @@ final class LocalServer {
     func launched() {
         if let server { Self.run(server) }
         watch()
+        handOffOnceWatched()
     }
 
     /// Whether a server answers already, at the socket files or on the
@@ -204,6 +213,37 @@ final class LocalServer {
             while !Task.isCancelled {
                 await self?.refresh()
                 try? await Task.sleep(for: Self.refreshInterval)
+            }
+        }
+    }
+
+    /// The app opened while an update's watch held its lock, handed to
+    /// launchd once it has ended (AppAgentJob.handOff): Restart Server's
+    /// restart, which AppRelauncher makes through the app's agent (`Visor
+    /// app-agent start`) and this build's watcher follows, so a crash is
+    /// answered from then on. Until then a crash isn't, as before 0.72.1.
+    /// Not while the hand-back runs: a restart asked then would reach the
+    /// server agent. A refusal (a watch's 409) is asked again a few times.
+    private func handOffOnceWatched() {
+        guard MacAppInstance.handsOffAfterWatch, handingOff == nil else { return }
+        let log: @Sendable (String) -> Void = { ServerPlatform.current.log($0) }
+        handingOff = Task { [weak self] in
+            var tries = 0
+            while !Task.isCancelled, tries < AppAgentJob.handOffTries {
+                try? await Task.sleep(for: AppAgentJob.watchPoll)
+                guard let self else { return }
+                switch AppAgentJob.handOff(watching: MacAppInstance.watchHeld(RelaunchWatchLock.url.path),
+                                           serverInApp: mode == .inApp && server != nil, wanted: AppAgentService.wanted,
+                                           installProblem: Self.startsAtLoginProblem) {
+                case .wait: continue
+                case .never: return
+                case .now: break
+                }
+                log("the update's watch has ended: Visor hands itself to launchd (a restart through its agent)")
+                tries += 1
+                guard let problem = await restartServer() else { return }
+                log("Visor couldn't hand itself to launchd yet: \(problem)")
+                try? await Task.sleep(for: .seconds(30))
             }
         }
     }
