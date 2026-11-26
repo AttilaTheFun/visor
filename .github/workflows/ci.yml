@@ -895,7 +895,9 @@ jobs:
   # release: it changes rarely.
   agent-image-wanted:
     needs: [alpha-apple, alpha-propose]
-    if: ${{ !cancelled() && (inputs.run == 'agent-image' || needs.alpha-propose.result == 'success') }}
+    # Main's alone: an image every Sessions container pulls is never built
+    # from a branch's unreviewed code (NCH, 26 Nov 2026).
+    if: ${{ !cancelled() && github.ref == 'refs/heads/main' && (inputs.run == 'agent-image' || needs.alpha-propose.result == 'success') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     outputs:
@@ -925,22 +927,26 @@ jobs:
   # Ubuntu (arm64 alone, as the containers that run it: no emulated
   # architecture) and pushed to GitHub's registry as that version, its
   # MAJOR.MINOR and latest (tools/containers/publish_agent_image.sh).
+  # Main's alone, twice over: the job's `if`, and the environment
+  # `agent-image`, whose deployment branches are main alone, holding the
+  # registry's token (GHCR_TOKEN): a ci.yml changed on a branch gets
+  # no token to push with.
   agent-image:
     needs: [alpha-propose, agent-image-wanted]
-    if: ${{ !cancelled() && needs.agent-image-wanted.outputs.build == 'true' }}
+    if: ${{ !cancelled() && github.ref == 'refs/heads/main' && needs.agent-image-wanted.outputs.build == 'true' }}
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 90
+    environment: agent-image
     permissions:
       contents: read
-      packages: write
     steps:
       - uses: actions/checkout@v5
       - run: sudo --preserve-env=GHCR_USER,GHCR_TOKEN,VISOR_REF tools/containers/publish_agent_image.sh "$VERSION"
         env:
           VERSION: ${{ needs.agent-image-wanted.outputs.version }}
           VISOR_REF: ${{ github.sha }}
-          GHCR_USER: ${{ github.actor }}
-          GHCR_TOKEN: ${{ github.token }}
+          GHCR_USER: ${{ secrets.GHCR_USER }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
 
   # ---- Released ------------------------------------------------------------
 
