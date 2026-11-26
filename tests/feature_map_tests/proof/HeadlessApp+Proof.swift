@@ -1,6 +1,8 @@
 // A proof's picture of a screen held still: taken until two in a row are
 // the same, as the proof's scripts took them before the driver (a caret's
-// blink may keep any two from matching: then the last is kept).
+// blink may keep any two from matching: then the last is kept), for as
+// long as the proof gives a screen to settle (VISOR_PROOF_SETTLE_SECONDS:
+// a slow simulator's sheets and turns outlast a fast one's).
 
 import Foundation
 import IsomerHeadless
@@ -16,15 +18,27 @@ extension HeadlessApp {
             ?? FileManager.default.temporaryDirectory.appendingPathComponent("isomer-proof")
     }
 
+    /// How long a screen is given to hold still, in seconds: the test's
+    /// VISOR_PROOF_SETTLE_SECONDS, else 5 (the twelve pictures a quarter of
+    /// a second apart it was given before, on GitHub's Macs).
+    static var settleSeconds: Double {
+        guard let seconds = ProcessInfo.processInfo.environment["VISOR_PROOF_SETTLE_SECONDS"].flatMap({ Double($0) }),
+              seconds > 0 else { return 5 }
+        return seconds
+    }
+
     /// Pictures the screen as `name` (`device` as HeadlessApp.picture
     /// takes it), again until the picture is the same as the one before,
-    /// at most `tries` times: how many it took. Records an issue when no
-    /// picture comes.
+    /// for at most `budget` seconds: how many it took. Records an issue
+    /// when no picture comes.
     @discardableResult
-    func steadyPicture(_ name: String, device: String? = nil, tries: Int = 12,
+    func steadyPicture(_ name: String, device: String? = nil, within budget: Double = HeadlessApp.settleSeconds,
                        sourceLocation: SourceLocation = #_sourceLocation) throws -> Int {
+        let deadline = ContinuousClock.now + .milliseconds(Int(budget * 1000))
         var previous: Data?
-        for attempt in 1...tries {
+        var attempt = 0
+        repeat {
+            attempt += 1
             guard let id = try picture(name, device: device) else {
                 Issue.record("no picture of \(name): is the app headful, and its launcher one that takes pictures?",
                              sourceLocation: sourceLocation)
@@ -34,8 +48,8 @@ extension HeadlessApp {
             if picture == previous { return attempt }
             previous = picture
             Thread.sleep(forTimeInterval: 0.25)
-        }
-        print("[proof] \(name): never the same twice, the last picture kept")
-        return tries
+        } while ContinuousClock.now < deadline
+        print("[proof] \(name): never the same twice in \(budget) s, the last picture kept")
+        return attempt
     }
 }

@@ -17,6 +17,17 @@
 //                            fixture.orientation); Android's emulator is
 //                            turned before the run
 //   ISOMER_PROOF             where the pictures go (screens/<id>.png)
+//   VISOR_PROOF_SETTLE_SECONDS  how long a screen is given to hold still
+//                            before its picture (default 5: a slow
+//                            simulator's sheets and turns take longer)
+//
+// A screen is pictured once it is drawn, not only listed: its node shown,
+// what its own view lists there (a chat's rows, the commands' popover),
+// and on the iPhone its sheet risen onto the screen and held there, and on
+// its side the window turned (`arrive`); then two pictures in a row the
+// same (HeadlessApp.steadyPicture). Each waits for what the screen shows,
+// not for a time: on GitHub's Macs no longer than before, and as long as a
+// slow simulator takes.
 //
 // Headful alone (//tests/feature_map_tests:feature_map_proof_<platform>);
 // headless, there is nothing to picture and it isn't run.
@@ -35,6 +46,61 @@ struct FeatureMapProof {
     /// The fixture's settings for this run: the iPhone's app on its side.
     static var settings: [String: String] {
         ProcessInfo.processInfo.environment["VISOR_PROOF_ORIENTATION"] == "landscape" ? ["fixture.orientation": "landscape"] : [:]
+    }
+
+    /// Whether the app is the iPhone's (Isomer's iOS launcher): where the
+    /// driver lists a sheet while it is still below the screen, and the
+    /// app turns itself on its side a moment after it opens.
+    static var iPhone: Bool {
+        (VisorLaunch.launcher.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "").hasPrefix("ios")
+    }
+
+    /// What a screen's own view lists once it is drawn, past its node: the
+    /// commands' popover, both of the fixture's slash commands; a chat's
+    /// rows (VisorFixture's), which AgentUI draws at opacity 0 under its
+    /// held empty state until the thread has settled at its end
+    /// (TranscriptView's reveal), and which the driver lists only then
+    /// (SwiftUI leaves a view at opacity 0 out of accessibility, and the
+    /// driver a UIKit view at alpha 0). A row the list of Sessions doesn't
+    /// show as a preview, where it is beside the chat.
+    static func drawn(_ screen: String, on shown: HeadlessScreen) -> Bool {
+        if screen == "commands" {
+            return ["/compact", "/goal"].allSatisfy { command in
+                shown.elements.contains { $0.id == "suggestion-" + command || $0.label.hasPrefix(command) }
+            }
+        }
+        let rows: [String] = switch screen {
+        case "chat": ["The weather app loses rows when the phone goes offline", "Rows now sync in the background, and the banner"]
+        case "goal": ["Start on this."]
+        case "earlier": ["Start on this.", "Earlier row"]
+        default: []
+        }
+        return rows.isEmpty || rows.contains { row in shown.shows(row) || shown.elements.contains { $0.label.contains(row) } }
+    }
+
+    /// The elements of a screen's own view that are looked at on the
+    /// iPhone until they are on the screen and held still, by identifier
+    /// or label: a sheet's (the first of them listed), which the driver
+    /// lists while the sheet is still below the screen; the commands'
+    /// popover's rows. Each is near the top, and wide or on the left:
+    /// accessibility's frames are in the upright device's coordinates on
+    /// an app that turns itself, where a narrow element on the window's
+    /// right, below it, falls inside the window's bounds (`hold`), and a
+    /// sheet on its side is shorter than its form.
+    static func held(_ screen: String, on shown: HeadlessScreen) -> [String] {
+        let elements: [String] = switch screen {
+        case "connect": ["host"]
+        case "new-session": ["Cancel", "conversation", "start"]
+        case "question": ["question-skip", "question-send"]
+        case "models": ["approval-Auto Approve", "all-models"]
+        case "inspector": ["details-title", "details-done"]
+        case "settings": ["settings-appearance"]
+        case "search": ["message-hit"]
+        case "commands": ["suggestion-/compact", "suggestion-/goal"]
+        default: []
+        }
+        let listed = elements.filter { shown.has(id: $0) || shown.has(label: $0) }
+        return screen == "commands" ? listed : Array(listed.prefix(1))
     }
 
     /// How a screen is told once its own launch has opened it.
@@ -142,8 +208,9 @@ struct FeatureMapProof {
         }
     }
 
-    /// Waits for `screen`'s node (when it has one), recording an issue if it
-    /// never shows; its picture is taken all the same.
+    /// Waits for `screen`'s node (when it has one) and what its own view
+    /// lists, then on the iPhone for it to be drawn (`hold`), recording an
+    /// issue if it never is; its picture is taken all the same.
     private func arrive(_ app: HeadlessApp, at screen: String, timeout: Double = 15) throws {
         guard let node = Self.node(screen) else {
             Thread.sleep(forTimeInterval: 4)
@@ -152,12 +219,94 @@ struct FeatureMapProof {
         // The commands' chat: its slash commands offered, over it on the
         // iPhone (a popover, all the driver lists while it's open).
         let isShown = { (shown: HeadlessScreen) in
-            node.isShown(on: shown) || (screen == "commands" && shown.elements.contains { $0.label.hasPrefix("/goal") })
+            (node.isShown(on: shown) || (screen == "commands" && shown.elements.contains { $0.label.hasPrefix("/goal") }))
+                && Self.drawn(screen, on: shown)
         }
         let start = ContinuousClock.now
         let shown = try app.screen(within: timeout) { isShown($0) }
-        #expect(isShown(shown), "\(screen): not \(node.rawValue): \(shown.summary)")
+        #expect(isShown(shown), "\(screen): not \(node.rawValue), or not its own rows or commands yet: \(shown.summary)")
+        if Self.iPhone { try hold(app, screen, Self.held(screen, on: shown), timeout: timeout) }
         print("[proof] \(screen): there in \(ContinuousClock.now - start)")
+    }
+
+    /// A frame as the driver's `inspect` gives it (its `frame`: `x y width
+    /// height` in points, accessibility's).
+    private struct Frame: Equatable {
+        let x, y, width, height: Double
+
+        init?(_ text: String?) {
+            let numbers = (text ?? "").split(separator: " ").compactMap { Double($0) }
+            guard numbers.count == 4, numbers[2] > 0, numbers[3] > 0 else { return nil }
+            x = numbers[0]
+            y = numbers[1]
+            width = numbers[2]
+            height = numbers[3]
+        }
+
+        /// Inside a `width` by `height` screen, either way round: the
+        /// window's, or on an app that turns itself, the upright device's
+        /// (a point's rounding aside).
+        func inside(width: Double, height: Double) -> Bool {
+            guard x >= -1, y >= -1 else { return false }
+            let right = x + self.width - 1, bottom = y + self.height - 1
+            return (right <= width && bottom <= height) || (right <= height && bottom <= width)
+        }
+    }
+
+    /// Waits, within `timeout` seconds, for the iPhone's screen as it is
+    /// drawn: on its side, the window turned (wider than it is tall: the
+    /// app turns itself a moment after it opens, and HeadlessApp.picture
+    /// names a picture by it); and each of `elements` on the screen, its
+    /// frame where it was the look before (a sheet listed before it has
+    /// risen, or on its way up or round, is below the screen or moving).
+    /// Where the driver gives no frame, the node alone, as before.
+    private func hold(_ app: HeadlessApp, _ screen: String, _ elements: [String], timeout: Double) throws {
+        let landscape = ProcessInfo.processInfo.environment["VISOR_PROOF_ORIENTATION"] == "landscape"
+        guard landscape || !elements.isEmpty else { return }
+        let deadline = ContinuousClock.now + .milliseconds(Int(timeout * 1000))
+        var size: HeadlessInfo?
+        var before: [Frame]?
+        var why = ""
+        repeat {
+            // The window's size, until it has turned (then it stays).
+            if size == nil {
+                let info = try app.info()
+                if landscape, info.width <= info.height {
+                    why = "the window not turned yet (\(Int(info.width))×\(Int(info.height)))"
+                    Thread.sleep(forTimeInterval: 0.1)
+                    continue
+                }
+                size = info
+                if elements.isEmpty { return }
+            }
+            guard let width = size?.width, let height = size?.height else { continue }
+            // Each `inspect` reads the screen once the driver has seen it
+            // settle: two looks a settling apart.
+            var frames: [Frame] = []
+            for element in elements {
+                guard let inspection = try? app.inspect(element) else {
+                    why = "\(element) not listed"
+                    break
+                }
+                guard let frame = Frame(inspection.params["frame"]) else {
+                    print("[proof] \(screen): no frame of \(element) (\(inspection.params["frame"] ?? "none")): its node alone")
+                    return
+                }
+                guard frame.inside(width: width, height: height) else {
+                    why = "\(element) at \(frame), off the \(Int(width))×\(Int(height)) screen"
+                    break
+                }
+                frames.append(frame)
+            }
+            guard frames.count == elements.count else {
+                before = nil
+                continue
+            }
+            if frames == before { return }
+            why = "\(elements.joined(separator: ", ")) moving: \(before.map { "\($0)" } ?? "") to \(frames)"
+            before = frames
+        } while ContinuousClock.now < deadline
+        Issue.record("\(screen): not drawn in \(timeout) s: \(why)")
     }
 
     /// The picture, as the platform's device calls it (`phone`, or on its
