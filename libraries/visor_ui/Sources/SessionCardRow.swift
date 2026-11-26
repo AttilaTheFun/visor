@@ -7,8 +7,10 @@ import VisorProtocol
 /// A session in the sidebar: where its agent runs (a container, or the
 /// computer's system), its name, a pin when it is pinned, its loop, and at
 /// the end of that line a flag while it works toward a goal (a goal said
-/// loosely can run away with it) and what is happening — a spinner while
-/// the agent works, a clock while it waits on anything; then the full path
+/// loosely can run away with it) and what is happening — a raised hand
+/// while it waits to be allowed something, a question while it waits for
+/// an answer, a spinner while the agent works, a clock while it waits on
+/// anything else; then the full path
 /// of its folder and the first lines of the latest message. What it waits
 /// on, its subagents and its sub-sessions are its chat's (Logan, 26 Nov
 /// 2026: in the list they were noise). Whether the computer answers is its
@@ -72,18 +74,23 @@ struct SessionCardRow: View {
 
     /// What is happening at the line's end.
     enum Activity: Equatable {
-        case working, waiting, none
+        case approval, question, working, waiting, none
     }
 
-    /// From its turn's state (or, from a server before turn states, what
-    /// its busy, approval and background say): working while the agent
-    /// thinks, writes or runs a tool call of its own; waiting while it
-    /// waits on anything else — an approval, a question, a sign-in, a
-    /// subagent, a monitor, work left in the background. A monitor is one
-    /// more thing waited on, not a mark of its own.
+    /// What waits on the person comes first, a mark of its own (Logan, 26
+    /// Nov 2026): an approval, or the agent's questions, which stop a turn
+    /// still going. Otherwise from its turn's state (or, from a server
+    /// before turn states, what its busy and background say): working
+    /// while the agent thinks, writes or runs a tool call of its own;
+    /// waiting while it waits on anything else — a sign-in, a subagent, a
+    /// monitor, work left in the background. A monitor is one more thing
+    /// waited on, not a mark of its own.
     static func activity(of session: SessionInfo) -> Activity {
         let turn = session.turn ?? TurnState.of(approval: session.pendingApproval, signIn: false, busy: session.busy, sending: false,
                                                 responding: false, status: [], background: session.background)
+        if let request = session.pendingApproval { return request.questions?.isEmpty == false ? .question : .approval }
+        if turn.waits.contains(where: { $0.kind == .question }) { return .question }
+        if turn.waits.contains(where: { $0.kind == .approval }) { return .approval }
         switch turn.phase {
         case .sending, .thinking, .responding: return .working
         case .waiting:
@@ -93,9 +100,18 @@ struct SessionCardRow: View {
         }
     }
 
-    /// What is happening: the agent works, or waits.
+    /// What is happening: the agent waits to be allowed something or for
+    /// an answer, works, or waits on something else.
     @ViewBuilder private var activity: some View {
         switch Self.activity(of: session) {
+        case .approval:
+            Image(systemName: "hand.raised.fill").foregroundColor(.yellow)
+                .accessibilityLabel("Waiting for your approval")
+                .accessibilityIdentifier("activity-" + session.id)
+        case .question:
+            Image(systemName: "questionmark.bubble.fill").foregroundStyle(mark)
+                .accessibilityLabel("Asking you a question")
+                .accessibilityIdentifier("activity-" + session.id)
         case .working:
             // Screenshot tests want the same pixels every run.
             if VisorFixture.active {
@@ -116,7 +132,7 @@ struct SessionCardRow: View {
         }
     }
 
-    /// The goal's and the loop's marks: the accent, or the words' color on
+    /// The goal's, the loop's and a question's marks: the accent, or the words' color on
     /// the selection.
     private var mark: AnyShapeStyle { selected ? AnyShapeStyle(.primary) : AnyShapeStyle(Color.accentColor) }
 }

@@ -1,8 +1,10 @@
-// What a session's row shows at the end of its first line: a spinner while
-// the agent works (thinking, writing, running a tool call of its own), a
-// clock while it waits on anything else — an approval, a question, a
-// subagent, a monitor, work left in the background. A monitor is one more
-// thing waited on, not a mark of its own.
+// What a session's row shows at the end of its first line: a raised hand
+// while it waits to be allowed something, a question while it waits for an
+// answer (before the turn they hold up, so a session waiting on the person
+// is seen without opening it); else a spinner while the agent works
+// (thinking, writing, running a tool call of its own), a clock while it
+// waits on anything else — a subagent, a monitor, work left in the
+// background. A monitor is one more thing waited on, not a mark of its own.
 
 import VisorProtocol
 @testable import VisorUI
@@ -20,13 +22,21 @@ final class SessionCardRowTests: XCTestCase {
         return info
     }
 
-    func testAPromptOrAQuestionIsWaiting() {
+    func testAPromptOrAQuestionShowsWhileItsTurnGoesOn() {
         let prompt = ApprovalRequest(id: "p", tool: "Bash", summary: "rm -rf build")
         let question = ApprovalRequest(id: "q", tool: "AskUserQuestion", summary: "",
                                        questions: [AgentQuestion(question: "Which?", options: [.init(label: "This")])])
-        XCTAssertEqual(SessionCardRow.activity(of: session(busy: true, approval: prompt)), .waiting)
-        XCTAssertEqual(SessionCardRow.activity(of: session(busy: true, approval: question)), .waiting)
-        XCTAssertEqual(SessionCardRow.activity(of: session(approval: question)), .waiting, "a question Codex asked between turns")
+        XCTAssertEqual(SessionCardRow.activity(of: session(busy: true, approval: prompt)), .approval)
+        XCTAssertEqual(SessionCardRow.activity(of: session(busy: true, approval: question)), .question)
+        XCTAssertEqual(SessionCardRow.activity(of: session(approval: question)), .question, "a question Codex asked between turns")
+        // As the turn's state says them, from a server of turn states.
+        let asked = TurnState(.waiting, waits: [TurnWait(kind: .approval, id: "p", label: "rm -rf build")])
+        let questioned = TurnState(.waiting, waits: [TurnWait(kind: .question, id: "q", label: "Which?")])
+        XCTAssertEqual(SessionCardRow.activity(of: session(busy: true, turn: asked)), .approval)
+        XCTAssertEqual(SessionCardRow.activity(of: session(busy: true, turn: questioned)), .question)
+        // A sign-in waits on the person too, but is one more wait.
+        let signIn = TurnState(.waiting, waits: [TurnWait(kind: .signIn, id: "sign-in", label: "Claude")])
+        XCTAssertEqual(SessionCardRow.activity(of: session(busy: true, turn: signIn)), .waiting)
     }
 
     func testFromAServerBeforeTurnStates() {

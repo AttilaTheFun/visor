@@ -109,6 +109,11 @@ public enum VisorFixture {
         var chat = session(chatSession, .claude, "/Users/visor/Developer/weather", "Offline sync",
                            model: "opus", preview: "Rows now sync in the background; waiting for your approval to run the tests.", age: 60)
         chat.goal = "Rows written offline are all on the server after reconnecting"
+        // What its thread waits on (FixtureAgentServer's subscribe), as its
+        // computer lists it too: on the chat screen, the approval of its
+        // tests; on the question screen, the question.
+        if screen == "chat" { chat.pendingApproval = ApprovalRequest(id: "fixture-approval", tool: "Bash", summary: "swift test --filter SyncTests") }
+        if screen == "question" { chat.pendingApproval = question }
         // On the turn screens, the chat's turn as the list has it.
         if screen == "turn" || stillTurn != nil {
             let turn = stillTurn ?? turnSteps[0]

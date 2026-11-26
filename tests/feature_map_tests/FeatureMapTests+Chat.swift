@@ -114,6 +114,26 @@ extension FeatureMapTests {
         /// reply's row once it syncs, once, and the line gone. (Not among
         /// FixtureScreens': while the turn runs the composer offers Stop,
         /// not Send, so the chat is told by its end.)
+        /// An approval or a question the chat waits on: in Sessions, its
+        /// row's own mark, a raised hand or a question (`activity-‹id›`),
+        /// where any other wait is a clock.
+        @Test("Session chat → Sessions: back; the row marks what waits on the person", arguments: [
+            ("chat", "Waiting for your approval"),
+            ("question", "Asking you a question"),
+        ])
+        func waitsOnThePerson(screen: String, mark: String) throws {
+            let app = try VisorLaunch.fixture(screen)
+            defer { app.quit() }
+            if screen == "question" {
+                try app.screen { FeatureMapNode.question.isShown(on: $0) }
+                try app.dismiss()
+            }
+            try app.screen { FeatureMapNode.chat.isShown(on: $0) }
+            _ = try app.back()
+            let listed = try app.screen { $0.row("Offline sync", marked: "activity-fixture-chat", mark) }
+            #expect(listed.row("Offline sync", marked: "activity-fixture-chat", mark), "the list's mark: \(listed.summary)")
+        }
+
         @Test("Session chat: the turn's line through its states, then the reply's row")
         func turnStates() throws {
             let reply = "All 42 sync tests pass, offline rows included, and the banner shows how many are still waiting."
