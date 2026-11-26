@@ -10,7 +10,8 @@ import ClaudeTranscript
 import Foundation
 import Testing
 
-@Suite final class ConversationFilesTests {
+// One at a time: each sets the one home folder Claude's files are under.
+@Suite(.serialized) final class ConversationFilesTests {
     private var savedHome: URL!
     private var home: URL!
 
