@@ -18,6 +18,7 @@
 
 import Crypto
 import Foundation
+import Synchronization
 
 @MainActor
 package final class SigningKeys {
@@ -40,14 +41,20 @@ package final class SigningKeys {
 
     /// How long a key that stopped being current verifies every token it
     /// signed: as long as the longest-lived of them lasts.
-    package static let previousKeyLife: TimeInterval = 24 * 3600
+    nonisolated package static let previousKeyLife: TimeInterval = 24 * 3600
 
     /// How long after a failed read the kept keys are read again.
     static let retryInterval: TimeInterval = 30
 
     private let secrets: any SecretStore
     /// The keys, once read or made; nil while those kept can't be read.
-    private var keySet: KeySet?
+    private var keySet: KeySet? {
+        didSet { let set = keySet; shared.withLock { $0 = set } }
+    }
+    /// `keySet` as it was last set, for a check off the main actor
+    /// (`liveKey`: agent-proxy's pass-through, before it waits on the
+    /// server, AgentTokens.passThroughCheck).
+    private nonisolated let shared = Mutex<KeySet?>(nil)
     /// Why the kept keys can't be used, while they can't.
     package private(set) var problem: String?
     private var lastRead = Date.distantPast
@@ -56,6 +63,8 @@ package final class SigningKeys {
     package init(secrets: any SecretStore, now: Date = Date()) {
         self.secrets = secrets
         load(now: now)
+        let set = keySet
+        shared.withLock { $0 = set }
     }
 
     /// The current key's name ("" while the keys can't be read).
@@ -93,9 +102,22 @@ package final class SigningKeys {
     /// and `AgentTokens.expiredTokenGrace` ago (verify-only: such a key is
     /// never current, and never signs).
     package func key(_ kid: String, now: Date = Date(), withinGrace: Bool = false) -> Data? {
-        guard let kept = held(now: now)?.keys[kid] else { return nil }
+        held(now: now).flatMap { Self.key(kid, in: $0, now: now, withinGrace: withinGrace) }
+    }
+
+    /// As `key(_:now:)` (no grace), from any thread: the keys as they were
+    /// last set here, never read again. `known` is false while none have
+    /// been read (the kept ones unreadable): then nothing is said of a kid.
+    nonisolated package func liveKey(_ kid: String, now: Date = Date()) -> (known: Bool, key: Data?) {
+        guard let set = shared.withLock({ $0 }) else { return (false, nil) }
+        return (true, Self.key(kid, in: set, now: now, withinGrace: false))
+    }
+
+    /// The key named `kid` in `set`, while it is held (`key`'s rule).
+    private nonisolated static func key(_ kid: String, in set: KeySet, now: Date, withinGrace: Bool) -> Data? {
+        guard let kept = set.keys[kid] else { return nil }
         if let retired = kept.retired {
-            let life = Self.previousKeyLife + (withinGrace ? AgentTokens.expiredTokenGrace : 0)
+            let life = previousKeyLife + (withinGrace ? AgentTokens.expiredTokenGrace : 0)
             if now.timeIntervalSince1970 - retired >= life { return nil }
         }
         return Data(base64Encoded: kept.key)

@@ -10,13 +10,16 @@ import XCTest
 
 final class NativeMCPProxyTests: XCTestCase {
     /// A proxy on a free loopback port, serving `endpoints`, admitting `one-token` (and a container agent's own token as
-    /// `agentSession` says), each endpoint's `API_KEY` its secret.
+    /// `agentSession` says, once `agentTokenCheck` lets it be asked), each endpoint's `API_KEY` its secret.
     private func proxy(_ endpoints: [NativeMCPProxy.Endpoint], maxConnections: Int = NativeMCPProxy.defaultMaxConnections,
-                       agentSession: (@Sendable (String) async -> String?)? = nil) throws -> NativeMCPProxy {
+                       maxVouches: Int = NativeMCPProxy.defaultMaxVouches,
+                       agentSession: (@Sendable (String) async -> String?)? = nil,
+                       agentTokenCheck: (@Sendable (String) -> Bool)? = nil) throws -> NativeMCPProxy {
         for _ in 0..<20 {
             if let proxy = NativeMCPProxy(port: UInt16.random(in: 20000...45000), endpoints: { endpoints }, admits: { $0 == "one-token" },
                                           secret: { name, header in header == "API_KEY" ? "\(name)-secret" : nil },
-                                          agentSession: agentSession, maxConnections: maxConnections) {
+                                          agentSession: agentSession, agentTokenCheck: agentTokenCheck, maxConnections: maxConnections,
+                                          maxVouches: maxVouches) {
                 proxy.start()
                 return proxy
             }
@@ -26,6 +29,12 @@ final class NativeMCPProxyTests: XCTestCase {
 
     /// An HTTP request to the proxy, and its status and body.
     private func ask(_ port: UInt16, _ path: String, token: String?, body: String = "{}", extra: [String] = []) throws -> (status: String, body: String) {
+        try Self.ask(port, path, token: token, body: body, extra: extra)
+    }
+
+    /// The same, from any thread.
+    private static func ask(_ port: UInt16, _ path: String, token: String?, body: String = "{}", extra: [String] = []) throws
+        -> (status: String, body: String) {
         let connection = agent_proxy_connect_tcp("127.0.0.1", port)
         guard connection >= 0 else { throw XCTSkip("the proxy can't be reached") }
         defer { close(connection) }
@@ -140,6 +149,77 @@ final class NativeMCPProxyTests: XCTestCase {
             XCTAssertEqual(try ask(proxy.port, "/mcp/\(name)", token: "one-token").status, "200", "native: \(name)")
         }
         XCTAssertEqual(endpoint.requests.withLock { $0.count }, 5)
+    }
+
+    /// NCH's check of #536: the server's word on a container agent's token is waited for (up to ten seconds) while the
+    /// call holds one of the proxy's places, so forged tokens could fill them. A token is checked here first, at once
+    /// (`agentTokenCheck`: the server's keys): one that fails (forged, expired, another server's) is refused with no
+    /// wait, and the server is never asked; one that passes is asked as before.
+    func testAForgedTokenIsRefusedAtOnce() throws {
+        let endpoint = try XCTUnwrap(FakeEndpoint())
+        defer { endpoint.stop() }
+        let asked = Lines()
+        let proxy = try proxy([NativeMCPProxy.Endpoint(name: "nimbus", url: "http://127.0.0.1:\(endpoint.port)/mcp")],
+                              agentSession: { token in
+                                  asked.add(token)
+                                  // A server slow to say, that would say yes to anything.
+                                  if token != "agent.own.token" { try? await Task.sleep(for: .seconds(5)) }
+                                  return "s-container"
+                              },
+                              agentTokenCheck: { $0 == "agent.own.token" })
+        defer { proxy.stop() }
+        for forged in ["forged.jwt.token", "expired.jwt.token"] {
+            let start = Date()
+            XCTAssertEqual(try ask(proxy.port, "/mcp/nimbus", token: forged).status, "401", forged)
+            XCTAssertLessThan(Date().timeIntervalSince(start), 1, "refused with no wait: \(forged)")
+        }
+        XCTAssertEqual(asked.all, [], "the server is never asked about them")
+        XCTAssertEqual(endpoint.requests.withLock { $0.count }, 0)
+        XCTAssertEqual(try ask(proxy.port, "/mcp/nimbus", token: "agent.own.token").status, "200")
+        XCTAssertEqual(asked.all, ["agent.own.token"])
+    }
+
+    /// At most `maxVouches` calls wait on the server's word at once (eight); another is refused at once (503), and one
+    /// is asked again once a place is given back.
+    func testCallsPastTheVouchesCapAreRefusedAtOnce() throws {
+        XCTAssertEqual(NativeMCPProxy.defaultMaxVouches, 8)
+        let endpoint = try XCTUnwrap(FakeEndpoint())
+        defer { endpoint.stop() }
+        let waiting = DispatchSemaphore(value: 0)
+        let answer = DispatchSemaphore(value: 0)
+        let proxy = try proxy([NativeMCPProxy.Endpoint(name: "nimbus", url: "http://127.0.0.1:\(endpoint.port)/mcp")], maxVouches: 1,
+                              agentSession: { _ in
+                                  waiting.signal()
+                                  // The server's answer held until the test lets it go.
+                                  await withCheckedContinuation { (said: CheckedContinuation<Void, Never>) in
+                                      DispatchQueue.global().async {
+                                          answer.wait()
+                                          said.resume()
+                                      }
+                                  }
+                                  return "s-container"
+                              },
+                              agentTokenCheck: { _ in true })
+        defer { proxy.stop() }
+        let port = proxy.port
+        let first = Locked<String?>(nil)
+        let done = DispatchSemaphore(value: 0)
+        DispatchQueue.global().async {
+            let status = try? Self.ask(port, "/mcp/nimbus", token: "agent.own.token").status
+            first.withLock { $0 = status }
+            done.signal()
+        }
+        XCTAssertEqual(waiting.wait(timeout: .now() + 5), .success, "the first call waits on the server")
+        let start = Date()
+        XCTAssertEqual(try ask(port, "/mcp/nimbus", token: "agent.own.token").status, "503")
+        XCTAssertLessThan(Date().timeIntervalSince(start), 1, "refused with no wait")
+        answer.signal()
+        XCTAssertEqual(done.wait(timeout: .now() + 5), .success)
+        XCTAssertEqual(first.withLock { $0 }, "200")
+        // Its place given back: the next is asked.
+        answer.signal()
+        XCTAssertEqual(try ask(port, "/mcp/nimbus", token: "agent.own.token").status, "200")
+        XCTAssertEqual(endpoint.requests.withLock { $0.count }, 2)
     }
 
     /// An endpoint kept as MultiPass's runner.json kept it (CLIENT_ID: $SESSION_ID) leaves CLIENT_ID to the session, so

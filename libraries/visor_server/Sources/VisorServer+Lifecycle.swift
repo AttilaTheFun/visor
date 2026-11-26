@@ -36,11 +36,15 @@ extension VisorServer {
     }
 
     /// Why a restart or an update is refused now: an earlier one's watch
-    /// still holds its lock (RelaunchWatchLock), or nil.
+    /// still holds its lock (RelaunchWatchLock), or nil. Its holder counts
+    /// only when it started when the lock says its watcher did: a live pid
+    /// alone may be another process's since (NCH's check of #537).
     func relaunchWatched() -> String? {
         let text = try? String(contentsOf: RelaunchWatchLock.url, encoding: .utf8)
+        let processes = ServerPlatform.current.processes
         guard let left = RelaunchWatchLock.remaining(text, now: Int(Date().timeIntervalSince1970),
-                                                     isRunning: { ServerPlatform.current.processes.isRunning($0) }) else { return nil }
+                                                     isRunning: { processes.isRunning($0) },
+                                                     started: { processes.startTime(of: $0) }) else { return nil }
         return Self.relaunchWatchedRefusal(left)
     }
 

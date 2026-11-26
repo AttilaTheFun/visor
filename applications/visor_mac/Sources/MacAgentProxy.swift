@@ -50,8 +50,11 @@ enum MacAgentProxy {
     private static var folded: AgentProxyHost.Running?
     private static var foldedDigest: String?
     /// Whose a container agent's token is, as the server in this process
-    /// says (VisorServer.passThroughSession), once it's folded in.
+    /// says (VisorServer.passThroughSession), once it's folded in; and
+    /// whether a token may be one at all, said at once from the server's
+    /// keys (VisorServer.passThroughTokenCheck) before that is waited on.
     private static var agentSession: (@Sendable (String) async -> String?)?
+    private static var agentTokenCheck: (@Sendable (String) -> Bool)?
 
     /// In the server: the job gone (its ports are the proxy's here),
     /// then the proxy started in this process, with the server's secrets,
@@ -63,9 +66,11 @@ enum MacAgentProxy {
         foldedDigest = AgentProxyHost.digest(server.settings.agentProxy)
         let session: @Sendable (String) async -> String? = { token in await server.passThroughSession(for: token) }
         agentSession = session
+        let check = server.passThroughTokenCheck
+        agentTokenCheck = check
         guard let settings = server.settings.agentProxy else { return }
         folded = AgentProxyHost.start(settings, places: places, secrets: ServerPlatform.current.secrets, version: VisorMacApp.bundleVersion,
-                                      agentSession: session, log: log)
+                                      agentSession: session, agentTokenCheck: check, log: log)
     }
 
     /// In the server, once folded in: started again with `settings`
@@ -79,6 +84,7 @@ enum MacAgentProxy {
         guard let settings else { return }
         ServerPlatform.current.log("agent-proxy: its settings changed: started again")
         folded = AgentProxyHost.start(settings, places: places, secrets: ServerPlatform.current.secrets, version: VisorMacApp.bundleVersion,
-                                      agentSession: agentSession, log: { ServerPlatform.current.log("agent-proxy: \($0)") })
+                                      agentSession: agentSession, agentTokenCheck: agentTokenCheck,
+                                      log: { ServerPlatform.current.log("agent-proxy: \($0)") })
     }
 }

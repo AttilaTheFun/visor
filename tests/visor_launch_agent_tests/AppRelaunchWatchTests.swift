@@ -254,6 +254,49 @@ import VisorServer
         #expect(scene.read(scene.destination + "/name") == "new")
     }
 
+    /// NCH's check of #537: the instance lock's file keeps the id of a
+    /// holder that has ended (the lock goes with its process, the file's
+    /// words don't), and an id is reused. A live process by the id the file
+    /// names that doesn't hold the lock isn't the app, so the fallback's
+    /// open isn't skipped, nor a stranger watched or stopped; the process
+    /// that holds it is (AppRelauncher's `holder`).
+    @Test func aReusedProcessIDIsNoLockHolder() throws {
+        let scene = try Scene()
+        defer { scene.cleanUp() }
+        let holder = AppRelaunchWatch.lockHolder(scene.holder)
+        // The holder gone, its id now another live process's, which never
+        // took the lock.
+        let stranger = Process()
+        stranger.executableURL = URL(fileURLWithPath: "/bin/sleep")
+        stranger.arguments = ["60"]
+        try stranger.run()
+        defer { stranger.terminate() }
+        try "\(stranger.processIdentifier)\n".write(toFile: scene.holder, atomically: true, encoding: .utf8)
+        #expect(try Self.shell(holder) == "", "a live process by the id the file names, holding nothing, is no holder")
+        // Taken, as the app takes it (its own id written in it): its holder.
+        let lock = try #require(try InstanceLock.take(scene.holder))
+        #expect(try Self.shell(holder) == "\(getpid())\n")
+        #expect(InstanceLock.isHeld(scene.holder) && InstanceLock.holder(scene.holder) == getpid(), "asking let nothing go")
+        lock.release()
+        #expect(try Self.shell(holder) == "", "let go: this process runs still, but holds nothing")
+        #expect(FileManager.default.fileExists(atPath: scene.holder), "the file is kept")
+        try FileManager.default.removeItem(atPath: scene.holder)
+        #expect(try Self.shell(holder) == "", "no file: no holder")
+    }
+
+    /// What `command` prints, run by /bin/sh.
+    private static func shell(_ command: String) throws -> String {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = ["-c", command]
+        let output = Pipe()
+        process.standardOutput = output
+        try process.run()
+        let data = output.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        return String(decoding: data, as: UTF8.self)
+    }
+
     /// NCH's check of #537: an app whose quit never ends (a modal, a
     /// terminate not answered) left no server and the watch's lock held. It
     /// has `endWithin` seconds, then TERM, then KILL.

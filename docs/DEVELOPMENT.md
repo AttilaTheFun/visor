@@ -684,7 +684,15 @@ longer a place it runs, and the `ServerAsAgent` default isn't read.
   The watch follows the app's process by the instance lock's holder (the
   lock file's pid): launchd runs the app by a path relative to the bundle,
   and a second copy that loses the race and exits 0 is never a crash (NCH's
-  check of #537). Up to ten minutes for a process to appear at all (the
+  check of #537). The pid stays in the file after its holder ends, and a
+  pid is reused, so a live process by that pid counts only while the lock
+  is held (AppRelaunchWatch.lockHolder: a try to take it at once fails,
+  `/usr/bin/lockf -t 0` on a Mac, util-linux's `flock -n` in the tests);
+  otherwise a stranger would skip the fallback's open ("launchd's copy came
+  up after all"), be watched, or be stopped. The app that goes is waited
+  for by `kill -0`; on Linux (the tests) /proc's `State: Z` says an
+  unreaped one has gone, and a Mac, with no /proc, asks `kill -0` alone
+  (launchd, the app's parent, reaps it at once). Up to ten minutes for a process to appear at all (the
   system's first checks of a new build), then two minutes for its first
   answer, on 7433 from that process (lsof's listener), or at its socket
   file while it has no password to listen with, then two minutes up: a
@@ -787,7 +795,12 @@ longer a place it runs, and the `ServerAsAgent` default isn't read.
   note while it watches (RelaunchWatchLock: `<pid> <started>`), stopping an
   earlier watcher still holding it as it starts; the server answers
   `/api/restart` with 409 ("An update is still being watched; try again in
-  N s"), and the menu's restart likewise, while a live watcher holds it.
+  N s"), and the menu's restart likewise, while a live watcher holds it: a
+  process by the lock's pid that started within 30 s of the time the lock
+  records (`ProcessSignals.startTime`, as the hand-back's
+  RelaunchWatchHolder asks; NCH's check of #537: a live pid alone may be
+  another process's since, and would refuse every restart for a whole
+  watch).
   Each watch keeps the bundle it replaced in `Previous/<token>/`, and puts
   it back only if that copy is there, whole, and the bundle in place is
   still the one it installed (its executable's checksum): otherwise the

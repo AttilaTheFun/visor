@@ -22,6 +22,12 @@
 //
 // Each command it runs on the system is a field, so a test runs the same
 // script with stand-ins (//tests/visor_launch_agent_tests, on Linux).
+//
+// The app that goes is waited for by `kill -0`. On Linux a process that has
+// exited but not been reaped (a container's first process may reap nothing)
+// still answers it, so there /proc's `State: Z` says it has gone; a Mac has
+// no /proc, and `kill -0` alone is asked there (the app's parent is launchd,
+// which reaps it at once).
 
 import Foundation
 import VisorProtocol
@@ -119,6 +125,32 @@ public struct AppRelaunchWatch: Sendable {
         "curl -s -o /dev/null -m 3 -w '%{http_code}' --unix-socket \(quoted(path)) http://localhost/api/hello | grep -qv '^000$'"
     }
 
+    /// Shell: the process id the instance lock at `lock` names (its first
+    /// line, InstanceLock's), while that process holds the lock; else
+    /// nothing. The id stays in the file after its holder ends (the lock
+    /// goes with the process, the file's words don't), and an id is reused:
+    /// a live process by that id would be taken for the app, the fallback's
+    /// open skipped ("launchd's copy came up after all") and a stranger
+    /// watched, or stopped (NCH's check of #537). So the lock itself is
+    /// asked (`lockHeld`), of a live process alone: as the app starts, the
+    /// file still names the one that went, which has ended, and the probe
+    /// never takes the lock from under the new one's take. Only a reused
+    /// id has it take the lock, for a moment, which the app's take allows
+    /// for (MacAppInstance: tried again for half a second).
+    public static func lockHolder(_ lock: String) -> String {
+        "h=$(head -1 \(quoted(lock)) 2>/dev/null | tr -dc 0-9); [ -n \"$h\" ] && kill -0 $h 2>/dev/null && \(lockHeld(lock)) && echo $h"
+    }
+
+    /// Shell: succeeds while a process holds the lock file `lock` (flock(2),
+    /// as InstanceLock takes it): a try to take it at once fails with
+    /// EX_TEMPFAIL (75); one that succeeds lets it go as it ends. A Mac's
+    /// `/usr/bin/lockf` (`-k` keeps the file, `-n` makes none, `-s` quiet),
+    /// else util-linux's `flock` (Linux's, the tests').
+    public static func lockHeld(_ lock: String) -> String {
+        "{ if [ -x /usr/bin/lockf ]; then /usr/bin/lockf -kns -t 0 \(quoted(lock)) true; else flock -n -E 75 \(quoted(lock)) true; fi; "
+            + "[ $? = 75 ]; } 2>/dev/null"
+    }
+
     /// The whole script. How long a build that runs and never serves leaves
     /// the Mac with no server before it's undone: the start through launchd
     /// (a registration, about two minutes at most), then `firstAnswer` (two
@@ -128,7 +160,7 @@ public struct AppRelaunchWatch: Sendable {
     public func script() -> String {
         """
         \(lock.map { RelaunchWatchLock.take($0) + "\n" } ?? "")w=0
-        while kill -0 \(appPID) 2>/dev/null && ! grep -q '^State:.*Z' /proc/\(appPID)/status 2>/dev/null; do
+        while kill -0 \(appPID) 2>/dev/null && ! { [ -r /proc/\(appPID)/status ] && grep -q '^State:.*Z' /proc/\(appPID)/status; }; do
           w=$((w+1))
           [ $w = \(endWithin * 5) ] && { echo "$(date): the app (process \(appPID)) didn't end within \(endWithin) s: sent TERM"; kill \(appPID) 2>/dev/null; }
           [ $w = \((endWithin + killAfter) * 5) ] && { echo "$(date): the app (process \(appPID)) didn't end after TERM: sent KILL"; kill -9 \(appPID) 2>/dev/null; }
