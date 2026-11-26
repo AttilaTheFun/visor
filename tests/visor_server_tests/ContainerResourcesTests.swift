@@ -133,7 +133,7 @@ extension ServerTests {
         for (body, reason) in refusals {
             let refused = await put(body)
             #expect(refused.status == 400, "\(body)")
-            #expect(parseJSON(refused.body)?["error"].string?.contains(reason) == true, "\(body): \(refused.body)")
+            #expect(parseJSON(refused.body)?["message"].string?.contains(reason) == true, "\(body): \(refused.body)")
         }
         #expect(kept?.cpus == 6 && kept?.memoryGiB == 16 && kept?.enabled == false && kept?.idleMinutes == 30, "nothing changed")
         #expect(server.settings.container?.cpus == 6 && server.settings.container?.memoryGiB == 16 && !server.settings.lan)

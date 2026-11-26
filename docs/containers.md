@@ -247,8 +247,9 @@ editing the file or restarting Visor: `containerEnabled`,
 `containerCPUs`, `containerMemoryGiB` and `containerIdleMinutes`, each
 kept in the settings file at once. A number is checked against this
 Mac's (`activeProcessorCount` and `physicalMemory`, as the engine reads
-them) and the limits in the table, and one outside them is refused (400
-with `error` saying why, and nothing in the change taken), never clamped.
+them) and the limits in the table, and one outside them is refused (400,
+an `error` whose `message` says why, and nothing in the change taken),
+never clamped.
 `null`, or `"default"`, goes back to the default (the key left out of the
 file). `GET /api/settings` says them (`settings.containerCPUs` and
 `containerMemoryGiB`, `null` for the defaults, and
