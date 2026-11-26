@@ -15,9 +15,11 @@ This repo is public. Every change to `main` goes through a pull request:
 client and the Android app built, and the client's screens walked
 headless through Isomer's driver, FEATURE_MAP.md's
 `//tests/feature_map_tests`), must pass on main's head before a pull
-request can merge, with `container-apple` (the iPhone and Mac apps,
-libraries and servers built on GitHub's `xcode-27` Mac) beside it; each
-commit on main runs the same. CI runs on GitHub's runners and cache alone,
+request can merge; each commit on main runs the same. No Mac runs at a
+pull request (Logan, 13 Nov 2026): for a change to Apple code, run
+`container-apple` by hand on its branch (`gh workflow run ci.yml --ref
+<branch> -f run=container-apple`: the iPhone and Mac apps, libraries and
+servers built on GitHub's `xcode-27` Mac), and verify builds them all. CI runs on GitHub's runners and cache alone,
 none of Shireworks'. The
 rest of the tests and the proof run by hand (`run: verify`), and every
 release proposal runs them (docs/DEVELOPMENT.md, CI). Run the tests

@@ -27,12 +27,15 @@ name: CI
 #
 # - A pull request runs `container`, the required check (Linux: the rules,
 #   the Linux client and blue Visor's Android APK built, the client's
-#   screens walked headless, the command-line server built with SwiftPM),
-#   and `container-apple` beside it (the iPhone and Mac apps, the Mac's
-#   test bundles, libraries and servers, built). A pull request of
-#   documentation alone checks the rules and stops there. A newer push
-#   cancels its run. A fork's pull request runs them too, on GitHub's
-#   runners: no secret reaches it, and it writes no cache.
+#   screens walked headless, the command-line server built with SwiftPM).
+#   A pull request of documentation alone checks the rules and stops
+#   there. A newer push cancels its run. A fork's pull request runs it
+#   too, on GitHub's runners: no secret reaches it, and it writes no cache.
+#   No Mac at a pull request (Logan, 13 Nov 2026: Apple runners for release
+#   verification alone, as they are the bottleneck): `container-apple`
+#   (the iPhone and Mac apps, the Mac's test bundles, libraries and
+#   servers, built) runs by hand on a branch that touches Apple code
+#   (`run=container-apple`), and verify builds and tests them all.
 # - Each commit on main runs `populate`: the merged tree built as the
 #   pull request's Linux jobs build it, and its screens walked headless
 #   (nothing published), into GitHub's cache and BuildBuddy's.
@@ -67,9 +70,9 @@ on:
   workflow_dispatch:
     inputs:
       run:
-        description: "verify: the tests and the proof. prerelease: Alphas and a draft pre-release. release: verify, then Alphas and a draft release. agent-image: Visor's toolchain image, built and pushed. populate: the Apple apps built into the caches (populate-apple), as the nightly run does."
+        description: "verify: the tests and the proof. prerelease: Alphas and a draft pre-release. release: verify, then Alphas and a draft release. agent-image: Visor's toolchain image, built and pushed. populate: the Apple apps built into the caches (populate-apple), as the nightly run does. container-apple: the Apple apps built on this branch, as a pull request's check once did."
         type: choice
-        options: [verify, prerelease, release, agent-image, populate]
+        options: [verify, prerelease, release, agent-image, populate, container-apple]
         default: verify
   # Logan's Release in Reviews publishes the draft, which makes its v* tag.
   release:
@@ -171,31 +174,20 @@ jobs:
           swift build --target VisorClientGRPCServer
           swift build --target VisorClientGRPCClient
 
-  # The Apple targets, on an xcode-27 Mac with its own Xcode.
+  # The Apple targets, on an xcode-27 Mac with its own Xcode: by hand on a
+  # branch (`run=container-apple`), never at a pull request (above).
   container-apple:
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'workflow_dispatch' && inputs.run == 'container-apple'
     runs-on: xcode-27
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v5
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 0
-      - id: changes
-        env:
-          BASE: ${{ github.event.pull_request.base.sha }}
-        run: |
-          files="$(git diff --name-only "$BASE" HEAD)"
-          if printf '%s\n' "$files" | awk '!/^([Dd]ocs\/|\.notes\/)|\.md$/ { code = 1 } END { exit !code }'; then code=true; else code=false; fi
-          echo "code=$code" >> "$GITHUB_OUTPUT"
       - uses: ./.github/actions/bazel_cache
-        if: steps.changes.outputs.code == 'true'
         with:
           group: apple
       # The iPhone and iPad app, Visor.app, the Mac client and Visor Server,
       # the Mac's test bundles, then the libraries and servers for the Mac.
       - name: The Apple apps
-        if: steps.changes.outputs.code == 'true'
         run: tools/ci/container_build.sh
 
   # ---- main ----------------------------------------------------------------
@@ -240,6 +232,10 @@ jobs:
       github.ref == 'refs/heads/main' &&
       (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.run == 'populate'))
     runs-on: xcode-27
+    permissions:
+      contents: read
+      # The nightly failure's issue (its last step).
+      issues: write
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v5
@@ -256,6 +252,24 @@ jobs:
           group: apple
           gigabytes: 3
           repository-hit: ${{ steps.cache.outputs.repository-hit }}
+      # A broken main, seen at night (no pull request builds the Apple
+      # apps): an issue opened, or the open one commented on, with the
+      # run's link. This job's token alone may write issues.
+      - name: A broken main, flagged
+        if: failure() && github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Nightly Apple build failed on main"
+          body="populate-apple failed on main at $GITHUB_SHA: $RUN"
+          number="$(gh issue list --state open --search "$title in:title" --json number,title --jq ".[] | select(.title == \"$title\") | .number" | head -n 1)"
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body"
+          fi
 
   # ---- By hand: verify -----------------------------------------------------
 
