@@ -40,8 +40,7 @@ import VisorServer
         init() throws {
             root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-app-commands-" + UUID().uuidString).path
             try FileManager.default.createDirectory(atPath: root, withIntermediateDirectories: true)
-            try "#!/bin/sh\necho \"$*\" >> '\(asked)'\n".write(toFile: launchctl, atomically: true, encoding: .utf8)
-            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: launchctl)
+            try StandIn.executable("#!/bin/sh\necho \"$*\" >> '\(asked)'\n", at: launchctl)
         }
 
         /// A stand-in Visor.app: `app-agent start` starts the bundle's own
@@ -62,8 +61,7 @@ import VisorServer
             fi
             \(body)
             """
-            try script.write(toFile: macOS + "/Visor", atomically: true, encoding: .utf8)
-            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: macOS + "/Visor")
+            try StandIn.executable(script, at: macOS + "/Visor")
             try name.write(toFile: path + "/name", atomically: true, encoding: .utf8)
         }
 
@@ -207,7 +205,7 @@ import VisorServer
         try scene.app(at: scene.destination, name: "old", body: scene.serves)
         try scene.app(at: scene.source, name: "new", body: "")
         // Not even `app-agent start`: the whole executable ends 3.
-        try "#!/bin/sh\nexit 3\n".write(toFile: scene.source + "/Contents/MacOS/Visor", atomically: true, encoding: .utf8)
+        try StandIn.executable("#!/bin/sh\nexit 3\n", at: scene.source + "/Contents/MacOS/Visor")
         let began = Date()
         let output = try scene.run(scene.watch(update: true, appearWithin: 60))
         #expect(output.contains("app-agent start ended with status 3: the build doesn't run"), "\(output)")
