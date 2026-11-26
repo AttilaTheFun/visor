@@ -102,6 +102,12 @@ public final class VisorServer {
     /// The bytes free on the disk a URL is on, which a move here must fit
     /// (VisorServer+MigrationSize.swift): the system's word, or a test's.
     var freeBytes: (URL) -> Int? = { VisorServer.systemFreeBytes($0) }
+    /// This computer's cores and memory, which the Sessions container's
+    /// CPUs and memory must fit (VisorServer+ContainerResources): the
+    /// system's word, or a test's.
+    var hostResources: () -> (cores: Int, memoryBytes: UInt64) = {
+        (ProcessInfo.processInfo.activeProcessorCount, ProcessInfo.processInfo.physicalMemory)
+    }
     /// The agent shims' connections waiting for an approval's answer: by
     /// session, then by request id. The server's, not the session's: a
     /// connection is a client of this server.
