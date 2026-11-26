@@ -119,9 +119,8 @@ public final class VisorServer {
     /// (VISOR_TRUST and the headers it names): why a request is let in,
     /// and whom it names. Nil: anyone who reaches it, as `owner`.
     public var front: FrontTrust?
-    /// Addresses connections were refused on (a path that is off), and
-    /// "tailscale serve" for its tailnet's while the VPN path is off
-    /// (`admits(peer:headers:)`), each logged once.
+    /// Addresses connections were refused on (a path that is off), each
+    /// logged once.
     var refusedPaths: Set<String> = []
 
     /// The slash commands each agent listed when it last ran (VisorServer+Commands.swift).

@@ -240,15 +240,10 @@ extension VisorServer {
     }
 
     private func acceptClient(_ stream: any ByteStream, received: Data, trusted: Bool) {
-        let headers = HTTPServer.headerEnd(received).map { HTTPServer.headers(String(decoding: received[..<$0], as: UTF8.self)) } ?? [:]
-        // One tailscale serve relays from the tailnet: closed while the VPN
-        // path is off, as a connection on it would have been.
-        if !trusted, !admits(peer: stream.remoteAddress, headers: headers) {
-            stream.close()
-            return
-        }
         let client = ClientConnection(stream: stream, received: received)
-        client.headers = headers
+        if let end = HTTPServer.headerEnd(received) {
+            client.headers = HTTPServer.headers(String(decoding: received[..<end], as: UTF8.self))
+        }
         // The socket file's: as this user, while SSH clients are, or for
         // Visor.app itself.
         client.trusted = trusts(socketFile: trusted, headers: client.headers)

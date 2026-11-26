@@ -231,6 +231,32 @@ extension ServerTests {
         #expect(server.route(request("/api/hello", bearer: "pearl-grove", from: "127.0.0.1", forwardedFor: "2001:db8:0:8::1")).status == 200)
     }
 
+    /// A tailnet's IPv6 address is counted whole, straight here or named
+    /// by tailscale serve: its nodes share one /64, each given its own
+    /// address. Any other IPv6 address is still counted by its /64.
+    @Test func testTailnetIPv6AddressesAreCountedEachOnItsOwn() {
+        server.password = "pearl-grove"
+        let first = "fd7a:115c:a1e0:ab12:4843:cd96:6265:6667"
+        let second = "fd7a:115c:a1e0:ab12:4843:cd96:6265:6668"
+        for _ in 0..<PasswordThrottle.allowed {
+            #expect(server.route(request("/api/hello", bearer: "wrong", from: "127.0.0.1", forwardedFor: first)).status == 401)
+        }
+        #expect(server.route(request("/api/hello", bearer: "pearl-grove", from: "127.0.0.1", forwardedFor: first)).status == 429)
+        #expect(server.route(request("/api/hello", bearer: "pearl-grove", from: first)).status == 429, "the same node, straight here")
+        #expect(server.route(request("/api/hello", bearer: "pearl-grove", from: "127.0.0.1", forwardedFor: second)).status == 200,
+                "another node of the tailnet")
+        for _ in 0..<PasswordThrottle.allowed {
+            #expect(server.route(request("/api/hello", bearer: "wrong", from: second)).status == 401)
+        }
+        #expect(server.route(request("/api/hello", bearer: "pearl-grove", from: second)).status == 429)
+        #expect(server.route(request("/api/hello", bearer: "pearl-grove", from: "fd7a:115c:a1e0:ab12:4843:cd96:6265:6669")).status == 200)
+        // Outside the tailnet's range, one /64 is one count.
+        for host in 1...PasswordThrottle.allowed {
+            #expect(server.route(request("/api/hello", bearer: "wrong", from: "2001:db8:0:9::\(host)")).status == 401)
+        }
+        #expect(server.route(request("/api/hello", bearer: "pearl-grove", from: "2001:db8:0:9::ffff")).status == 429)
+    }
+
     /// Over the wire, the same: the connection's own address is loopback,
     /// and the request's X-Forwarded-For names the client.
     @Test func testTailscaleServesClientIsCountedOverTheWire() {
@@ -270,7 +296,6 @@ extension ServerTests {
 
         // An upgrade that arrives: its headers are what the login is
         // counted by.
-        server.settings.vpn = true
         let stream = PeerStream(from: "127.0.0.1")
         server.accept(stream)
         stream.arrive("GET / HTTP/1.1\r\nHost: visor\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\n"
@@ -278,48 +303,6 @@ extension ServerTests {
         #expect(String(decoding: stream.sent, as: UTF8.self).hasPrefix("HTTP/1.1 101 "))
         let accepted = server.connections.values.first { $0.peer == "127.0.0.1" }
         #expect(accepted?.clientAddress == "100.101.102.103")
-    }
-
-    /// With the VPN path off, a tailnet's client is let in through
-    /// `tailscale serve` no more than straight to the server: its request
-    /// is answered 403 and its upgrade closed. Anyone else on loopback, and
-    /// the header from the network, are let in as before.
-    @Test func testTailscaleServeKeepsToTheVPNPath() {
-        server.password = "pearl-grove"
-        server.settings.vpn = false
-        #expect(server.http != nil, "the REST side is served")
-        func call(from address: String = "127.0.0.1", forwardedFor: String?) -> String {
-            let stream = PeerStream(from: address)
-            server.accept(stream)
-            let header = forwardedFor.map { "X-Forwarded-For: \($0)\r\n" } ?? ""
-            stream.arrive("GET /api/hello HTTP/1.1\r\nHost: visor\r\nAuthorization: Bearer pearl-grove\r\n\(header)\r\n")
-            return String(decoding: stream.sent, as: UTF8.self)
-        }
-        func upgrade(forwardedFor: String) -> PeerStream {
-            let stream = PeerStream(from: "127.0.0.1")
-            server.accept(stream)
-            stream.arrive("GET / HTTP/1.1\r\nHost: visor\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\n"
-                + "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nX-Forwarded-For: \(forwardedFor)\r\n\r\n")
-            return stream
-        }
-        let refused = call(forwardedFor: "100.101.102.103")
-        #expect(refused.hasPrefix("HTTP/1.1 403 Forbidden\r\n"))
-        #expect(refused.contains(VisorServer.vpnPathOff))
-        #expect(call(forwardedFor: "fd7a:115c:a1e0::1234").hasPrefix("HTTP/1.1 403 "), "Tailscale's IPv6 range")
-        #expect(call(forwardedFor: nil).hasPrefix("HTTP/1.1 200 "), "this computer")
-        #expect(call(forwardedFor: "203.0.113.7").hasPrefix("HTTP/1.1 200 "), "not a tailnet's: a Funnel's, say")
-        #expect(call(from: "192.168.1.20", forwardedFor: "100.101.102.103").hasPrefix("HTTP/1.1 200 "), "the network's word is not read")
-        let closed = upgrade(forwardedFor: "100.101.102.103")
-        #expect(closed.closed)
-        #expect(closed.sent.isEmpty)
-        #expect(server.connections.isEmpty)
-
-        server.settings.vpn = true
-        #expect(call(forwardedFor: "100.101.102.103").hasPrefix("HTTP/1.1 200 "))
-        let opened = upgrade(forwardedFor: "100.101.102.103")
-        #expect(!opened.closed)
-        #expect(String(decoding: opened.sent, as: UTF8.self).hasPrefix("HTTP/1.1 101 "))
-        #expect(server.connections.count == 1)
     }
 
     /// hello says whether clients may keep the sessions' messages on their
@@ -571,14 +554,13 @@ private final class SetTime {
 private final class PeerStream: ByteStream {
     let remoteAddress: String?
     var sent = Data()
-    var closed = false
     private var reader: (@MainActor (Data?) -> Void)?
 
     init(from address: String) { remoteAddress = address }
 
     func receive(_ chunk: @escaping @MainActor (Data?) -> Void) { reader = chunk }
     func send(_ data: Data, sent: (@MainActor () -> Void)?) { self.sent.append(data); sent?() }
-    func close() { closed = true }
+    func close() {}
     func arrive(_ text: String) { reader?(Data(text.utf8)) }
 }
 

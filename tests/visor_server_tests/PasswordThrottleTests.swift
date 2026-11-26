@@ -139,18 +139,18 @@ extension ServerTests {
         #expect(PasswordThrottle.key(ForwardedFor.client(peer: "127.0.0.1", headers: ["x-forwarded-for": "2001:db8:0:7::1"])) == "2001:db8:0:7::/64")
     }
 
-    @Test func testTailnetAddresses() {
-        #expect(ForwardedFor.isTailnet("100.64.0.1"))
-        #expect(ForwardedFor.isTailnet("100.127.255.254"))
-        #expect(!ForwardedFor.isTailnet("100.128.0.1"))
-        #expect(!ForwardedFor.isTailnet("100.63.0.1"))
-        #expect(!ForwardedFor.isTailnet("192.168.1.20"))
-        #expect(ForwardedFor.isTailnet("fd7a:115c:a1e0:ab12:4843:cd96:6265:6667"))
-        #expect(ForwardedFor.isTailnet("[FD7A:115C:A1E0::1]"))
-        #expect(ForwardedFor.isTailnet("::ffff:100.101.102.103"))
-        #expect(!ForwardedFor.isTailnet("fd7a:115c:a1e1::1"))
-        #expect(!ForwardedFor.isTailnet("2001:db8::1"))
-        #expect(!ForwardedFor.isTailnet("not an address"))
+    @Test func testATailnetsIPv6AddressIsCountedWhole() {
+        #expect(PasswordThrottle.key("fd7a:115c:a1e0:ab12:4843:cd96:6265:6667") == "fd7a:115c:a1e0:ab12:4843:cd96:6265:6667")
+        #expect(PasswordThrottle.key("[FD7A:115C:A1E0::1]") == "fd7a:115c:a1e0:0:0:0:0:1", "one address, however written")
+        #expect(PasswordThrottle.key("fd7a:115c:a1e0:0:0:0:0:1") == "fd7a:115c:a1e0:0:0:0:0:1")
+        #expect(PasswordThrottle.key("fd7a:115c:a1e1::1") == "fd7a:115c:a1e1:0::/64", "outside the tailnet's /48")
+        let throttle = freshThrottle()
+        for _ in 0..<PasswordThrottle.allowed { _ = throttle.failed("fd7a:115c:a1e0:ab12:4843:cd96:6265:6667") }
+        #expect(throttle.retryAfter("fd7a:115c:a1e0:ab12:4843:cd96:6265:6667") == 300)
+        #expect(throttle.retryAfter("fd7a:115c:a1e0:ab12:4843:cd96:6265:6668") == nil, "another node")
+        for host in 1...PasswordThrottle.allowed { _ = throttle.failed("2001:db8:0:3::\(host)") }
+        #expect(throttle.retryAfter("2001:db8:0:3::abcd") == 300, "any other address by its /64")
     }
+}
 }
 }
