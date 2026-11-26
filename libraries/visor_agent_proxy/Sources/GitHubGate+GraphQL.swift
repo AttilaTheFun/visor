@@ -7,6 +7,9 @@ import Foundation
 // repository by the proxy (GateCheck.graphQLNodes) before it goes on.
 // Merging (mergePullRequest, which MultiPass checked as the REST merge,
 // auto-merge and the rest) and deleteRef are Logan's alone (GitHubGate+Owner).
+// closeIssue and closePullRequest are a check that the node is the GitHub
+// App's bot's own (Logan, 25 Nov 2026: GateChecker+Close); reopening is
+// Logan's, an agent's own included.
 
 extension GitHubGate {
     func decideGraphQL(_ request: GateRequest) -> GateDecision {
@@ -67,7 +70,7 @@ extension GitHubGate {
             }
         }
         if let check = checks.first {
-            guard operation.root.count == 1 else { return .refuse("a branch's update is a mutation of its own") }
+            guard operation.root.count == 1 else { return .refuse("a branch's update or a close is a mutation of its own") }
             return .check(check)
         }
         guard !nodes.isEmpty else { return .refuse("the mutation names nothing to check its repository by") }
@@ -83,6 +86,7 @@ extension GitHubGate {
         case createIssue, updateIssue
         case addLabelsToLabelable, removeLabelsFromLabelable
         case updatePullRequestBranch
+        case closeIssue, closePullRequest
 
         struct Outcome {
             var nodes: [GateCheck.GraphQLNode]
@@ -105,6 +109,8 @@ extension GitHubGate {
             case .updateIssue: named = ["id", "title", "body", "labelIds"]
             case .addLabelsToLabelable, .removeLabelsFromLabelable: named = ["labelableId", "labelIds"]
             case .updatePullRequestBranch: named = ["pullRequestId", "expectedHeadOid", "updateMethod"]
+            case .closeIssue: named = ["issueId", "stateReason"]
+            case .closePullRequest: named = ["pullRequestId"]
             }
             return named.union(["clientMutationId"])
         }
@@ -168,6 +174,15 @@ extension GitHubGate {
                 }
                 guard let id = input["pullRequestId"]?.string, !id.isEmpty else { return .failure(Refusal("\(rawValue) names its pullRequestId")) }
                 return .success(Outcome(nodes: [], check: .graphQLUpdateBranch(pullRequestID: id)))
+            case .closeIssue:
+                guard let id = input["issueId"]?.string, !id.isEmpty else { return .failure(Refusal("\(rawValue) names its issueId")) }
+                if let reason = input["stateReason"], reason != .null, !["COMPLETED", "NOT_PLANNED"].contains(reason.string ?? "") {
+                    return .failure(Refusal("a close's stateReason is COMPLETED or NOT_PLANNED"))
+                }
+                return .success(Outcome(nodes: [], check: .graphQLClose(id: id, kind: "Issue")))
+            case .closePullRequest:
+                guard let id = input["pullRequestId"]?.string, !id.isEmpty else { return .failure(Refusal("\(rawValue) names its pullRequestId")) }
+                return .success(Outcome(nodes: [], check: .graphQLClose(id: id, kind: "PullRequest")))
             }
         }
 
@@ -178,8 +193,8 @@ extension GitHubGate {
             switch name {
             case "disablePullRequestAutoMerge", "dequeuePullRequest":
                 return "\(name): a pull request is merged once its checks have passed, never later unchecked (no auto-merge)"
-            case "closePullRequest", "reopenPullRequest", "closeIssue", "reopenIssue":
-                return "\(name): closing and reopening are Logan's"
+            case "reopenPullRequest", "reopenIssue":
+                return Owner.reopening(name)
             case let deleting where deleting.hasPrefix("delete"):
                 return "\(name): nothing is deleted through the agent proxy"
             case "createRef", "updateRef", "updateRefs", "createCommitOnBranch":

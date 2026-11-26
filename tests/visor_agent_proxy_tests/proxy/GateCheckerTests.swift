@@ -266,6 +266,62 @@ final class GateCheckerTests: XCTestCase {
         refused(await check(FakeGitHub(answers: ["graphql nodes": (200, #"{"data":{"nodes":[null]}}"#)]), .graphQLNodes(nodes)), "no node")
     }
 
+    // MARK: Closing an agent's own (Logan, 25 Nov 2026)
+
+    private var bot: GitHubAppIdentity { GitHubAppIdentity(slug: "logan-shire-agent", userID: 987) }
+
+    private func issue(_ number: Int, by login: String, pull: Bool) -> FakeGitHub {
+        let marked = pull ? #","pull_request":{"url":"x"}"# : ""
+        return FakeGitHub(answers: ["/repos/AttilaTheFun/shireworks/issues/\(number)":
+            (200, #"{"number":\#(number),"user":{"login":"\#(login)"}\#(marked)}"#)])
+    }
+
+    private func node(_ kind: String, author: String, login: String, repository: String = "AttilaTheFun/shireworks") -> FakeGitHub {
+        FakeGitHub(answers: ["graphql node": (200, #"{"data":{"node":{"__typename":"\#(kind)","number":7,"author":{"__typename":"\#(author)","login":"\#(login)"},"repository":{"nameWithOwner":"\#(repository)"}}}}"#)])
+    }
+
+    func testAnAgentClosesOnlyWhatTheAppsBotOpened() async {
+        let close = GateCheck.close(repository: repo, number: 7)
+        for pull in [true, false] {
+            let own = await GateChecker(rules: .standard, github: issue(7, by: "logan-shire-agent[bot]", pull: pull), bot: bot).run(close)
+            XCTAssertEqual(own, .pass(nil))
+            let logans = await GateChecker(rules: .standard, github: issue(7, by: "AttilaTheFun", pull: pull), bot: bot).run(close)
+            refused(logans, "\(pull ? "pull request" : "issue") #7 of AttilaTheFun/shireworks is AttilaTheFun's: an agent closes only what it opened itself")
+            // The auth token's: no bot to be.
+            let unknown = await GateChecker(rules: .standard, github: issue(7, by: "logan-shire-agent[bot]", pull: pull)).run(close)
+            refused(unknown, "with no GitHub App")
+        }
+        // Another App's bot isn't this one.
+        let other = await GateChecker(rules: .standard, github: issue(7, by: "dependabot[bot]", pull: true), bot: bot).run(close)
+        refused(other, "dependabot[bot]'s")
+        let missing = await GateChecker(rules: .standard, github: FakeGitHub(answers: [:]), bot: bot).run(close)
+        XCTAssertEqual(missing, .fail("GitHub didn't give #7 of AttilaTheFun/shireworks (404)"))
+    }
+
+    func testAGraphQLCloseReadsItsNodesAuthor() async {
+        let bot = self.bot
+        let checker = { (github: FakeGitHub) in GateChecker(rules: .standard, github: github, bot: bot) }
+        for kind in ["PullRequest", "Issue"] {
+            let own = await checker(node(kind, author: "Bot", login: "logan-shire-agent")).run(.graphQLClose(id: "N_1", kind: kind))
+            XCTAssertEqual(own, .pass(nil), kind)
+            let logans = await checker(node(kind, author: "User", login: "AttilaTheFun")).run(.graphQLClose(id: "N_1", kind: kind))
+            refused(logans, "#7 of AttilaTheFun/shireworks is AttilaTheFun's")
+            let unknown = await GateChecker(rules: .standard, github: node(kind, author: "Bot", login: "logan-shire-agent"))
+                .run(.graphQLClose(id: "N_1", kind: kind))
+            refused(unknown, "with no GitHub App")
+            let elsewhere = await checker(node(kind, author: "Bot", login: "logan-shire-agent", repository: "someone/else"))
+                .run(.graphQLClose(id: "N_1", kind: kind))
+            refused(elsewhere, "not among the repositories")
+        }
+        // A user who happens to have the slug for a login isn't the bot.
+        let namesake = await checker(node("Issue", author: "User", login: "logan-shire-agent")).run(.graphQLClose(id: "N_1", kind: "Issue"))
+        refused(namesake, "is logan-shire-agent's")
+        let wrongKind = await checker(node("Issue", author: "Bot", login: "logan-shire-agent")).run(.graphQLClose(id: "N_1", kind: "PullRequest"))
+        refused(wrongKind, "is a Issue, not a PullRequest")
+        let none = await checker(FakeGitHub(answers: ["graphql node": (200, #"{"data":{"node":null}}"#)])).run(.graphQLClose(id: "N_1", kind: "Issue"))
+        refused(none, "no node the agent proxy can see")
+    }
+
     func testAPushNeverReachesTheDefaultBranch() async {
         let github = FakeGitHub(answers: ["/repos/AttilaTheFun/shireworks": (200, #"{"default_branch":"develop"}"#)])
         let feature = await check(github, .push(repository: repo, branches: ["feature"]))

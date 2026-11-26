@@ -7,6 +7,15 @@
 protocol GitHubTokenSource: Sendable {
     func token(session: String, repository: String) async throws -> String
     func forget(session: String, repository: String) async
+    /// The git identity the container's agents commit as: the GitHub App's
+    /// bot, where the source is the App's (PreferredGitHubToken); nil for
+    /// any other.
+    func identity() async -> GitHubAppIdentity?
+}
+
+extension GitHubTokenSource {
+    /// An auth token, or a test's fixed one, is no one's: no identity.
+    func identity() async -> GitHubAppIdentity? { nil }
 }
 
 /// What a source throws when it has no token to give: none is configured.

@@ -31,6 +31,24 @@ public enum GateCheck: Equatable, Sendable {
     case graphQLNodes([GraphQLNode])
     /// A push's branches against the repository's default ([G3c]).
     case push(repository: String, branches: [String])
+    /// `PATCH …/issues/{n}` or `…/pulls/{n}` with `state: "closed"` (Logan,
+    /// 25 Nov 2026: an agent closes what it opened itself): the issue or
+    /// pull request read (`GET …/issues/{n}`), its author the GitHub App's
+    /// bot.
+    case close(repository: String, number: Int)
+    /// `closeIssue` or `closePullRequest` by GraphQL: the node read, a
+    /// `kind` (Issue or PullRequest) in an allowed repository, its author
+    /// the App's bot.
+    case graphQLClose(id: String, kind: String)
+
+    /// Whether it asks whose an issue or pull request is: the GitHub App's
+    /// bot must be known (GateChecker's `bot`) for it to pass.
+    var needsBot: Bool {
+        switch self {
+        case .close, .graphQLClose: true
+        default: false
+        }
+    }
 
     /// A node a mutation names: its id, and what it may be.
     public struct GraphQLNode: Equatable, Sendable {

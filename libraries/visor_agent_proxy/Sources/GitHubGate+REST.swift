@@ -5,7 +5,10 @@ import Foundation
 // templates (W1-W15), its body one JSON object of the template's fields with
 // their values' rules, and those that change state GitHub must be read for
 // first go on as a check. Merging, publishing a release and deleting a ref
-// are refused first, whatever else the request is (GitHubGate+Owner).
+// are refused first, whatever else the request is (GitHubGate+Owner). An
+// issue's or a pull request's edit that closes it (`state: "closed"`) is a
+// check that it's the GitHub App's bot's own (Logan, 25 Nov 2026:
+// GateChecker+Close); one that reopens it is refused.
 
 extension GitHubGate {
     func decideREST(_ request: GateRequest, _ segments: [String]) -> GateDecision {
@@ -105,10 +108,11 @@ extension GitHubGate {
         var fields: Set<String> {
             switch self {
             case .createPull: ["title", "head", "base", "body", "draft"]
-            case .editPull: ["title", "body"]
+            case .editPull: ["title", "body", "state"]
             case .replyToComment, .comment: ["body"]
             case .review: ["body", "event", "commit_id"]
-            case .createIssue, .editIssue: ["title", "body", "labels"]
+            case .createIssue: ["title", "body", "labels"]
+            case .editIssue: ["title", "body", "labels", "state", "state_reason"]
             case .draftRelease: ["tag_name", "target_commitish", "name", "body", "draft"]
             case .editRelease: ["name", "body", "target_commitish", "tag_name"]
             case .updateBranch: ["expected_head_sha"]
@@ -134,6 +138,7 @@ extension GitHubGate {
             case .createPull:
                 return Self.createPull(body, repository: repository)
             case .editPull:
+                if body["state"] != nil { return Self.closing(body, repository: repository, number: number) }
                 guard body["title"] != nil || body["body"] != nil else { return .refuse("a pull request's edit changes a title or a body: give one") }
                 return .allow(repository: repository)
             case .review:
@@ -142,6 +147,7 @@ extension GitHubGate {
                 }
                 return .allow(repository: repository)
             case .editIssue:
+                if body["state"] != nil || body["state_reason"] != nil { return Self.closing(body, repository: repository, number: number) }
                 guard body["title"] != nil || body["body"] != nil || body["labels"] != nil else {
                     return .refuse("an issue's edit changes a title, body or labels: give one")
                 }
@@ -166,6 +172,25 @@ extension GitHubGate {
                 return .check(.cancel(repository: repository, run: number))
             case .dispatch:
                 return Self.dispatch(body, workflow: number, repository: repository, rules: gate.rules)
+            }
+        }
+
+        /// An edit with a `state`: closing, checked to be of the App's bot's
+        /// own (its other fields as an edit's); reopening, refused.
+        private static func closing(_ body: [String: GateJSON], repository: String, number: Int) -> GateDecision {
+            switch body["state"]?.string {
+            case "closed":
+                if let reason = body["state_reason"], reason != .null,
+                   !["completed", "not_planned"].contains(reason.string ?? "") {
+                    return .refuse("a close's state_reason is completed or not_planned")
+                }
+                return .check(.close(repository: repository, number: number))
+            case "open":
+                return .refuse(Owner.reopening("state: open"))
+            case nil:
+                return .refuse("state_reason goes with state: closed")
+            case let other?:
+                return .refuse("state is closed or nothing: \(other) isn't a state")
             }
         }
 

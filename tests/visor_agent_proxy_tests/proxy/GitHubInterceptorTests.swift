@@ -35,6 +35,49 @@ private struct BrokenTokens: GitHubTokenSource {
     func forget(session: String, repository: String) async {}
 }
 
+/// The GitHub App's installation token, and its bot (Logan, 25 Nov 2026:
+/// an agent closes what its bot opened).
+private struct AppTokens: GitHubTokenSource {
+    func token(session: String, repository: String) async throws -> String { "ghs_fixedtoken" }
+    func forget(session: String, repository: String) async {}
+    func identity() async -> GitHubAppIdentity? { GitHubAppIdentity(slug: "logan-shire-agent", userID: 987) }
+}
+
+/// GitHub's API as a close's check reads it, each read kept with the token
+/// it was made with: #3 and PR_bot the bot's pull request, #4 and I_bot its
+/// issue; #5 and PR_logan Logan's pull request, #6 and I_logan his issue.
+private struct Authors: GitHubReading {
+    let token: String
+    let reads: Locked<[String]>
+
+    func get(_ path: String) async -> GitHubAnswer {
+        reads.withLock { $0.append("GET \(path) \(token)") }
+        let authors: [String: (pull: Bool, login: String)] = [
+            "3": (true, "logan-shire-agent[bot]"), "4": (false, "logan-shire-agent[bot]"), "5": (true, "AttilaTheFun"), "6": (false, "AttilaTheFun"),
+        ]
+        let number = String(path.split(separator: "/").last ?? "")
+        guard path.hasPrefix("/repos/AttilaTheFun/shireworks/issues/"), let author = authors[number] else { return GitHubAnswer(status: 404, json: nil) }
+        var issue: [String: GateJSON] = ["number": .number(number), "user": .object(["login": .string(author.login)])]
+        if author.pull { issue["pull_request"] = .object(["url": .string("x")]) }
+        return GitHubAnswer(status: 200, json: .object(issue))
+    }
+
+    func graphQL(_ query: String, variables: [String: GateJSON]) async -> GitHubAnswer {
+        let id = variables["id"]?.string ?? ""
+        reads.withLock { $0.append("graphql \(id) \(token)") }
+        let nodes: [String: (kind: String, type: String, login: String)] = [
+            "PR_bot": ("PullRequest", "Bot", "logan-shire-agent"), "I_bot": ("Issue", "Bot", "logan-shire-agent"),
+            "PR_logan": ("PullRequest", "User", "AttilaTheFun"), "I_logan": ("Issue", "User", "AttilaTheFun"),
+        ]
+        guard let node = nodes[id] else { return GitHubAnswer(status: 200, json: .object(["data": .object(["node": .null])])) }
+        return GitHubAnswer(status: 200, json: .object(["data": .object(["node": .object([
+            "__typename": .string(node.kind), "number": .number("3"),
+            "author": .object(["__typename": .string(node.type), "login": .string(node.login)]),
+            "repository": .object(["nameWithOwner": .string("AttilaTheFun/shireworks")]),
+        ])])]))
+    }
+}
+
 /// GitHub's API as the checks read it: every repository's default branch is main.
 private struct DefaultBranchMain: GitHubReading {
     func get(_ path: String) async -> GitHubAnswer { GitHubAnswer(status: 200, json: .object(["default_branch": .string("main")])) }
@@ -177,7 +220,8 @@ final class GitHubInterceptorTests: XCTestCase {
     /// GitHub played as `host`, and agent-proxy before it: its connections to
     /// it held back `delay`, or to nothing at all (`unreachable`).
     private func launch(host: String = "api.github.com", delay: TimeAmount = .zero, unreachable: Bool = false,
-                        tokens: any GitHubTokenSource = FixedTokens()) throws {
+                        tokens: any GitHubTokenSource = FixedTokens(),
+                        reader: @escaping @Sendable (String) -> any GitHubReading = { _ in DefaultBranchMain() }) throws {
         relay?.stop()
         interceptor?.stop()
         github?.stop()
@@ -187,7 +231,7 @@ final class GitHubInterceptorTests: XCTestCase {
         trust.trustRoots = .certificates([try NIOSSLCertificate(bytes: Array(try githubCA.pem.utf8), format: .pem)])
         let githubPort = unreachable ? 1 : github.port
         let lines = self.lines
-        interceptor = try GitHubInterceptor(gate: GitHubGate(), ca: proxyCA, tokens: tokens, reader: { _ in DefaultBranchMain() },
+        interceptor = try GitHubInterceptor(gate: GitHubGate(), ca: proxyCA, tokens: tokens, reader: reader,
                                             upstream: .init(address: { _ in ("127.0.0.1", githubPort) }, tls: trust, delay: delay),
                                             egress: egress, log: { lines.add($0) })
         let proxy = EgressProxy(connect: { agent_proxy_connect_tcp($0.host, $0.port) }, interceptor: interceptor, egress: egress,
@@ -312,6 +356,77 @@ final class GitHubInterceptorTests: XCTestCase {
         XCTAssertTrue(graphQL.body.contains("Refused: merging pull requests is Logan's alone, never an agent's (mergePullRequest)"), graphQL.body)
         let auto = try agent(.POST, "/graphql", body: json(#"{"query":"mutation { enablePullRequestAutoMerge(input: {pullRequestId: \"PR_1\"}) { clientMutationId } }"}"#))
         XCTAssertTrue(auto.body.contains("Refused: merging pull requests is Logan's alone, never an agent's (enablePullRequestAutoMerge)"), auto.body)
+        XCTAssertEqual(github.requests, [])
+    }
+
+    /// Logan (2026-11-25): agents may close pull requests and issues they
+    /// opened themselves. With the App's token, its bot's own close over
+    /// REST and GraphQL, read first with the token the close goes on with;
+    /// Logan's are refused and never reach GitHub; reopening is refused.
+    func testAnAgentClosesWhatItsBotOpenedAndNothingElse() throws {
+        let reads = Locked<[String]>([])
+        try launch(tokens: AppTokens(), reader: { token in Authors(token: token, reads: reads) })
+        let closed = json(#"{"state":"closed"}"#)
+        func closing(_ mutation: String, _ input: String) -> [UInt8] {
+            json(#"{"query":"mutation($input:\#(mutation == "closeIssue" ? "CloseIssueInput" : "ClosePullRequestInput")!){\#(mutation)(input:$input){clientMutationId}}","variables":{"input":\#(input)}}"#)
+        }
+        // The bot's own pull request and issue, by REST and by GraphQL.
+        for path in ["/repos/AttilaTheFun/shireworks/pulls/3", "/repos/AttilaTheFun/shireworks/issues/4"] {
+            let own = try agent(.PATCH, path, body: closed)
+            XCTAssertEqual(own.status, 200, own.body)
+        }
+        for (mutation, input) in [("closePullRequest", #"{"pullRequestId":"PR_bot"}"#), ("closeIssue", #"{"issueId":"I_bot","stateReason":"COMPLETED"}"#)] {
+            let own = try agent(.POST, "/graphql", body: closing(mutation, input))
+            XCTAssertEqual(own.status, 200, own.body)
+            XCTAssertFalse(own.body.contains("FORBIDDEN"), own.body)
+        }
+        XCTAssertEqual(github.requests, ["PATCH /repos/AttilaTheFun/shireworks/pulls/3 Bearer ghs_fixedtoken",
+                                         "PATCH /repos/AttilaTheFun/shireworks/issues/4 Bearer ghs_fixedtoken",
+                                         "POST /graphql Bearer ghs_fixedtoken", "POST /graphql Bearer ghs_fixedtoken"])
+        // Read first, with the token the close went on with.
+        XCTAssertEqual(reads.withLock { $0 }, ["GET /repos/AttilaTheFun/shireworks/issues/3 ghs_fixedtoken",
+                                               "GET /repos/AttilaTheFun/shireworks/issues/4 ghs_fixedtoken",
+                                               "graphql PR_bot ghs_fixedtoken", "graphql I_bot ghs_fixedtoken"])
+
+        // Logan's: refused, and never at GitHub.
+        for path in ["/repos/AttilaTheFun/shireworks/pulls/5", "/repos/AttilaTheFun/shireworks/issues/6"] {
+            let logans = try agent(.PATCH, path, body: closed)
+            XCTAssertEqual(logans.status, 403, logans.body)
+            XCTAssertTrue(logans.body.contains("is AttilaTheFun's: an agent closes only what it opened itself (logan-shire-agent[bot]'s)"), logans.body)
+        }
+        for (mutation, input) in [("closePullRequest", #"{"pullRequestId":"PR_logan"}"#), ("closeIssue", #"{"issueId":"I_logan"}"#)] {
+            let logans = try agent(.POST, "/graphql", body: closing(mutation, input))
+            XCTAssertEqual(logans.status, 200, "GraphQL's errors are a 200's: \(logans.body)")
+            XCTAssertTrue(logans.body.contains("\"type\":\"FORBIDDEN\""), logans.body)
+            XCTAssertTrue(logans.body.contains("is AttilaTheFun's"), logans.body)
+        }
+        // Reopening, its own included: refused before any read.
+        let readsBefore = reads.withLock { $0.count }
+        let reopened = try agent(.PATCH, "/repos/AttilaTheFun/shireworks/pulls/3", body: json(#"{"state":"open"}"#))
+        XCTAssertEqual(reopened.status, 403, reopened.body)
+        XCTAssertTrue(reopened.body.contains("reopening an issue or a pull request is Logan's alone"), reopened.body)
+        for mutation in ["reopenPullRequest(input: {pullRequestId: \\\"PR_bot\\\"})", "reopenIssue(input: {issueId: \\\"I_bot\\\"})"] {
+            let again = try agent(.POST, "/graphql", body: json(#"{"query":"mutation { \#(mutation) { clientMutationId } }"}"#))
+            XCTAssertTrue(again.body.contains("\"type\":\"FORBIDDEN\""), again.body)
+            XCTAssertTrue(again.body.contains("reopening an issue or a pull request is Logan's alone"), again.body)
+        }
+        XCTAssertEqual(reads.withLock { $0.count }, readsBefore, "a reopen is refused before anything is read")
+        XCTAssertEqual(github.requests.count, 4, "nothing refused reached GitHub: \(github.requests)")
+    }
+
+    /// With the auth token (no App), the bot is unknown: every close is
+    /// refused, saying why, and nothing is read or reaches GitHub.
+    func testWithoutTheAppClosingIsRefused() throws {
+        let reads = Locked<[String]>([])
+        try launch(tokens: FixedTokens(), reader: { token in Authors(token: token, reads: reads) })
+        let rest = try agent(.PATCH, "/repos/AttilaTheFun/shireworks/pulls/3", body: json(#"{"state":"closed"}"#))
+        XCTAssertEqual(rest.status, 403, rest.body)
+        XCTAssertTrue(rest.body.contains("with no GitHub App (github-app/key and github-app/id) or its bot not found, closing is Logan's"), rest.body)
+        let graphQL = try agent(.POST, "/graphql", body: json(
+            #"{"query":"mutation($input:CloseIssueInput!){closeIssue(input:$input){clientMutationId}}","variables":{"input":{"issueId":"I_bot"}}}"#))
+        XCTAssertTrue(graphQL.body.contains("\"type\":\"FORBIDDEN\""), graphQL.body)
+        XCTAssertTrue(graphQL.body.contains("with no GitHub App"), graphQL.body)
+        XCTAssertEqual(reads.withLock { $0 }, [])
         XCTAssertEqual(github.requests, [])
     }
 

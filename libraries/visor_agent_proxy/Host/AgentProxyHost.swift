@@ -121,6 +121,15 @@ public enum AgentProxyHost {
             interceptor?.stop()
             anthropic?.stop()
         }
+
+        /// Who the Sessions container's agents commit as: the GitHub App's
+        /// bot, as its GitHub interceptor finds it (once for the App's
+        /// secrets). Nil with no interceptor (no relay), no App, or no
+        /// answer from GitHub (said in the log, once).
+        public func gitIdentity() async -> ContainerGitIdentity? {
+            guard let bot = await interceptor?.gitIdentity() else { return nil }
+            return ContainerGitIdentity(name: bot.name, email: bot.email)
+        }
     }
 
     /// agent-proxy started from `settings`: each listener configured, and

@@ -181,6 +181,12 @@ extension VisorServer {
         guard let move = record.move, !move.agent.isEmpty, isInContainer(record) else {
             return .failure(AgentJobRefusal("“\(record.info.title)” isn't placed in the Sessions container."))
         }
+        // Who it commits as, asked of agent-proxy first (found once, then
+        // kept): the guards below see the session as it is once answered.
+        let git = await containerGitIdentityForStart()
+        guard record.move?.agent == move.agent, isInContainer(record) else {
+            return .failure(AgentJobRefusal("“\(record.info.title)” isn't placed in the Sessions container."))
+        }
         let id = record.info.id
         let agent = ContainerRunner.key(move.agent)
         guard let container = sessionsContainer else {
@@ -198,8 +204,9 @@ extension VisorServer {
             sourcesDirectory: move.sources.isEmpty ? nil : move.workingDirectory, token: containerRunner.token(for: agent),
             // The container's Claude folder is on Sessions, so what its
             // agents say survives the container, and the host can read it;
-            // its credential is agent-proxy's, a placeholder here.
-            environment: Self.containerClaudeEnvironment(sessions: sessions))
+            // its credential is agent-proxy's, a placeholder here; it
+            // commits as the GitHub App's bot, where agent-proxy has one.
+            environment: Self.containerClaudeEnvironment(sessions: sessions, git: git))
         do {
             let run = try await container.startAgent(request)
             containerRunner.started(agent, run: run)

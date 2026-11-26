@@ -172,8 +172,9 @@ final class GitHubGateTests: XCTestCase {
             ("POST", "\(repo)/merges", #"{"base":"main","head":"x"}"#),                                    // 346
             ("PUT", "\(repo)/pulls/3/update-branch", nil),                                                 // 347
             ("PUT", "\(repo)/pulls/3/update-branch", "{\"expected_head_sha\":\"\(sha)\",\"update_method\":\"rebase\"}"), // 348
-            ("PATCH", "\(repo)/pulls/3", #"{"state":"closed"}"#),                                          // 349
-            ("PATCH", "\(repo)/issues/3", #"{"state":"closed"}"#),                                         // 350
+            // 349 and 350 closed; a close is a check of its author now (Logan, 25 Nov 2026), and reopening stays his.
+            ("PATCH", "\(repo)/pulls/3", #"{"state":"open"}"#),
+            ("PATCH", "\(repo)/issues/3", #"{"state":"open"}"#),
             ("POST", "\(repo)/pulls/3/reviews", #"{"event":"APPROVE"}"#),                                  // 351
             ("POST", "\(repo)/pulls/3/reviews", #"{"event":"REQUEST_CHANGES","body":"x"}"#),               // 352
             ("POST", "\(repo)/releases", #"{"tag_name":"v1","draft":false}"#),                             // 353
@@ -472,13 +473,52 @@ final class GitHubGateTests: XCTestCase {
 
     func testAMutationIsItsWrittenOutRootFieldsAlone() {
         refused(graphQL("mutation { ...M } fragment M on Mutation { deleteRef(input: {refId: \"x\"}) { clientMutationId } }"), "no fragments")
-        refused(graphQL("mutation { closeIssue(input: {issueId: \"I_1\"}) { clientMutationId } }"), "closing and reopening")
+        refused(graphQL("mutation { reopenIssue(input: {issueId: \"I_1\"}) { clientMutationId } }"), "reopening an issue or a pull request is Logan's alone")
         refused(graphQL("mutation { addComment(input: {subjectId: \"I_1\", body: \"x\"}) { clientMutationId } createRef(input: {repositoryId: \"R\", name: \"refs/heads/x\", oid: \"\(sha)\"}) { clientMutationId } }"),
                 "pushed with git")
         refused(graphQL("query A { viewer { login } } mutation B { addComment(input: {subjectId: \"I\", body: \"x\"}) { clientMutationId } }"), "operationName")
         passes(graphQL("query A { viewer { login } } mutation B { addComment(input: {subjectId: \"I\", body: \"x\"}) { clientMutationId } }", operation: "A"))
         refused(graphQL("subscription { x }"), "subscriptions")
         refused(graphQL("mutation { addPullRequestReview(input: {pullRequestId: \"PR\", event: APPROVE}) { clientMutationId } }"), "COMMENT only")
+    }
+
+    /// Logan, 25 Nov 2026: agents may close pull requests and issues they
+    /// opened themselves. A close, by REST or as gh sends it by GraphQL, is
+    /// a check of its author (GateChecker+Close); reopening, an agent's own
+    /// included, is refused.
+    func testAClosesAuthorIsCheckedAndReopeningIsRefused() {
+        let named = "AttilaTheFun/shireworks"
+        XCTAssertEqual(rest("PATCH", "\(repo)/pulls/3", #"{"state":"closed"}"#), .check(.close(repository: named, number: 3)))
+        XCTAssertEqual(rest("PATCH", "\(repo)/issues/4", #"{"state":"closed"}"#), .check(.close(repository: named, number: 4)))
+        XCTAssertEqual(rest("PATCH", "\(repo)/issues/4", #"{"state":"closed","state_reason":"not_planned"}"#),
+                       .check(.close(repository: named, number: 4)))
+        XCTAssertEqual(rest("PATCH", "\(repo)/issues/4", #"{"state":"closed","title":"t"}"#), .check(.close(repository: named, number: 4)),
+                       "an edit the gate allows, with the close")
+        refused(rest("PATCH", "\(repo)/pulls/3", #"{"state":"open"}"#), "reopening an issue or a pull request is Logan's alone")
+        refused(rest("PATCH", "\(repo)/issues/4", #"{"state":"open"}"#), "reopening an issue or a pull request is Logan's alone")
+        refused(rest("PATCH", "\(repo)/issues/4", #"{"state_reason":"reopened"}"#), "goes with state: closed")
+        refused(rest("PATCH", "\(repo)/issues/4", #"{"state":"closed","state_reason":"reopened"}"#), "state_reason is completed or not_planned")
+        refused(rest("PATCH", "\(repo)/issues/4", #"{"state":"locked"}"#), "isn't a state")
+        refused(rest("PATCH", "\(repo)/pulls/3", #"{"state":"closed","base":"main"}"#), "never sends base")
+        refused(rest("PATCH", "/repos/someone/else/pulls/3", #"{"state":"closed"}"#), "not among the repositories")
+        // As gh pr close and gh issue close send them.
+        XCTAssertEqual(graphQL("mutation PullRequestClose($input:ClosePullRequestInput!){closePullRequest(input: $input){pullRequest{id}}}",
+                               variables: #"{"input":{"pullRequestId":"PR_1"}}"#),
+                       .check(.graphQLClose(id: "PR_1", kind: "PullRequest")))
+        XCTAssertEqual(graphQL("mutation IssueClose($input:CloseIssueInput!){closeIssue(input: $input){issue{id}}}",
+                               variables: #"{"input":{"issueId":"I_1","stateReason":"NOT_PLANNED"}}"#),
+                       .check(.graphQLClose(id: "I_1", kind: "Issue")))
+        XCTAssertEqual(graphQL("mutation { closeIssue(input: {issueId: \"I_1\", stateReason: COMPLETED}) { clientMutationId } }"),
+                       .check(.graphQLClose(id: "I_1", kind: "Issue")))
+        refused(graphQL("mutation { closeIssue(input: {issueId: \"I_1\", stateReason: REOPENED}) { clientMutationId } }"), "stateReason")
+        refused(graphQL("mutation { closeIssue(input: {issueId: \"I_1\", duplicateIssueId: \"I_2\"}) { clientMutationId } }"),
+                "never sends duplicateIssueId")
+        refused(graphQL("mutation { closePullRequest(input: {}) { clientMutationId } }"), "names its pullRequestId")
+        refused(graphQL("mutation { closeIssue(input: {issueId: \"I_1\"}) { clientMutationId } addComment(input: {subjectId: \"I_1\", body: \"x\"}) { clientMutationId } }"),
+                "a mutation of its own")
+        refused(graphQL("mutation { reopenIssue(input: {issueId: \"I_1\"}) { clientMutationId } }"), "reopening")
+        refused(graphQL("mutation { reopenPullRequest(input: {pullRequestId: \"PR_1\"}) { clientMutationId } }"),
+                "reopening an issue or a pull request is Logan's alone, an agent's own included (reopenPullRequest)")
     }
 
     func testGhPrMergeAndAutoMergeAreRefused() {

@@ -13,7 +13,8 @@
 //   server when `agentProxy` is set, and started again when it changes
 //   (`refold`: the Sessions container turned on gives it a relay port). Here,
 //   beside the Sessions container, its MCP pass-through takes each container
-//   agent's own token too, the server saying whose it is.
+//   agent's own token too, the server saying whose it is; and the server
+//   asks it who those agents commit as (the GitHub App's bot).
 
 import Foundation
 import VisorAgentProxyHost
@@ -68,6 +69,8 @@ enum MacAgentProxy {
         agentSession = session
         let check = server.passThroughTokenCheck
         agentTokenCheck = check
+        // Asked of what's folded in when it's asked: started again, the new one.
+        server.containerGitIdentity = { await MacAgentProxy.gitIdentity() }
         guard let settings = server.settings.agentProxy else { return }
         folded = AgentProxyHost.start(settings, places: places, secrets: ServerPlatform.current.secrets, version: VisorMacApp.bundleVersion,
                                       agentSession: session, agentTokenCheck: check, log: log)
@@ -86,5 +89,11 @@ enum MacAgentProxy {
         folded = AgentProxyHost.start(settings, places: places, secrets: ServerPlatform.current.secrets, version: VisorMacApp.bundleVersion,
                                       agentSession: agentSession, agentTokenCheck: agentTokenCheck,
                                       log: { ServerPlatform.current.log("agent-proxy: \($0)") })
+    }
+
+    /// Who the container's agents commit as, from the proxy folded in now
+    /// (none: no identity).
+    static func gitIdentity() async -> ContainerGitIdentity? {
+        await folded?.gitIdentity()
     }
 }

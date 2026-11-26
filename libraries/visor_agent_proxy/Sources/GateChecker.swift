@@ -7,6 +7,9 @@ import Foundation
 struct GateChecker: Sendable {
     let rules: GateRules
     let github: any GitHubReading
+    /// The GitHub App's bot, whose issues and pull requests an agent may
+    /// close (GateChecker+Close); nil when the token isn't the App's.
+    var bot: GitHubAppIdentity? = nil
 
     func run(_ check: GateCheck) async -> CheckOutcome {
         switch check {
@@ -33,6 +36,10 @@ struct GateChecker: Sendable {
             return await resolve(nodes)
         case .push(let repository, let branches):
             return await push(repository, branches)
+        case .close(let repository, let number):
+            return await close(repository, number)
+        case .graphQLClose(let id, let kind):
+            return await close(node: id, kind: kind)
         }
     }
 

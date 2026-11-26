@@ -381,6 +381,10 @@ public final class VisorServer {
     /// Where jobs for runners go (`POST /api/jobs`): VisorDriver's
     /// dispatcher. None where no dispatcher runs.
     package var jobs: (any AgentJobQueue)?
+    /// Who the Sessions container's agents commit as, asked of the
+    /// agent-proxy in this process (VisorServer+ContainerGitIdentity): the
+    /// GitHub App's bot. None, or nil from it: no git identity is given.
+    @ObservationIgnored public var containerGitIdentity: (@Sendable () async -> ContainerGitIdentity?)?
     /// The agents Visor starts itself in its Sessions container, for the
     /// sessions placed there (VisorServer+ContainerRunner): the driver
     /// asks it of their tokens.

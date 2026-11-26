@@ -16,6 +16,11 @@
 //
 // MultiPass let a merge through once its checks passed (GateChecker+Merge,
 // kept for update-branch's checks); it refused the rest too, in other words.
+//
+// Reopening an issue or a pull request is Logan's too, an agent's own
+// included (Logan, 25 Nov 2026, as agents came to close their own:
+// GateChecker+Close): REST's `state: "open"`, GraphQL's `reopenIssue` and
+// `reopenPullRequest`.
 
 extension GitHubGate {
     /// The refusals, in words that say whose each is.
@@ -28,6 +33,10 @@ extension GitHubGate {
 
         static func deleting(_ what: String) -> String {
             "deleting a branch or any other ref is Logan's alone, never an agent's (\(what))"
+        }
+
+        static func reopening(_ what: String) -> String {
+            "reopening an issue or a pull request is Logan's alone, an agent's own included (\(what)): an agent only closes what it opened"
         }
 
         /// GraphQL's mutations that merge.

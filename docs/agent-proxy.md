@@ -381,9 +381,51 @@ until five minutes before it expires, about an hour; requests that come
 while one is minted wait for that one. GitHub turning a token down (401)
 has the next request mint another.
 
+**Its bot, the container agents' git identity** (0.72.1). The App's bot
+user is who the Sessions container's agents commit as (docs/containers.md,
+git's identity in the container): its name `<slug>[bot]`, its email
+`<id>+<slug>[bot]@users.noreply.github.com`. The slug is the App's, from
+`GET /app` with its JWT; the id is its bot user's, from `GET
+/users/<slug>%5Bbot%5D` (the brackets escaped) with an installation token,
+not anonymously (anonymous reads share the containers' sixty an hour). It
+is found at the start, beside the installation, and kept for the secrets;
+askers that come together share one finding, and one that failed is tried
+again at the next asking. The server, with agent-proxy inside it, asks the
+GitHub interceptor for it (`gitIdentity`, through `AgentProxyHost.Running`)
+as each container agent starts, and sets `GIT_AUTHOR_NAME`,
+`GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_NAME` and `GIT_COMMITTER_EMAIL` from it.
+Without the App, or when it couldn't be found, none is set.
+
 The secrets are read again at most once a minute, like the others, so
 setting or changing them needs no restart. With other secrets, the
 installation and the token kept are forgotten.
+With other secrets, the bot is found again.
+
+**Closing its own** (0.72.1). Logan's decision, 25 Nov 2026: "agents may
+close pull requests and issues they opened themselves", that is, those
+whose author is the App's bot (`<slug>[bot]`, logan-shire-agent[bot]).
+Before, the gate refused every close ("closing and reopening are Logan's").
+Now a close is one of the checks that read before they write (GateChecker,
+`GateCheck.close` and `graphQLClose`), read with the token the close goes on
+with:
+- REST: `PATCH /repos/{o}/{r}/issues/{n}` or `…/pulls/{n}` with `state:
+  "closed"` (and, for an issue, `state_reason` `completed` or
+  `not_planned`; the edit's other fields as an edit's) reads `GET
+  /repos/{o}/{r}/issues/{n}` and passes only if its `user.login` is the
+  bot's name;
+- GraphQL: `closeIssue` (`issueId`, `stateReason` COMPLETED or NOT_PLANNED)
+  and `closePullRequest` (`pullRequestId`), each a mutation of its own (gh
+  issue close and gh pr close send them so), read the node: an Issue or a
+  PullRequest as named, in an allowed repository, its `author` a Bot whose
+  login is the slug (GraphQL names a bot without `[bot]`).
+
+Anyone else's is refused: `… #<n> of <owner/repo> is <login>'s: an agent
+closes only what it opened itself (<slug>[bot]'s)`. With no App (the auth
+token, or none) or its bot not found, the bot is unknown and every close is
+refused before GitHub is asked: `… with no GitHub App (github-app/key and
+github-app/id) or its bot not found, closing is Logan's`. Still Logan's
+alone: reopening (`state: "open"`, `reopenIssue`, `reopenPullRequest`), an
+agent's own included, merging, publishing a release and deleting a ref.
 
 **The import**, on a Mac in the desktop session (the secrets are in the
 keychain), from the App's files in `~/Library/Application Support/Agents/github`:
@@ -402,6 +444,14 @@ where it runs inside the server; `Visor-agent-proxy.log` as its own job):
 - at the start, and when the secrets change (at the next request):
   `agent-proxy: github: tokens minted as the GitHub App <id> (installation <n> of <owner>), hourly, for <repositories, comma-separated | all of <owner>'s>`;
 - each mint: `agent-proxy: github: an installation token minted (expires <ISO 8601 time>)`;
+- its bot, once found (at the start, and when the secrets change):
+  `agent-proxy: github: commits as <slug>[bot] <id>+<slug>[bot]@users.noreply.github.com`;
+- why the container agents have no git identity, once until it changes:
+  `agent-proxy: github: no git identity for container agents: <why>`, where
+  `<why>` is `no GitHub App (github-app/key and github-app/id)`, `GitHub
+  answered <status> for the App (GET /app): <message>`, `GitHub answered
+  <status> for the App's bot user (GET /users/<slug>[bot]): <message>`, or
+  what kept a token from being minted;
 - what went wrong, once until it changes:
   `agent-proxy: github: the App's key isn't a PEM`,
   `… no installation of the App for <owner>`,

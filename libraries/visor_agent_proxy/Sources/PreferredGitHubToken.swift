@@ -3,7 +3,9 @@
 // (GitHubAppTokens) when its key and its id are both set; otherwise
 // Settings' auth token (ConfiguredGitHubToken), as before the App came back;
 // otherwise none, and what needs a token is refused. An App whose key or id
-// is missing isn't the App: its other secrets alone change nothing.
+// is missing isn't the App: its other secrets alone change nothing. The
+// container agents' git identity is the App's bot, while it's the App's
+// (GitHubAppIdentity); with the auth token, none.
 
 import Foundation
 
@@ -22,5 +24,9 @@ struct PreferredGitHubToken: GitHubTokenSource {
     func forget(session: String, repository: String) async {
         await app.forget()
         await configured.forget(session: session, repository: repository)
+    }
+
+    func identity() async -> GitHubAppIdentity? {
+        await app.identity(appSecrets())
     }
 }
