@@ -28,7 +28,8 @@ public struct ContainerAgent: Equatable, Sendable {
     /// resumes.
     public var sources: [Source]
     public var sourcesDirectory: String?
-    /// The agent's token (a JWT for `visor.runner-agent`): AGENT_TOKEN alone.
+    /// The agent's token (a JWT for `visor.runner-agent`): the wrapper's
+    /// standard input alone (AGENT_TOKEN_FD=0).
     public var token: String
     /// More for its harness's environment (CLAUDE_CONFIG_DIR).
     public var environment: [String: String]

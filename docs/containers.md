@@ -322,8 +322,8 @@ agent-proxy:
 - On the Mac, a `UnixBridge` (HostRelay's other half: the same accept
   loop, splice and connection cap) listens on `run/driver.sock` beside the
   relay's socket, and joins each connection to the driver's port with
-  **no PROXY header**: the agents' JWTs (`AGENT_TOKEN`, shown as
-  `authorization: Bearer` on every call) say who they are, as on the Mac.
+  **no PROXY header**: the agents' JWTs (each wrapper's, handed over on
+  its standard input, shown as `authorization: Bearer` on every call) say who they are, as on the Mac.
 - It's carried into the guest at `/run/visor/driver.sock`, and started and
   stopped with the relay.
 - In the guest, relay-client's `--forward 7434=/run/visor/driver.sock`
@@ -354,7 +354,7 @@ to `sessions/logs/<session>.log`, with the environment a runner gives it
 | `AGENT_DRIVER_URL` | `http://127.0.0.1:7434` |
 | `AGENT_DISPATCHER_URL` | Whom it reports Started, Completed and Failed to, when it has one |
 | `AGENT_RUNNER` | `visor-sessions` unless the session says |
-| `AGENT_TOKEN` | The agent's JWT, there alone (the wrapper unsets it once read and keeps it from the harness) |
+| `AGENT_TOKEN_FD` | `0`: the agent's JWT is the wrapper's standard input (the exec writes it, then closes it), never a variable (agent_protocol#17, below) |
 | `AGENT_SESSIONS_DIR` | `/Volumes/Sessions` (a job with no folder works in `<it>/Claude/<agent>`) |
 | `AGENT_SOURCES_DIR` | Where a resumed session's sources are cloned, when given |
 | `AGENT_WRAPPER_CLAUDE` | Only for a stand-in (a test's): the harness is the image's `claude`, on its PATH (`/usr/local/bin/claude`, npm's Claude Code) |
@@ -657,17 +657,41 @@ a Claude Code session with no folder to pick (the server's
 server's refusal (the container off, without egress, its agent unable to
 start) is shown in the sheet, which stays open.
 
-**Its token in the agent's environment** (agent_protocol#17): the wrapper
-reads `AGENT_TOKEN` and unsets it, and keeps it from its harness's
-environment, but `/proc/<wrapper>/environ` still shows the environment the
-process began with, and the harness runs as the same user (root, in the
-container), so it can read the token there. The token is the session's
-alone, for an hour, and only for the driver (never the REST side), so it
-lets the agent act as its own session and nothing more; still, it's a
-credential its harness shouldn't hold. The fix is agent_protocol#17's: the
-token handed over on a descriptor (`AGENT_TOKEN_FD`) or in a 0600 file the
-wrapper deletes once read, with `hidepid=2` or a uid of the harness's own
-as a defence beside it. Visor adopts it once #17 lands in a release.
+**Its token, never in the agent's environment** (agent_protocol#17): every
+process in the container runs as root, so any of them can read the
+environment another began with (`/proc/<pid>/environ`), whatever it later
+unsets: a session's harness (Claude, which a prompt can steer) could take
+another session's wrapper's token from there and drive Visor as that
+session. So the token goes in no environment:
+
+- `wrapperExec` sets `AGENT_TOKEN_FD=0` and gives the exec the token as its
+  input (`ContainerExec.input`), which `ContainerizationMachine` hands
+  Containerization as the process's standard input (`InputBytes`: the
+  bytes, then the end; Containerization closes the guest's end once its
+  stream ends). The wrapper reads it to the end, and its standard input is
+  /dev/null after. Containerization's exec takes no descriptors but the
+  three standard ones, and a file (`AGENT_TOKEN_FILE`) would be readable by
+  every root process there until the wrapper deletes it (0600 stops no
+  root), so it's the standard input.
+- The wrapper makes itself undumpable (`PR_SET_DUMPABLE` 0) before it
+  reads it, so the others are refused its `/proc/<pid>/environ`, `fd` and
+  `mem` (EACCES). That holds against root only without `CAP_SYS_PTRACE`:
+  an exec has Containerization's default capabilities (the OCI set, which
+  leaves it out; `CAP_NET_ADMIN` is relay-client's alone), and must keep
+  them so.
+- Its refresh is unchanged: the driver sends a fresh one down the stream
+  (`DriverMessage.token`), which never touches the container's files.
+- `hidepid=2` on the container's `/proc` (Containerization's
+  `defaultMounts()` mounts it with no options; a mount of Visor's could
+  replace it) would hide only what `ptrace` checks refuse, which is the
+  undumpable wrapper already: with every agent root, it adds nothing until
+  the harnesses run as a user of their own.
+
+The token is the session's alone, for an hour, and only for the driver
+(never the REST side). This needs agent-wrapper 0.6 (agent_protocol's
+release with #17, pinned in Package.swift and
+third_party/swift_packages): 0.5's ignores `AGENT_TOKEN_FD`, so its agents
+would start with no token, and the driver would refuse them.
 
 ## Still open
 
@@ -676,10 +700,6 @@ as a defence beside it. Visor adopts it once #17 lands in a release.
   `Foo.h` and `foo.h` are two files. Visor Disk Utility makes new ones
   case-sensitive and adopts an existing one as it is, with a note saying
   how to remake it; the Mini's are remade by hand.
-
-## What's next
-
-- **agent_protocol#17:** the token handed over on a descriptor, above.
 
 ## Testing
 

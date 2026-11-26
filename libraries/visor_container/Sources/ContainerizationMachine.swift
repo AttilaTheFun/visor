@@ -16,7 +16,9 @@ struct ContainerizationMachine: ContainerMachine {
         config.environmentVariables = Self.merged(base.environmentVariables, process.environment)
         if let directory = process.workingDirectory { config.workingDirectory = directory }
         config.terminal = false
-        config.stdin = nil
+        // Its standard input: the bytes given, then closed (Containerization
+        // closes the guest's end once the stream ends); else none.
+        config.stdin = process.input.map(InputBytes.init)
         let log = try LogWriter(process.log)
         config.stdout = log
         config.stderr = log
@@ -38,5 +40,18 @@ struct ContainerizationMachine: ContainerMachine {
         guard !extra.isEmpty else { return list }
         let kept = list.filter { entry in !extra.keys.contains(String(entry.split(separator: "=", maxSplits: 1).first ?? "")) }
         return kept + extra.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }
+    }
+}
+
+/// A process's standard input that is some bytes and then its end
+/// (Containerization's ReaderStream).
+struct InputBytes: ReaderStream {
+    let bytes: Data
+
+    func stream() -> AsyncStream<Data> {
+        AsyncStream { continuation in
+            continuation.yield(bytes)
+            continuation.finish()
+        }
     }
 }
