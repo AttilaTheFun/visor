@@ -232,6 +232,10 @@ jobs:
       github.ref == 'refs/heads/main' &&
       (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.run == 'populate'))
     runs-on: xcode-27
+    permissions:
+      contents: read
+      # The nightly failure's issue (its last step).
+      issues: write
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v5
@@ -248,6 +252,24 @@ jobs:
           group: apple
           gigabytes: 3
           repository-hit: ${{ steps.cache.outputs.repository-hit }}
+      # A broken main, seen at night (no pull request builds the Apple
+      # apps): an issue opened, or the open one commented on, with the
+      # run's link. This job's token alone may write issues.
+      - name: A broken main, flagged
+        if: failure() && github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Nightly Apple build failed on main"
+          body="populate-apple failed on main at $GITHUB_SHA: $RUN"
+          number="$(gh issue list --state open --search "$title in:title" --json number,title --jq ".[] | select(.title == \"$title\") | .number" | head -n 1)"
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body"
+          fi
 
   # ---- By hand: verify -----------------------------------------------------
 
