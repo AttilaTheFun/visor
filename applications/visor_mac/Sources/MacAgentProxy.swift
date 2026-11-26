@@ -69,11 +69,15 @@ enum MacAgentProxy {
         agentSession = session
         let check = server.passThroughTokenCheck
         agentTokenCheck = check
-        // Asked of what's folded in when it's asked: started again, the new one.
+        if let settings = server.settings.agentProxy {
+            folded = AgentProxyHost.start(settings, places: places, secrets: ServerPlatform.current.secrets, version: VisorMacApp.bundleVersion,
+                                          agentSession: session, agentTokenCheck: check, log: log)
+        }
+        // Asked of what's folded in when it's asked: started again, the new
+        // one. Given once it's there (or isn't to be), for the container
+        // agents carried on at the server's start, which wait for it
+        // (MacServer.run: expected).
         server.containerGitIdentity = { await MacAgentProxy.gitIdentity() }
-        guard let settings = server.settings.agentProxy else { return }
-        folded = AgentProxyHost.start(settings, places: places, secrets: ServerPlatform.current.secrets, version: VisorMacApp.bundleVersion,
-                                      agentSession: session, agentTokenCheck: check, log: log)
     }
 
     /// In the server, once folded in: started again with `settings`
