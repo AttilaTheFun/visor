@@ -219,8 +219,10 @@ import VisorServer
         try scene.app(at: scene.destination, name: "same", body: scene.neverAnswers)
         let output = try scene.run(scene.watch(update: false))
         #expect(output.contains("did not come up (it never answered at its socket file); starting it once more"), "\(output)")
+        #expect(output.contains("did not come up again (it never answered at its socket file): left as it is"),
+                "that start watched too, and said: \(output)")
         #expect(!FileManager.default.fileExists(atPath: scene.note), "nothing was put back")
-        #expect(scene.starts == 2, "stopped, then started again: never two at once")
+        #expect(scene.starts == 2, "stopped, then started again: never two at once, nor a third")
     }
 
     /// Another build put in place since this watch installed its own (a

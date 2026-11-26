@@ -36,6 +36,9 @@ import VisorServer
         var launchctl: String { root + "/launchctl" }
         /// Each start through `app-agent start`, a line each.
         var started: String { root + "/started" }
+        /// The Quit's marker (AppAgentJob.quitMarker): the pid of the app
+        /// that was quit.
+        var quitMarker: String { root + "/com.LoganShire.Visor.quit" }
 
         init() throws {
             root = FileManager.default.temporaryDirectory.appendingPathComponent("visor-app-commands-" + UUID().uuidString).path
@@ -74,11 +77,21 @@ import VisorServer
         /// run by.
         var serves: String { "\(takesTheLock); touch '\(answering)'; while :; do sleep 1; done" }
         var crashesOnceUp: String { "\(takesTheLock); touch '\(answering)'; sleep 3; exit 1" }
+        /// Quit Visor once up: the marker written as AppKit ends the app
+        /// (AppDelegate.applicationWillTerminate), then an exit of 0.
+        var quitsOnceUp: String { "\(takesTheLock); touch '\(answering)'; sleep 3; echo $$ > '\(quitMarker)'; exit 0" }
+        /// A crash once up the first time it runs, whose marker names
+        /// another process (one from a Quit long before); then it serves.
+        var crashesTheFirstTime: String {
+            "if [ ! -f '\(root)/crashed' ]; then touch '\(root)/crashed'; \(takesTheLock); touch '\(answering)'; sleep 3; "
+                + "echo 1 > '\(quitMarker)'; exit 1; fi; \(serves)"
+        }
 
         /// What the watch runs, as AppRelauncher gives it, launchctl played.
         var commands: AppRelaunchCommands {
             AppRelaunchCommands(executable: executable, open: "echo opened >> '\(started)'",
-                                agent: .init(label: "com.LoganShire.Visor.app", command: ["app-agent", "start"], instanceLock: instance),
+                                agent: .init(label: "com.LoganShire.Visor.app", command: ["app-agent", "start"], instanceLock: instance,
+                                             quitMarker: quitMarker),
                                 launchctl: launchctl)
         }
 
@@ -86,7 +99,7 @@ import VisorServer
             let app = commands
             return AppRelaunchWatch(appPID: Self.gonePID(), destination: destination, backup: update ? backup : nil,
                                     install: update ? AppRelaunchCommands.replacing(destination, with: source, keptAt: backup, sessions: "all") : "",
-                                    start: app.start, stop: app.stop, pid: app.pid,
+                                    start: app.start, stop: app.stop, pid: app.pid, quit: app.quit,
                                     answers: "[ -f '\(answering)' ]", answersWhere: "at its socket file", note: note,
                                     newVersion: "0.72.3", oldVersion: "0.72.2", seconds: 10, firstAnswer: 4, appearWithin: appearWithin,
                                     endWithin: 60, killAfter: 1, settle: 1, lock: lock)
@@ -217,6 +230,77 @@ import VisorServer
         #expect(scene.read(scene.destination + "/name") == "old")
         #expect(scene.read(scene.note)?.contains("(it didn't run (app-agent start ended with status 3))") == true)
         #expect(scene.holder != nil, "the previous build was started again")
+    }
+
+    /// The hand-off's restart (LocalServer.handOffOnceWatched: a plain
+    /// restart through the agent) that stays up says so, last.
+    @Test func aPlainRestartThatStaysUpSaysSo() throws {
+        let scene = try Scene()
+        defer { scene.cleanUp() }
+        try scene.app(at: scene.destination, name: "same", body: scene.serves)
+        let output = try scene.run(scene.watch(update: false))
+        #expect(output.split(separator: "\n").last?.hasSuffix("0.72.3 stayed up") == true, "\(output)")
+        #expect(!output.contains("once more"), "\(output)")
+        #expect(scene.starts == 1)
+        #expect(scene.holder != nil, "launchd's copy runs on")
+    }
+
+    /// NCH's lease test of 0.72.2: Quit Visor within two minutes of the
+    /// hand-off's restart was taken for a start that failed ("did not come
+    /// up (it quit or crashed); starting it once more"), and Visor came
+    /// back. The app's Quit marker names the process the watch followed:
+    /// left stopped, as launchd's KeepAlive leaves an exit of 0.
+    @Test func aQuitDuringARestartsWatchIsLeftStopped() throws {
+        let scene = try Scene()
+        defer { scene.cleanUp() }
+        try scene.app(at: scene.destination, name: "same", body: scene.quitsOnceUp)
+        let output = try scene.run(scene.watch(update: false))
+        #expect(output.contains("0.72.3 was quit (process "), "\(output)")
+        #expect(output.contains("ended at a Quit): left stopped"), "\(output)")
+        #expect(!output.contains("once more") && !output.contains("stayed up") && !output.contains("bootout"), "\(output)")
+        #expect(scene.starts == 1, "not started again")
+        #expect(scene.holder == nil, "nothing runs")
+    }
+
+    /// A crash during the same watch (the marker, if any, names another
+    /// process) is started once more, as before, and that start watched:
+    /// the watch ends with its word.
+    @Test func aCrashDuringARestartsWatchIsStartedOnceMoreAndWatched() throws {
+        let scene = try Scene()
+        defer { scene.cleanUp() }
+        try scene.app(at: scene.destination, name: "same", body: scene.crashesTheFirstTime)
+        let output = try scene.run(scene.watch(update: false))
+        #expect(output.contains("0.72.3 did not come up (it quit or crashed); starting it once more"), "\(output)")
+        #expect(output.contains("launchctl bootout com.LoganShire.Visor.app: status 0"), "stopped first: \(output)")
+        #expect(output.split(separator: "\n").last?.hasSuffix("0.72.3 stayed up") == true, "\(output)")
+        #expect(!output.contains("was quit"), "\(output)")
+        #expect(scene.starts == 2)
+        #expect(scene.holder != nil, "it runs")
+    }
+
+    /// One that crashes each time is said, after its second start, and
+    /// left to launchd: no third start.
+    @Test func aRestartThatCrashesAgainIsSaid() throws {
+        let scene = try Scene()
+        defer { scene.cleanUp() }
+        try scene.app(at: scene.destination, name: "same", body: scene.crashesOnceUp)
+        let output = try scene.run(scene.watch(update: false))
+        #expect(output.contains("starting it once more"), "\(output)")
+        #expect(output.split(separator: "\n").last?.hasSuffix("0.72.3 did not come up again (it quit or crashed): left as it is") == true,
+                "\(output)")
+        #expect(scene.starts == 2)
+    }
+
+    /// An update's new build that goes within its watch is undone, quit or
+    /// not: what's quit is the build that came, unproven.
+    @Test func aQuitDuringAnUpdatesWatchIsStillRolledBack() throws {
+        let scene = try Scene()
+        defer { scene.cleanUp() }
+        try scene.app(at: scene.destination, name: "old", body: scene.serves)
+        try scene.app(at: scene.source, name: "new", body: scene.quitsOnceUp)
+        let output = try scene.run(scene.watch(update: true))
+        #expect(output.contains("rolled back to 0.72.2: it quit or crashed"), "\(output)")
+        #expect(scene.read(scene.destination + "/name") == "old")
     }
 
     /// The app is followed by its pid: launchd's copy, run by the relative
