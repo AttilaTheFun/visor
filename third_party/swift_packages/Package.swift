@@ -58,11 +58,12 @@ let package = Package(
         // at their root views and scenes: nothing portable (visor_ui,
         // visor_client) depends on it. Each capability does nothing without
         // the Info.plist keys and entitlements CI's builds to publish carry
-        // (tools/signing, tools/shared_sign_in). Exactly 0.1.0, the tag with
-        // the public repository's crash privacy (Visor's is public).
+        // (tools/signing, tools/shared_sign_in). Exactly 0.2.1: the public
+        // repository's crash privacy (from 0.1.0; Visor's is public), and
+        // Report a Bug's sheet opening at once.
         .package(
             url: "https://github.com/AttilaTheFun/shireworks_kit.git",
-            exact: "0.1.0"
+            exact: "0.2.1"
         ),
         // Apple's Containerization (docs/containers.md): the Sessions
         // container's image store, ext4 unpacking and init filesystem, and,

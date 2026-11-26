@@ -14,6 +14,10 @@
 // caller's word). Only on the servers containers are given (`containerServers`: Nimbus's, Logan, 25 Nov 2026); any
 // other path is refused them (403). gh in a container is the gh CLI through the GitHub gate, oss is retired, and
 // Shireworks' is Nimbus's now.
+// The server's word waits on its main actor while the call holds one of the `maxConnections` places, so a token is
+// checked here first (`agentTokenCheck`: signed with a live key of the server's, for `visor.runner-agent`, unexpired),
+// one that fails refused at once (401), and at most `maxVouches` calls wait at a time, any more refused at once (503):
+// forged tokens can't fill the places (NCH's check of #536).
 
 import CAgentProxyPOSIX
 import Foundation
@@ -72,21 +76,31 @@ public final class NativeMCPProxy: Sendable {
     /// The session a container agent's own token acts as, while its agent runs (nil for any other token). None: only
     /// the sessions' token is taken.
     private let agentSession: (@Sendable (String) async -> String?)?
+    /// Whether a token may be a container agent's, said here at once with no wait (the server's keys: its signature,
+    /// audience and end); nil: not asked, `agentSession` alone says.
+    private let agentTokenCheck: (@Sendable (String) -> Bool)?
     /// The servers a container agent's call may reach (`containerServers` unless a test says).
     private let agentServers: Set<String>
     /// How long a call waits to hear whether a token is a container agent's.
     static let agentSessionWithin: DispatchTimeInterval = .seconds(10)
+    /// The most calls waiting at once to hear whether a token is a container agent's; another is refused with 503.
+    public let maxVouches: Int
+    /// The calls waiting so.
+    private let vouching = Locked(0)
 
     public static let defaultMaxConnections = 64
+    public static let defaultMaxVouches = 8
 
     /// Listening on loopback `port` alone: a call without the sessions' token, or a container agent's own (`agentSession`
-    /// names its session), is refused. Nil when the port can't be had.
+    /// names its session, once `agentTokenCheck` lets it be asked), is refused. Nil when the port can't be had.
     public init?(port: UInt16, endpoints: @escaping @Sendable () -> [Endpoint], admits: @escaping @Sendable (String) -> Bool,
                  secret: @escaping @Sendable (_ endpoint: String, _ header: String) -> String?,
                  inProcess: [String: any InProcessMCP] = [:], inProcessWithheld: [String: [String]] = [:],
                  agentSession: (@Sendable (String) async -> String?)? = nil,
+                 agentTokenCheck: (@Sendable (String) -> Bool)? = nil,
                  agentServers: Set<String> = NativeMCPProxy.containerServers,
-                 maxConnections: Int = NativeMCPProxy.defaultMaxConnections) {
+                 maxConnections: Int = NativeMCPProxy.defaultMaxConnections,
+                 maxVouches: Int = NativeMCPProxy.defaultMaxVouches) {
         agent_proxy_ignore_broken_pipes()
         let listener = agent_proxy_listen(port, 0)
         guard listener >= 0 else { return nil }
@@ -98,8 +112,10 @@ public final class NativeMCPProxy: Sendable {
         self.inProcess = inProcess
         self.inProcessWithheld = inProcessWithheld.mapValues(Set.init)
         self.agentSession = agentSession
+        self.agentTokenCheck = agentTokenCheck
         self.agentServers = agentServers
         self.maxConnections = maxConnections
+        self.maxVouches = maxVouches
     }
 
     public func start() {
@@ -238,8 +254,11 @@ public final class NativeMCPProxy: Sendable {
         // The sessions' token (a native session's call, through Visor's server), else a container agent's own.
         var session: String?
         if !admits(token) {
-            guard let agents = agentsSession(of: token) else {
-                return Self.reply(client, "401 Unauthorized", "No sessions' token for this proxy.")
+            let agents: String
+            switch agentsSession(of: token) {
+            case .session(let named): agents = named
+            case .refused: return Self.reply(client, "401 Unauthorized", "No sessions' token for this proxy.")
+            case .busy: return Self.reply(client, "503 Service Unavailable", "Too many container agents' tokens being checked at once.")
             }
             // A container's agent reaches the servers it's given alone.
             guard agentServers.contains(Self.serverName(request.path)) else {
@@ -255,10 +274,30 @@ public final class NativeMCPProxy: Sendable {
         answerMCP(client, request, session: session)
     }
 
+    /// What's said of a token that isn't the sessions'.
+    enum Vouch: Equatable {
+        /// A container agent's own: the session it acts as.
+        case session(String)
+        /// No one's (or not said in time).
+        case refused
+        /// Not asked: `maxVouches` calls wait already.
+        case busy
+    }
+
     /// The session `token` acts as, when it's a container agent's own (`agentSession` says, on a task of its own while
-    /// this call's thread waits, at most `agentSessionWithin`); nil for any other, or with nothing to ask.
-    private func agentsSession(of token: String) -> String? {
-        guard let agentSession, Self.isJWTShaped(token) else { return nil }
+    /// this call's thread waits, at most `agentSessionWithin`); refused for any other, or with nothing to ask. Only a
+    /// JWT's shape that `agentTokenCheck` lets through is asked, by at most `maxVouches` calls at once.
+    private func agentsSession(of token: String) -> Vouch {
+        guard let agentSession, Self.isJWTShaped(token) else { return .refused }
+        // A forged, expired or another server's token is refused here, at once, never waited on.
+        if let agentTokenCheck, !agentTokenCheck(token) { return .refused }
+        let room = vouching.withLock { waiting in
+            guard waiting < maxVouches else { return false }
+            waiting += 1
+            return true
+        }
+        guard room else { return .busy }
+        defer { vouching.withLock { $0 -= 1 } }
         let found = Locked<String?>(nil)
         let done = DispatchSemaphore(value: 0)
         Task {
@@ -266,8 +305,9 @@ public final class NativeMCPProxy: Sendable {
             found.withLock { $0 = session }
             done.signal()
         }
-        guard done.wait(timeout: .now() + Self.agentSessionWithin) == .success else { return nil }
-        return found.withLock { $0 }
+        guard done.wait(timeout: .now() + Self.agentSessionWithin) == .success,
+              let session = found.withLock({ $0 }) else { return .refused }
+        return .session(session)
     }
 
     /// The server a call's path names: `/mcp/<name>`'s name, up to a `?` or `/`; "" for any other path.

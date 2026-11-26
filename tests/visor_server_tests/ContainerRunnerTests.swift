@@ -500,6 +500,18 @@ extension ServerTests {
                         "a.b.c", "sessions-token"] {
             #expect(server.passThroughSession(for: refused) == nil, "\(refused)")
         }
+        // What agent-proxy asks first, at once, off the main actor (NCH's check of #536): the forged, the expired, a
+        // native session's, another server's, nonsense, never waited on; a token signed and unexpired for a runner's
+        // agent may be one, its session and its agent then the server's to say.
+        let check = server.passThroughTokenCheck
+        let elsewhere = try JWT.sign(claims, key: Data(repeating: 9, count: 32), kid: "another-servers")
+        let expired = tokens.mint(.runnerAgent, session: "pass", agent: agent, scope: [.mcp], now: Date().addingTimeInterval(-7200))
+        for refused in [forged, expired, elsewhere, tokens.mint(.session, session: "pass"), "a.b.c", "sessions-token"] {
+            #expect(await Task.detached { check(refused) }.value == false, "\(refused)")
+        }
+        for mayBe in [token, started.agent.token, tokens.mint(.runnerAgent, session: "someone-else", agent: agent, scope: [.mcp])] {
+            #expect(await Task.detached { check(mayBe) }.value, "\(mayBe)")
+        }
 
         // Its agent let go: its token is no one's, and it's given none.
         server.containerRunner.release(agent)

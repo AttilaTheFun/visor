@@ -343,6 +343,24 @@ extension ServerTests {
         #expect(server.agentSession("A", presenting: fresh, for: .messages) != nil, "its agent carries on with the file's")
     }
 
+    /// agent-proxy's check of a container agent's token, made off the main
+    /// actor before it waits on the server (AgentTokens.passThroughCheck,
+    /// NCH's check of #536), follows the keys as they change: a rotation's
+    /// previous key still verifies, an emergency's dropped one at once
+    /// doesn't, and a new key's tokens pass the check made before it.
+    @Test func thePassThroughsCheckFollowsTheKeys() async {
+        let tokens = server.agentTokens
+        let before = tokens.mint(.runnerAgent, session: "A", agent: "agent-1", scope: [.mcp])
+        let check = server.passThroughTokenCheck
+        #expect(await Task.detached { check(before) }.value)
+        server.rotateSigningKeys(dropPrevious: false)
+        #expect(await Task.detached { check(before) }.value, "the previous key still verifies")
+        server.rotateSigningKeys(dropPrevious: true)
+        #expect(await Task.detached { check(before) }.value == false, "dropped at once")
+        let after = tokens.mint(.runnerAgent, session: "A", agent: "agent-1", scope: [.mcp])
+        #expect(await Task.detached { check(after) }.value, "a new key's")
+    }
+
     @Test func theKeysAreKeptAcrossALaunch() {
         let a = server.agentToken(for: "A")
         let next = VisorServer(port: ServerTestCase.freePort())

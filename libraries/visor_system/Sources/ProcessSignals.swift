@@ -7,10 +7,19 @@ public protocol ProcessSignals: Sendable {
     func kill(_ pid: Int32)
     /// Whether a process with this id is running.
     func isRunning(_ pid: Int32) -> Bool
+    /// When a process started (seconds since 1970); nil when it isn't
+    /// running or the system doesn't say. What tells a process from
+    /// another that has reused its id since (RelaunchWatchLock).
+    func startTime(of pid: Int32) -> Int?
     /// The command line a process was started with; nil when it cannot be
     /// told.
     func commandLine(of pid: Int32) async -> String?
     /// Writing to a pipe whose reader has gone fails the write, rather than
     /// ending the server.
     func ignoreBrokenPipes()
+}
+
+extension ProcessSignals {
+    /// Not said, where a system's signals don't tell it.
+    public func startTime(of pid: Int32) -> Int? { nil }
 }

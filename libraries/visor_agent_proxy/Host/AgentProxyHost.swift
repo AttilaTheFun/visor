@@ -138,9 +138,13 @@ public enum AgentProxyHost {
     /// added needs no restart. `agentSession`: the session a container
     /// agent's own token acts as, while its agent runs (the server's, where
     /// agent-proxy runs inside the server that runs the container); none:
-    /// the pass-through takes the sessions' token alone.
+    /// the pass-through takes the sessions' token alone. `agentTokenCheck`:
+    /// whether a token may be one at all, said at once (the server's keys:
+    /// VisorServer.passThroughTokenCheck), before `agentSession` is waited
+    /// on.
     public static func start(_ settings: AgentProxySettings, places: Places, secrets: any SecretStore, version: String,
                              agentSession: (@Sendable (String) async -> String?)? = nil,
+                             agentTokenCheck: (@Sendable (String) -> Bool)? = nil,
                              log: @escaping @Sendable (String) -> Void) -> Running? {
         guard settings.relayPort != nil || settings.mcp != nil || settings.gh != nil else {
             log("agentProxy has neither `mcp`, `gh` nor `relayPort`: nothing to serve")
@@ -159,7 +163,7 @@ public enum AgentProxyHost {
         var nativeMCP: NativeMCPProxy?
         if settings.mcp != nil || settings.gh != nil {
             nativeMCP = startMCP(settings.mcp ?? AgentProxySettings.MCP(), gh: settings.gh, places: places, secrets: secrets,
-                                 agentSession: agentSession, log: log)
+                                 agentSession: agentSession, agentTokenCheck: agentTokenCheck, log: log)
             failed = failed || nativeMCP == nil
         }
         let serving = [relay == nil ? nil : "the relay listener", nativeMCP == nil ? nil : "the MCP pass-through"].compactMap { $0 }
@@ -248,6 +252,7 @@ public enum AgentProxyHost {
     /// when `gh` is set and no upstream is named gh.
     private static func startMCP(_ mcp: AgentProxySettings.MCP, gh: AgentProxySettings.GH?, places: Places, secrets: any SecretStore,
                                  agentSession: (@Sendable (String) async -> String?)?,
+                                 agentTokenCheck: (@Sendable (String) -> Bool)?,
                                  log: @escaping @Sendable (String) -> Void) -> NativeMCPProxy? {
         guard (1...65535).contains(mcp.port) else {
             log("agentProxy.mcp's port \(mcp.port) isn't a port: no MCP pass-through")
@@ -272,7 +277,8 @@ public enum AgentProxyHost {
                                          secret: { upstream, header in
                                              secrets.get(AgentProxySettings.secretKey(AgentProxySettings.mcpSecretName(upstream: upstream,
                                                                                                                        header: header)))
-                                         }, inProcess: inProcess, inProcessWithheld: inProcessWithheld, agentSession: agentSession) else {
+                                         }, inProcess: inProcess, inProcessWithheld: inProcessWithheld, agentSession: agentSession,
+                                         agentTokenCheck: agentTokenCheck) else {
             log("loopback port \(mcp.port) can't be had for the MCP pass-through (another listener on it?)")
             return nil
         }

@@ -105,6 +105,33 @@ package final class AgentTokens {
         return .success(claims)
     }
 
+    /// A check of a runner's agent's token that needs neither the main
+    /// actor nor the session, for agent-proxy's MCP pass-through to make
+    /// before it waits on the server's word (VisorServer.passThroughSession,
+    /// up to ten seconds, holding one of its calls' places): false for a
+    /// token surely not one of this server's runner agents' (malformed, its
+    /// key not a live one of this server's, its signature not its key's,
+    /// another issuer or audience, ended), refused at once. True for one
+    /// that may be, which `verify` and the session's liveness then decide;
+    /// and while the keys can't be read, nothing is said here. From any
+    /// thread: the keys as last read or made (SigningKeys.liveKey).
+    package var passThroughCheck: @Sendable (String) -> Bool {
+        let keys = self.keys
+        let issuer = self.issuer
+        return { token in Self.mayBeRunnerAgents(token, keys: keys, issuer: issuer, now: Date()) }
+    }
+
+    /// `passThroughCheck`'s answer at `now`.
+    nonisolated package static func mayBeRunnerAgents(_ token: String, keys: SigningKeys, issuer: String, now: Date) -> Bool {
+        guard let parts = JWT.parts(of: token) else { return false }
+        let live = keys.liveKey(parts.header.kid, now: now)
+        guard live.known else { return true }
+        guard let key = live.key, JWT.verify(parts, key: key),
+              let claims = try? JSONDecoder().decode(AgentTokenClaims.self, from: parts.payload) else { return false }
+        return claims.iss == issuer && claims.aud == AgentTokenAudience.runnerAgent.rawValue
+            && Double(claims.exp) > now.timeIntervalSince1970
+    }
+
     /// When `token` (one of this server's, of any audience) ends, if it
     /// is one.
     package func expiry(of token: String) -> Date? {

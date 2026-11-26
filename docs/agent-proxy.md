@@ -272,9 +272,16 @@ rule (no passed-on servers in a container) for Nimbus only.
   7439`).
 - **The token.** A call shows `X-Visor-Proxy` as before. The sessions'
   token lets it in as it always has. Any other token shaped as a JWT is
+  checked first, at once, with no wait on the server (`agentTokenCheck`,
+  VisorServer.passThroughTokenCheck: signed with a live key of the
+  server's, for `visor.runner-agent`, of its issuer, unexpired, from the
+  keys as last read, which follow each rotation); one that fails is refused
+  with 401 there (NCH's check of #536: a forged token would otherwise hold
+  one of the pass-through's places for the whole wait). One that passes is
   asked about (`agentSession`), on the call's own thread, for at most 10
-  seconds: the server agent, which runs agent-proxy and the container in
-  one process, answers with the session it acts as. That's a token of the
+  seconds, by at most 8 calls at once (`maxVouches`; another is refused
+  with 503 at once): the server, which runs agent-proxy and the container
+  in one process, answers with the session it acts as. That's a token of the
   server's (`visor.runner-agent`), unexpired, allowed MCP, naming an agent
   its container runner runs now (not let go), and that agent's session,
   live. Anything else (expired, forged, another server's, another session's,

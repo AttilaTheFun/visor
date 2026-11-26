@@ -684,7 +684,15 @@ longer a place it runs, and the `ServerAsAgent` default isn't read.
   The watch follows the app's process by the instance lock's holder (the
   lock file's pid): launchd runs the app by a path relative to the bundle,
   and a second copy that loses the race and exits 0 is never a crash (NCH's
-  check of #537). Up to ten minutes for a process to appear at all (the
+  check of #537). The pid stays in the file after its holder ends, and a
+  pid is reused, so a live process by that pid counts only while the lock
+  is held (AppRelaunchWatch.lockHolder: a try to take it at once fails,
+  `/usr/bin/lockf -t 0` on a Mac, util-linux's `flock -n` in the tests);
+  otherwise a stranger would skip the fallback's open ("launchd's copy came
+  up after all"), be watched, or be stopped. The app that goes is waited
+  for by `kill -0`; on Linux (the tests) /proc's `State: Z` says an
+  unreaped one has gone, and a Mac, with no /proc, asks `kill -0` alone
+  (launchd, the app's parent, reaps it at once). Up to ten minutes for a process to appear at all (the
   system's first checks of a new build), then two minutes for its first
   answer, on 7433 from that process (lsof's listener), or at its socket
   file while it has no password to listen with, then two minutes up: a
@@ -787,7 +795,12 @@ longer a place it runs, and the `ServerAsAgent` default isn't read.
   note while it watches (RelaunchWatchLock: `<pid> <started>`), stopping an
   earlier watcher still holding it as it starts; the server answers
   `/api/restart` with 409 ("An update is still being watched; try again in
-  N s"), and the menu's restart likewise, while a live watcher holds it.
+  N s"), and the menu's restart likewise, while a live watcher holds it: a
+  process by the lock's pid that started within 30 s of the time the lock
+  records (`ProcessSignals.startTime`, as the hand-back's
+  RelaunchWatchHolder asks; NCH's check of #537: a live pid alone may be
+  another process's since, and would refuse every restart for a whole
+  watch).
   Each watch keeps the bundle it replaced in `Previous/<token>/`, and puts
   it back only if that copy is there, whole, and the bundle in place is
   still the one it installed (its executable's checksum): otherwise the
@@ -1302,15 +1315,24 @@ container agents.
     tools/check_rules.py; the Linux client and blue Visor's APK built; the
     client's screens walked headless, `bazel test --config=headless
     //tests/feature_map_tests/...`; the command-line server built with
-    SwiftPM), and `container-apple` beside it on an `xcode-27` Mac (the
-    iPhone and Mac apps, the Mac's test bundles, libraries and servers). A
-    diff of documentation alone checks the rules and stops there; a newer
-    push cancels the run before. A fork's pull request runs them too, with
-    no secret and writing no cache.
-  - **Each commit on main** runs `populate` and `populate-apple`: the
-    merged tree built as the pull request's jobs build it and its screens
-    walked headless, into GitHub's cache and BuildBuddy's; nothing
-    published.
+    SwiftPM). A diff of documentation alone checks the rules and stops
+    there; a newer push cancels the run before. A fork's pull request runs
+    it too, with no secret and writing no cache. **No Mac at a pull
+    request** (Logan, 13 Nov 2026: Apple runners for release verification
+    alone, as they are the bottleneck): `container-apple` on an `xcode-27`
+    Mac (the iPhone and Mac apps, the Mac's test bundles, libraries and
+    servers) runs by hand on a branch that touches Apple code (`gh workflow
+    run ci.yml --ref <branch> -f run=container-apple`), and `verify` builds
+    and tests them all.
+  - **Each commit on main** runs `populate`: the merged tree built as the
+    pull request's Linux jobs build it and its screens walked headless,
+    into GitHub's cache and BuildBuddy's; nothing published.
+    `populate-apple`, the same for the Apple apps, runs **nightly** (06:00Z,
+    on main) and by hand (`-f run=populate`), not at each push: GitHub gives
+    a public repository's account 5 macOS runners in all, and a populate on
+    every merge held one while a prerelease waited (25 Nov 2026). A
+    `container-apple` by hand, and verify's Apple jobs, read the last
+    night's cache.
   - **By hand on main** (`gh workflow run ci.yml --ref main -f run=…`, or
     the gh tools' run_dispatch): `verify` runs the tests on Linux
     (`//tests:linux`, and the headless screens), those that need a Mac
