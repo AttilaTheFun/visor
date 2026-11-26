@@ -745,7 +745,32 @@ longer a place it runs, and the `ServerAsAgent` default isn't read.
   still), the previous bundle is put back, `relaunch-rollback.txt` says
   why, and it's started again the same way.
   Every session that was running is carried on (launchd starts the app
-  with no `--resume-sessions` list).
+  with no `--resume-sessions` list). A plain restart (Restart Server, and
+  the hand-off's restart through the agent once an old watch has ended:
+  LocalServer.handOffOnceWatched) has nothing to put back: one that
+  doesn't come up is stopped, started once more and watched again, and
+  the watch ends with "stayed up" or "did not come up again". Quit Visor
+  during a plain restart's watch is left alone: the app writes its pid to
+  a Quit marker as AppKit ends it (`<bundle id>.quit` beside the lock,
+  AppAgentJob.quitMarker; a crash never writes it), and a watch whose
+  process went with the marker naming it says "was quit" and starts
+  nothing, as launchd's KeepAlive leaves an exit of 0 (NCH's lease test of
+  0.72.2: a Quit within two minutes of the hand-off's restart was taken
+  for a start that failed, and Visor came back). The marker, not
+  `launchctl print`'s "last exit code": that's the job's, not the
+  process's (the fallback's opened copy is no job's, and `app-agent
+  start` registers the job afresh), and launchctl's manual says its output
+  is no API. An update's new build that goes within its watch is undone,
+  quit or not: it's unproven. The watcher's lines ("starting", "stayed
+  up", "rolled back", "was quit", launchctl's word) go to
+  `visor-relaunch.log` in Visor's logs (AppLifecycle), not to
+  `Visor-server.log`: look there for how an update or a restart ended.
+  From 0.71.1 (historical): an update that 0.71.1's server agent
+  installed is watched by that agent's own watch (ServerAgentWatch, its
+  script 0.71.1's), which asks only 7433. On a Mac with no password yet the
+  server listens on no port, serving at its socket file alone, so that
+  watch never hears it and rolls back ("it never answered on port 7433").
+  This build's watcher asks the socket file then.
 - **The hand-back** (ServerHandBack, LaunchdHandBackSteps, at the app's
   launch before it makes a server; tested with fakes on Linux): on the
   first launch of 0.72.1 after an update that the server agent installed

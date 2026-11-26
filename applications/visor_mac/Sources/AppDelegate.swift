@@ -69,6 +69,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         return .terminateLater
     }
 
+    /// Ending, as AppKit ends it (Quit Visor, `/api/quit`: an exit of 0,
+    /// which the agent's KeepAlive leaves stopped; a crash never comes
+    /// here): the Quit's marker, this process's pid, for an update's watch
+    /// that follows it (AppAgentJob.quitMarker), which then leaves it
+    /// stopped. Only the instance that holds the lock is followed.
+    func applicationWillTerminate(_ notification: Notification) {
+        guard MacAppInstance.holdsLock, !VisorFixture.active else { return }
+        let marker = AppAgentJob.quitMarker(bundleID: MacPlaces.own)
+        try? "\(ProcessInfo.processInfo.processIdentifier)\n".write(toFile: marker, atomically: true, encoding: .utf8)
+    }
+
     /// Opened again (from the Finder, the Dock, Spotlight) with no window
     /// showing: Visor's window.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
