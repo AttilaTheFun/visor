@@ -40,7 +40,8 @@ public struct ContainerSession: Equatable, Sendable {
     /// its clone URL, its branch, and its folder's name.
     public var sources: [Source]
     /// The agent's token (Job.token, a JWT): its bearer to the driver and
-    /// dispatcher, in AGENT_TOKEN alone (never in AGENT_JOB or argv).
+    /// dispatcher, on the wrapper's standard input alone (AGENT_TOKEN_FD=0;
+    /// never in an environment, AGENT_JOB or argv).
     public var token: String?
     /// AGENT_RUNNER: who runs it.
     public var runner: String

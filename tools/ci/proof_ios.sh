@@ -32,6 +32,10 @@
 #                       built with, where the image has it; else its default)
 #   PROOF_IOS_VERSION   the simulator's iOS (default: 27.2)
 #   PROOF_BAZEL         the Bazel to build and run the test (default: bazel)
+#   VISOR_PROOF_SETTLE_SECONDS
+#                       how long the test gives a screen to hold still
+#                       before its picture (its default, 5, if unset: a
+#                       slower simulator's sheets and turns take longer)
 #
 # Fails when the test fails (a screen that never showed) or a screen has no
 # picture.
@@ -132,11 +136,22 @@ if [ ! -f "$apps/visor_ios.ipa" ]; then
     "$ROOT/tools/ci/await_artifact.sh" "$PROOF_APPS_ARTIFACT" "$apps" "${PROOF_APPS_JOB:-build-apple}"
 fi
 [ -f "$apps/visor_ios.ipa" ] || { echo "$me: no visor_ios.ipa in $apps" >&2; exit 1; }
-ditto -x -k "$apps/visor_ios.ipa" "$work/ipa"
+# Unpacked with ditto on a Mac; with unzip in Nimbus' `ios` lease (Apple's
+# simulator under Darling, agent-sim's simctl), which has no ditto.
+if command -v ditto > /dev/null; then
+    ditto -x -k "$apps/visor_ios.ipa" "$work/ipa"
+else
+    unzip -q "$apps/visor_ios.ipa" -d "$work/ipa"
+fi
 app="$(find "$work/ipa/Payload" -maxdepth 1 -name '*.app' | head -1)"
 [ -n "$app" ] || { echo "$me: no app in visor_ios.ipa's Payload" >&2; exit 1; }
 xcrun simctl install "$udid" "$app"
-xcode="$(xcodebuild -version | tr '\n' ' ' | sed 's/ *$//')"
+# What pictured it: Xcode's version on a Mac; agent-sim's on Linux.
+if command -v xcodebuild > /dev/null; then
+    xcode="$(xcodebuild -version | tr '\n' ' ' | sed 's/ *$//')"
+else
+    xcode="$(agent-sim --version 2> /dev/null || echo agent-sim), Linux"
+fi
 printf '%s, iOS %s, %s\n' "$DEVICE" "$version" "$xcode" | tee "$out/device.txt"
 echo "::endgroup::"
 
@@ -155,7 +170,8 @@ start="$(date +%s)"
 # (The launcher's simctl the same Xcode's.)
 (cd "$ROOT" && "$BAZEL" test --test_output=streamed --test_env=ISOMER_SIMULATOR="$udid" ${DEVELOPER_DIR:+--test_env=DEVELOPER_DIR} \
     --test_env=ISOMER_PROOF="$proof" --test_env=VISOR_PROOF_SCREENS="$SCREENS" \
-    --test_env=VISOR_PROOF_ORIENTATION="$orientation" "$TEST") || status=1
+    --test_env=VISOR_PROOF_ORIENTATION="$orientation" \
+    ${VISOR_PROOF_SETTLE_SECONDS:+--test_env=VISOR_PROOF_SETTLE_SECONDS} "$TEST") || status=1
 echo "The screens took $(($(date +%s) - start)) s"
 logs="$(cd "$ROOT" && "$BAZEL" info bazel-testlogs 2> /dev/null)/tests/feature_map_tests/feature_map_proof_ios"
 cp -R "$logs/." "$out/logs/" 2> /dev/null || true
@@ -182,11 +198,17 @@ for screen in $SCREENS; do
     cp "$picture" "$shot"
     if [ "$orientation" = landscape ]; then
         python3 -I - "$shot" << 'PY'
-import struct, subprocess, sys
+import shutil, struct, subprocess, sys
 with open(sys.argv[1], "rb") as f:
     width, height = struct.unpack(">II", f.read(24)[16:24])
 if width < height:
-    subprocess.run(["sips", "-r", "270", sys.argv[1]], check=True, stdout=subprocess.DEVNULL)
+    if shutil.which("sips"):
+        subprocess.run(["sips", "-r", "270", sys.argv[1]], check=True, stdout=subprocess.DEVNULL)
+    else:
+        # Linux (an `ios` lease): Pillow's quarter turn anticlockwise, as
+        # sips' 270 clockwise.
+        from PIL import Image
+        Image.open(sys.argv[1]).rotate(90, expand=True).save(sys.argv[1])
 PY
     fi
 done

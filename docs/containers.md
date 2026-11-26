@@ -204,8 +204,8 @@ and again on the copy:
   missing visor-server, relay-client, visor-agent-host or agent-wrapper.
 
 **agent-wrapper** is agent_protocol's (the version Package.resolved pins,
-0.5.0), a static program of its own (about 70 MB stripped) beside
-visor-server, not a name of it: agent_protocol 0.5.0 makes it only an
+0.6.0), a static program of its own (about 70 MB stripped) beside
+visor-server, not a name of it: agent_protocol 0.6.0 makes it only an
 executable (its `AgentWrapper` module is no library product, and its main is
 top-level code), so visor-server can't run it by a name as it runs
 relay-client. tools/linux_programs.sh builds it as a product of Visor's
@@ -229,20 +229,57 @@ none is the defaults, off:
 | Key | Default | |
 | --- | --- | --- |
 | `enabled` | `false` | Whether sessions may be placed in the container. It takes effect only where this Mac can run it. |
-| `cpus` | 8, leaving two of this Mac's | At most this Mac's cores. |
-| `memoryGiB` | Half of what's free when it starts, at least 4, at most 24 | At most all of this Mac's less 4 GiB. The cap minds that Nimbus will run VMs and containers on the Mini (32 GB) too; set it lower there if need be. Memory the guest frees isn't given back while it runs: the idle stop gives it back. |
-| `idleMinutes` | 30 | Minutes with no session in it before it's stopped. |
+| `cpus` | 8, leaving two of this Mac's | At least 1, at most this Mac's cores. |
+| `memoryGiB` | Half of what's free when it starts, at least 4, at most 24 | At least 4, at most all of this Mac's less 4 GiB. The default's cap of 24 leaves this Mac's own apps room; a setting may go past it. The Mini (32 GB) runs agents and Visor alone, with no Nimbus VMs (Logan, 26 Nov 2026), so 24 GiB of its 32 is fine there. Memory the guest frees isn't given back while it runs: the idle stop gives it back. |
+| `idleMinutes` | 30 | Minutes with no session in it before it's stopped: 1 to 1440. |
 | `imageDigest` | none | An agent image digest in place of the release's. |
 | `checkouts` | the Sources volume | A folder of this Mac's (an absolute path) shared read-write at the same path, for the checkouts; none set, the Sources volume, when it's mounted. |
 
-A value that isn't one (a tag for `imageDigest`, a CPU count of 0) reads as
-its default.
+A value in the file that isn't one (a tag for `imageDigest`, a CPU count
+of 0) reads as its default. One out of range that is a number is taken
+within this Mac's when the container starts (a `cpus` of 64 on a Mac of
+10 cores starts it with 10).
+
+### Changing them
+
+`PUT /api/settings` (an admin's, docs/protocol.md) changes them without
+editing the file or restarting Visor: `containerEnabled`,
+`containerCPUs`, `containerMemoryGiB` and `containerIdleMinutes`, each
+kept in the settings file at once. A number is checked against this
+Mac's (`activeProcessorCount` and `physicalMemory`, as the engine reads
+them) and the limits in the table, and one outside them is refused (400,
+an `error` whose `message` says why, and nothing in the change taken),
+never clamped.
+`null`, or `"default"`, goes back to the default (the key left out of the
+file). `GET /api/settings` says them (`settings.containerCPUs` and
+`containerMemoryGiB`, `null` for the defaults, and
+`containerIdleMinutes`), with `containerLimits`: the least, the most and
+the default of each on this Mac, and `note`, when a change is taken.
+
+**When a change is taken:**
+
+- **CPUs and memory at the container's next start.** A running VM isn't
+  resized, and the server never restarts the container for them, idle or
+  not, so it cuts no session in it off: they're taken after the idle stop
+  (`idleMinutes` with nothing in it), a Stop and Start or a Restart
+  someone asks for (`POST /api/container/restart`; each ends what runs in
+  it), or Visor's own restart. Until then `GET /api/container` says what
+  the running container has; stopped, what it would start with now.
+- **The idle minutes at once:** the idle stop reads them each time it looks
+  (every 30 seconds).
+- **The switch at once:** turned off, the container is stopped.
 
 **Settings › Sessions Container** has the switch (`PUT /api/settings
-{containerEnabled}`), off and disabled unless this Mac can run it, and the
-readiness row: macOS 26 or later, Apple silicon, Virtualization, the
-Visor volume, and the assets on it (present, or what's missing: the
-engine fetches them when it first starts), with the image it would run.
+{containerEnabled}`), off and disabled unless this Mac can run it; the
+**CPUs** and **Memory** pickers (`containerCPUs`, `containerMemoryGiB`:
+Default, which says what it is, or a number within `containerLimits`),
+with the note that they apply at the container's next start (and what it
+runs with until then, when that differs); and the readiness row: macOS
+26 or later, Apple silicon, Virtualization, the Visor volume, and the
+assets on it (present, or what's missing: the engine fetches them when it
+first starts), with the image it would run. A computer's page in the
+iPhone's and the web's Settings shows only its container's Claude
+credential, not these.
 
 ## The engine
 
@@ -322,8 +359,8 @@ agent-proxy:
 - On the Mac, a `UnixBridge` (HostRelay's other half: the same accept
   loop, splice and connection cap) listens on `run/driver.sock` beside the
   relay's socket, and joins each connection to the driver's port with
-  **no PROXY header**: the agents' JWTs (`AGENT_TOKEN`, shown as
-  `authorization: Bearer` on every call) say who they are, as on the Mac.
+  **no PROXY header**: the agents' JWTs (each wrapper's, handed over on
+  its standard input, shown as `authorization: Bearer` on every call) say who they are, as on the Mac.
 - It's carried into the guest at `/run/visor/driver.sock`, and started and
   stopped with the relay.
 - In the guest, relay-client's `--forward 7434=/run/visor/driver.sock`
@@ -354,7 +391,7 @@ to `sessions/logs/<session>.log`, with the environment a runner gives it
 | `AGENT_DRIVER_URL` | `http://127.0.0.1:7434` |
 | `AGENT_DISPATCHER_URL` | Whom it reports Started, Completed and Failed to, when it has one |
 | `AGENT_RUNNER` | `visor-sessions` unless the session says |
-| `AGENT_TOKEN` | The agent's JWT, there alone (the wrapper unsets it once read and keeps it from the harness) |
+| `AGENT_TOKEN_FD` | `0`: the agent's JWT is the wrapper's standard input (the exec writes it, then closes it), never a variable (agent_protocol#17, below) |
 | `AGENT_SESSIONS_DIR` | `/Volumes/Sessions` (a job with no folder works in `<it>/Claude/<agent>`) |
 | `AGENT_SOURCES_DIR` | Where a resumed session's sources are cloned, when given |
 | `AGENT_WRAPPER_CLAUDE` | Only for a stand-in (a test's): the harness is the image's `claude`, on its PATH (`/usr/local/bin/claude`, npm's Claude Code) |
@@ -456,7 +493,11 @@ environment), so none goes in.
   App's on GitHub, as its pushes are. agent-proxy finds it (`GET /app` for
   the slug, `GET /users/<slug>%5Bbot%5D` for the id) once for the App's
   secrets, at its start, and the server asks it as each agent starts
-  (waiting ten seconds at most). Without the App (the auth token alone), or
+  (waiting ten seconds at most). The agents carried on at the server's
+  start wait for agent-proxy too, folded in just after it (0.73: before,
+  they had none): the server is told before it starts that agent-proxy is
+  to come, and the ten seconds cover its fold-in and its answer. Without
+  the App (the auth token alone), or
   when GitHub didn't answer, none is set, as before, and agent-proxy's log
   says why, once: `agent-proxy: github: no git identity for container
   agents: <why>`; such an agent sets its own (`git config user.name` and
@@ -657,17 +698,41 @@ a Claude Code session with no folder to pick (the server's
 server's refusal (the container off, without egress, its agent unable to
 start) is shown in the sheet, which stays open.
 
-**Its token in the agent's environment** (agent_protocol#17): the wrapper
-reads `AGENT_TOKEN` and unsets it, and keeps it from its harness's
-environment, but `/proc/<wrapper>/environ` still shows the environment the
-process began with, and the harness runs as the same user (root, in the
-container), so it can read the token there. The token is the session's
-alone, for an hour, and only for the driver (never the REST side), so it
-lets the agent act as its own session and nothing more; still, it's a
-credential its harness shouldn't hold. The fix is agent_protocol#17's: the
-token handed over on a descriptor (`AGENT_TOKEN_FD`) or in a 0600 file the
-wrapper deletes once read, with `hidepid=2` or a uid of the harness's own
-as a defence beside it. Visor adopts it once #17 lands in a release.
+**Its token, never in the agent's environment** (agent_protocol#17): every
+process in the container runs as root, so any of them can read the
+environment another began with (`/proc/<pid>/environ`), whatever it later
+unsets: a session's harness (Claude, which a prompt can steer) could take
+another session's wrapper's token from there and drive Visor as that
+session. So the token goes in no environment:
+
+- `wrapperExec` sets `AGENT_TOKEN_FD=0` and gives the exec the token as its
+  input (`ContainerExec.input`), which `ContainerizationMachine` hands
+  Containerization as the process's standard input (`InputBytes`: the
+  bytes, then the end; Containerization closes the guest's end once its
+  stream ends). The wrapper reads it to the end, and its standard input is
+  /dev/null after. Containerization's exec takes no descriptors but the
+  three standard ones, and a file (`AGENT_TOKEN_FILE`) would be readable by
+  every root process there until the wrapper deletes it (0600 stops no
+  root), so it's the standard input.
+- The wrapper makes itself undumpable (`PR_SET_DUMPABLE` 0) before it
+  reads it, so the others are refused its `/proc/<pid>/environ`, `fd` and
+  `mem` (EACCES). That holds against root only without `CAP_SYS_PTRACE`:
+  an exec has Containerization's default capabilities (the OCI set, which
+  leaves it out; `CAP_NET_ADMIN` is relay-client's alone), and must keep
+  them so.
+- Its refresh is unchanged: the driver sends a fresh one down the stream
+  (`DriverMessage.token`), which never touches the container's files.
+- `hidepid=2` on the container's `/proc` (Containerization's
+  `defaultMounts()` mounts it with no options; a mount of Visor's could
+  replace it) would hide only what `ptrace` checks refuse, which is the
+  undumpable wrapper already: with every agent root, it adds nothing until
+  the harnesses run as a user of their own.
+
+The token is the session's alone, for an hour, and only for the driver
+(never the REST side). This needs agent-wrapper 0.6 (agent_protocol's
+release with #17, pinned in Package.swift and
+third_party/swift_packages): 0.5's ignores `AGENT_TOKEN_FD`, so its agents
+would start with no token, and the driver would refuse them.
 
 ## Still open
 
@@ -676,10 +741,6 @@ as a defence beside it. Visor adopts it once #17 lands in a release.
   `Foo.h` and `foo.h` are two files. Visor Disk Utility makes new ones
   case-sensitive and adopts an existing one as it is, with a note saying
   how to remake it; the Mini's are remade by hand.
-
-## What's next
-
-- **agent_protocol#17:** the token handed over on a descriptor, above.
 
 ## Testing
 

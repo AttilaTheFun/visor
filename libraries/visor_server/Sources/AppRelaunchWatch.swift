@@ -13,15 +13,19 @@
 // previous bundle is put back, the rollback note says why
 // (VisorServer+Rollback), and it's started again. A plain restart that
 // doesn't come up is started once more and watched again, the watch ending
-// either way with its word ("stayed up", or "did not come up again"). A
-// plain restart's app that was quit (its Quit marker names it:
-// AppRelaunchCommands.quit) is left stopped, as launchd leaves an exit of
-// 0 (NCH's lease test of 0.72.2: a Quit within two minutes of the
-// hand-off's restart was taken for a failed start and started again). Once
-// the new build has stayed up, the one it replaced is removed. A start
-// that finds the new build can't run at all (Visor.app's `app-agent start`
-// ending other than 0 or 1: AppRelaunchCommands) says why, and it's undone
-// at once.
+// either way with its word ("stayed up", or "did not come up again"). An
+// app that was quit (its Quit marker names it: AppRelaunchCommands.quit)
+// is left stopped, as launchd leaves an exit of 0 (NCH's lease test of
+// 0.72.2: a Quit within two minutes of the hand-off's restart was taken for
+// a failed start and started again); an update's new build that was quit
+// stays installed, not rolled back, as a Quit is no failure (NCH's lease
+// test of 0.73.1: a Quit within two minutes of an update was rolled back
+// and the app started again). An exit with no marker naming it, even of 0
+// (a build that quits on its own at launch), is a failure as ever. Once
+// the new build has stayed up, or was quit, the one it replaced is
+// removed. A start that finds the new build can't run at all (Visor.app's
+// `app-agent start` ending other than 0 or 1: AppRelaunchCommands) says
+// why, and it's undone at once.
 //
 // What it says goes to the relauncher's own log (`visor-relaunch.log` in
 // Visor's logs, AppLifecycle), not the server's: the app it watches has
@@ -67,8 +71,8 @@ public struct AppRelaunchWatch: Sendable {
     public var pid: String
     /// Shell: succeeds when the process it followed (`$first`), gone, was
     /// quit (AppRelaunchCommands.quit); "false": any end is a failure.
-    /// Asked of a plain restart alone: an update's new build that goes
-    /// within its watch is undone, quit or not.
+    /// A plain restart's app that was quit is left stopped; an update's
+    /// new build too, installed and not rolled back.
     public var quit: String
     /// Shell: succeeds when process `$p` answers.
     public var answers: String
@@ -218,7 +222,8 @@ public struct AppRelaunchWatch: Sendable {
         \(retry)  break
         done
         if [ -n "$quit" ]; then
-          echo "$(date): \(newVersion) was quit (process $first ended at a Quit): left stopped, as launchd leaves it"
+          echo "$(date): \(newVersion) was quit (process $first ended at a Quit): left stopped, as launchd leaves it\(kept)"
+        \(removeReplaced)
         elif [ -n "$why" ]; then
         \(undo)
         else
@@ -228,11 +233,18 @@ public struct AppRelaunchWatch: Sendable {
         """
     }
 
-    /// Shell, in the watch's loop: a plain restart's app that was quit
-    /// ends the watch, its process left stopped. An update's isn't asked.
+    /// Shell, in the watch's loop: an app that was quit ends the watch,
+    /// its process left stopped: a plain restart's, and an update's new
+    /// build, which stays installed. Through 0.73.1 an update's wasn't
+    /// asked, and a Quit within its watch was rolled back.
     private var quitCheck: String {
-        guard backup == nil else { return "" }
-        return "if \(quit); then quit=1; break; fi; "
+        "if \(quit); then quit=1; break; fi; "
+    }
+
+    /// The Quit's line, for an update: the new build kept.
+    private var kept: String {
+        guard backup != nil else { return "" }
+        return "; installed, not rolled back: a Quit is no failure"
     }
 
     /// Shell, in the watch's loop: a plain restart that didn't come up the
