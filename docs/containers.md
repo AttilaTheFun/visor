@@ -204,8 +204,8 @@ and again on the copy:
   missing visor-server, relay-client, visor-agent-host or agent-wrapper.
 
 **agent-wrapper** is agent_protocol's (the version Package.resolved pins,
-0.5.0), a static program of its own (about 70 MB stripped) beside
-visor-server, not a name of it: agent_protocol 0.5.0 makes it only an
+0.6.0), a static program of its own (about 70 MB stripped) beside
+visor-server, not a name of it: agent_protocol 0.6.0 makes it only an
 executable (its `AgentWrapper` module is no library product, and its main is
 top-level code), so visor-server can't run it by a name as it runs
 relay-client. tools/linux_programs.sh builds it as a product of Visor's
@@ -456,7 +456,11 @@ environment), so none goes in.
   App's on GitHub, as its pushes are. agent-proxy finds it (`GET /app` for
   the slug, `GET /users/<slug>%5Bbot%5D` for the id) once for the App's
   secrets, at its start, and the server asks it as each agent starts
-  (waiting ten seconds at most). Without the App (the auth token alone), or
+  (waiting ten seconds at most). The agents carried on at the server's
+  start wait for agent-proxy too, folded in just after it (0.73: before,
+  they had none): the server is told before it starts that agent-proxy is
+  to come, and the ten seconds cover its fold-in and its answer. Without
+  the App (the auth token alone), or
   when GitHub didn't answer, none is set, as before, and agent-proxy's log
   says why, once: `agent-proxy: github: no git identity for container
   agents: <why>`; such an agent sets its own (`git config user.name` and
