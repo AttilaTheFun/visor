@@ -33,9 +33,20 @@ if ! { command -v pkg-config > /dev/null && pkg-config --exists sdl2 SDL2_ttf gl
     packages+=(pkg-config libsdl2-dev libsdl2-ttf-dev libgl-dev libegl-dev libglvnd-dev libgtk-3-dev
                libwebkit2gtk-4.1-dev libcurl4-openssl-dev libsqlite3-dev libnss3)
 fi
+# Asked again, after a fresh index, when a mirror answers 404 for a package
+# the index named a moment before: Ubuntu's security pocket replaces a
+# package while a job installs it (libtiff, 26 Nov 2026: the release run's
+# linux job ended at exit 100). Three tries: 20 s, then 40 s between them.
 if [ ${#packages[@]} -gt 1 ]; then
-    root_do apt-get update -qq > /dev/null
-    root_do env DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends "${packages[@]}" > /dev/null
+    for try in 1 2 3; do
+        root_do apt-get update -qq > /dev/null
+        if root_do env DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends "${packages[@]}" > /dev/null; then
+            break
+        fi
+        [ "$try" = 3 ] && { echo "job_tools: the packages couldn't be installed after three tries" >&2; exit 1; }
+        echo "job_tools: apt-get install failed (try $try): the index again in $((try * 20)) s" >&2
+        sleep $((try * 20))
+    done
 fi
 if ! command -v bazel > /dev/null; then
     work="$(mktemp -d)"
