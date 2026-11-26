@@ -39,11 +39,16 @@ private final class StubbornAgent: AgentProcess {
     func end(within deadline: Duration) async {}
 }
 
+/// The log's lines, as the platform's log (on any thread) writes them.
+private final class Heard: Sendable {
+    let lines = Mutex<[String]>([])
+}
+
 extension ServerTests {
 @Suite @MainActor final class UndeliveredSendTests {
     private var server: VisorServer!
     /// What the server logged while the test ran.
-    private let logged = Mutex<[String]>([])
+    private let logged = Heard()
 
     init() async throws {
         TestPlatform.install()
@@ -58,7 +63,7 @@ extension ServerTests {
     /// start puts the platform (and its log) back as it was.
     private func listen() {
         let logged = self.logged
-        ServerPlatform.current.log = { line in logged.withLock { $0.append(line) } }
+        ServerPlatform.current.log = { line in logged.lines.withLock { $0.append(line) } }
     }
 
     isolated deinit {
@@ -69,7 +74,7 @@ extension ServerTests {
         SessionRecord(info: SessionInfo(id: id, agent: .claude, cwd: "/tmp", title: title, created: 0), process: agent, entries: [])
     }
 
-    private func said(_ words: String) -> Bool { logged.withLock { $0.contains { $0.contains(words) } } }
+    private func said(_ words: String) -> Bool { logged.lines.withLock { $0.contains { $0.contains(words) } } }
 
     @Test func aMessageForNoSessionIsLogged() {
         listen()
