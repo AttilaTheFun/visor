@@ -69,8 +69,8 @@ public struct AppRelauncher: ServerLifecycle {
         /// path finds).
         public var instanceLock: String?
         /// The marker the app writes as it's quit, its pid
-        /// (AppAgentJob.quitMarker): a plain restart's watch leaves a Quit
-        /// alone rather than start the app again.
+        /// (AppAgentJob.quitMarker): the watch leaves a Quit alone rather
+        /// than start the app again, or, an update's, roll it back.
         public var quitMarker: String?
 
         public init(label: String, command: [String], presentMarker: String? = nil, instanceLock: String? = nil, quitMarker: String? = nil) {
