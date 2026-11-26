@@ -32,6 +32,10 @@
 #                       built with, where the image has it; else its default)
 #   PROOF_IOS_VERSION   the simulator's iOS (default: 27.2)
 #   PROOF_BAZEL         the Bazel to build and run the test (default: bazel)
+#   VISOR_PROOF_SETTLE_SECONDS
+#                       how long the test gives a screen to hold still
+#                       before its picture (its default, 5, if unset: a
+#                       slower simulator's sheets and turns take longer)
 #
 # Fails when the test fails (a screen that never showed) or a screen has no
 # picture.
@@ -166,7 +170,8 @@ start="$(date +%s)"
 # (The launcher's simctl the same Xcode's.)
 (cd "$ROOT" && "$BAZEL" test --test_output=streamed --test_env=ISOMER_SIMULATOR="$udid" ${DEVELOPER_DIR:+--test_env=DEVELOPER_DIR} \
     --test_env=ISOMER_PROOF="$proof" --test_env=VISOR_PROOF_SCREENS="$SCREENS" \
-    --test_env=VISOR_PROOF_ORIENTATION="$orientation" "$TEST") || status=1
+    --test_env=VISOR_PROOF_ORIENTATION="$orientation" \
+    ${VISOR_PROOF_SETTLE_SECONDS:+--test_env=VISOR_PROOF_SETTLE_SECONDS} "$TEST") || status=1
 echo "The screens took $(($(date +%s) - start)) s"
 logs="$(cd "$ROOT" && "$BAZEL" info bazel-testlogs 2> /dev/null)/tests/feature_map_tests/feature_map_proof_ios"
 cp -R "$logs/." "$out/logs/" 2> /dev/null || true
