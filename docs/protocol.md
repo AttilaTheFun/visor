@@ -67,11 +67,17 @@ minute locks that address out for five minutes, when everything it asks
 with a bearer is answered `429` with `Retry-After` (seconds) and the
 socket's `login` an `error` saying when to try again, whatever it shows.
 Only that address: a stranger on the network can't lock out the owner.
-This computer (loopback, so a front on it too) and the socket file are
-never counted; a right password, token or admin token forgets an
-address's wrong ones. A server keeps at most 1,024 addresses, forgetting
-the one heard from longest ago. The Windows server is given no client's
-address by its system yet, and counts none.
+This computer (loopback, so a front on it too, but for a client it names:
+below) and the socket file are never counted; a right password, token or
+admin token forgets an address's wrong ones. A server keeps at most 1,024
+addresses, forgetting the one heard from longest ago. The Windows server
+is given no client's address by its system yet, and counts none. Behind `tailscale serve`,
+which reaches the server on loopback, a request (or the socket's upgrade)
+from loopback that carries `X-Forwarded-For` is counted by that header's
+right-most address, the one `tailscale serve` set, and one from a
+tailnet's address (100.64.0.0/10, fd7a:115c:a1e0::/48) is let in only
+while the VPN path is on (else `403`, or the upgrade closed). From any
+other address the header is never read.
 
 No agent's token is ever taken here, on any route (401, saying so),
 even where the server asks nothing: not a native session's (below,

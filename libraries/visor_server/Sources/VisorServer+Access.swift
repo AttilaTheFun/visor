@@ -35,8 +35,8 @@ extension VisorServer {
         if isAgentToken(request.authorization) { return false }
         if settings.asksNothing { return front?.admits(request.headers) ?? true }
         guard let bearer = request.authorization, !bearer.isEmpty else { return false }
-        guard passwordThrottle.retryAfter(request.peer) == nil, admits(bearer) else { return false }
-        passwordThrottle.succeeded(request.peer)
+        guard passwordThrottle.retryAfter(request.clientAddress) == nil, admits(bearer) else { return false }
+        passwordThrottle.succeeded(request.clientAddress)
         return true
     }
 
@@ -108,12 +108,12 @@ extension VisorServer {
         if !request.trusted, isAgentToken(request.authorization) {
             return HTTPResponse(401, Envelope.error(Self.agentTokenRefusedOverREST).encoded())
         }
-        if let wait = passwordThrottle.retryAfter(request.peer) {
+        if let wait = passwordThrottle.retryAfter(request.clientAddress) {
             var response = HTTPResponse(429, Envelope.error(Self.lockedOut(retryAfter: wait)).encoded())
             response.headers["Retry-After"] = "\(wait)"
             return response
         }
-        if !settings.asksNothing, let bearer = request.authorization, !bearer.isEmpty { wrongPassword(from: request.peer) }
+        if !settings.asksNothing, let bearer = request.authorization, !bearer.isEmpty { wrongPassword(from: request.clientAddress) }
         return HTTPResponse(401, "{\"error\":\"wrong password\",\"id\":\"\(id)\"}")
     }
 

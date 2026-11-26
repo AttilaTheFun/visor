@@ -91,6 +91,24 @@ extension VisorServer {
         return kind == .vpn ? settings.vpn : settings.lan
     }
 
+    /// Whether a request or an upgrade (its headers, names in lower case)
+    /// that came on loopback is let in: one `tailscale serve` relays from a
+    /// tailnet's address (ForwardedFor) only while the VPN path is on, as if
+    /// it had come straight here; anything else as its connection was
+    /// (`admits(localAddress:)`, which knows no headers). The first refused
+    /// while the path is off is logged.
+    func admits(peer: String?, headers: [String: String]) -> Bool {
+        guard !settings.vpn, let client = ForwardedFor.relayed(peer: peer, headers: headers), ForwardedFor.isTailnet(client) else { return true }
+        if refusedPaths.insert("tailscale serve").inserted {
+            Self.log("\(client) was refused through tailscale serve on loopback: the VPN path is off")
+        }
+        return false
+    }
+
+    /// What a request relayed from a tailnet is told while the VPN path is
+    /// off.
+    static let vpnPathOff = "This server's VPN path is off."
+
     /// Settings changed in a way that changes how the server listens: it
     /// listens again.
     public func listenAgain() {

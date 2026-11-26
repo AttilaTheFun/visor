@@ -118,5 +118,39 @@ extension ServerTests {
         _ = throttle.failed("10.3.0.2")
         #expect(throttle.trackedCount <= 2)
     }
+
+    /// Who a request is taken as coming from: on loopback with
+    /// X-Forwarded-For (tailscale serve's), the header's right-most entry;
+    /// anywhere else, or without it, the connection's own address.
+    @Test func testTheClientAFrontOnThisComputerNames() {
+        let named = ["x-forwarded-for": "100.101.102.103"]
+        #expect(ForwardedFor.client(peer: "127.0.0.1", headers: named) == "100.101.102.103")
+        #expect(ForwardedFor.client(peer: "::1", headers: named) == "100.101.102.103")
+        #expect(ForwardedFor.client(peer: "::ffff:127.0.0.1", headers: named) == "100.101.102.103")
+        #expect(ForwardedFor.client(peer: "127.0.0.1", headers: ["x-forwarded-for": "10.0.0.1, 100.101.102.103"]) == "100.101.102.103")
+        #expect(ForwardedFor.client(peer: "127.0.0.1", headers: ["x-forwarded-for": "fd7a:115c:a1e0::1234"]) == "fd7a:115c:a1e0::1234")
+        #expect(ForwardedFor.client(peer: "127.0.0.1", headers: [:]) == "127.0.0.1")
+        #expect(ForwardedFor.client(peer: "127.0.0.1", headers: ["x-forwarded-for": " "]) == "127.0.0.1")
+        #expect(ForwardedFor.client(peer: "192.168.1.66", headers: named) == "192.168.1.66", "the network's word is not read")
+        #expect(ForwardedFor.client(peer: nil, headers: named) == nil, "the socket file")
+        // Counted as any address is: a loopback the header names is still
+        // this computer's own, an IPv6 one by its /64.
+        #expect(PasswordThrottle.key(ForwardedFor.client(peer: "127.0.0.1", headers: ["x-forwarded-for": "127.0.0.1"])) == nil)
+        #expect(PasswordThrottle.key(ForwardedFor.client(peer: "127.0.0.1", headers: ["x-forwarded-for": "2001:db8:0:7::1"])) == "2001:db8:0:7::/64")
+    }
+
+    @Test func testTailnetAddresses() {
+        #expect(ForwardedFor.isTailnet("100.64.0.1"))
+        #expect(ForwardedFor.isTailnet("100.127.255.254"))
+        #expect(!ForwardedFor.isTailnet("100.128.0.1"))
+        #expect(!ForwardedFor.isTailnet("100.63.0.1"))
+        #expect(!ForwardedFor.isTailnet("192.168.1.20"))
+        #expect(ForwardedFor.isTailnet("fd7a:115c:a1e0:ab12:4843:cd96:6265:6667"))
+        #expect(ForwardedFor.isTailnet("[FD7A:115C:A1E0::1]"))
+        #expect(ForwardedFor.isTailnet("::ffff:100.101.102.103"))
+        #expect(!ForwardedFor.isTailnet("fd7a:115c:a1e1::1"))
+        #expect(!ForwardedFor.isTailnet("2001:db8::1"))
+        #expect(!ForwardedFor.isTailnet("not an address"))
+    }
 }
 }

@@ -9,8 +9,13 @@ public struct HTTPRequest {
     /// (VisorServer.trusts).
     public var trusted = false
     /// The address it came from, where the system says (never on the
-    /// socket file): what wrong passwords are counted by (PasswordThrottle).
+    /// socket file).
     public var peer: String?
+
+    /// Who wrong passwords are counted by (PasswordThrottle): the client a
+    /// front on this computer names (`tailscale serve`'s X-Forwarded-For,
+    /// ForwardedFor), else `peer`.
+    var clientAddress: String? { ForwardedFor.client(peer: peer, headers: headers) }
 
     /// The bearer token; "" for a bare `Bearer` (no password).
     public var authorization: String? {

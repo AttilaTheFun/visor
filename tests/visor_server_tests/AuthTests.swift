@@ -93,9 +93,10 @@ extension ServerTests {
         #expect((server.route(request("/api/hello")).status) == 401)
     }
 
-    private func request(_ path: String, bearer: String?, from peer: String?) -> HTTPRequest {
+    private func request(_ path: String, bearer: String?, from peer: String?, forwardedFor: String? = nil) -> HTTPRequest {
         var made = request(path, bearer: bearer)
         made.peer = peer
+        made.headers["x-forwarded-for"] = forwardedFor
         return made
     }
 
@@ -175,6 +176,150 @@ extension ServerTests {
         let hello = Envelope.decode(server.route(request("/api/hello", bearer: "pearl-grove")).body)
         #expect(login(token: hello?.token, from: "192.168.1.68"))
         #expect(!login(token: hello?.token, from: "192.168.1.66"), "not even a token, while it's out")
+    }
+
+    /// Behind `tailscale serve` (proxying to loopback, the client in
+    /// X-Forwarded-For) each client is counted by its own address, not
+    /// let off as this computer; loopback without the header still is, and
+    /// the header from anywhere but loopback is never read.
+    @Test func testTailscaleServesClientsAreCountedByTheirOwnAddress() {
+        server.password = "pearl-grove"
+        let tailnet = "100.101.102.103"
+        for _ in 0..<PasswordThrottle.allowed {
+            #expect(server.route(request("/api/hello", bearer: "amber-birch", from: "127.0.0.1", forwardedFor: tailnet)).status == 401)
+        }
+        let locked = server.route(request("/api/hello", bearer: "pearl-grove", from: "127.0.0.1", forwardedFor: tailnet))
+        #expect(locked.status == 429, "the client tailscale serve named is locked out")
+        #expect(locked.headers["Retry-After"] == "300")
+        #expect(server.passwordThrottle.retryAfter(tailnet) == 300)
+        // Another of its clients is counted on its own.
+        #expect(server.route(request("/api/sessions", bearer: "pearl-grove", from: "127.0.0.1", forwardedFor: "100.101.102.104")).status == 200)
+        for _ in 1..<PasswordThrottle.allowed {
+            #expect(server.route(request("/api/hello", bearer: "wrong", from: "127.0.0.1", forwardedFor: "100.101.102.105")).status == 401)
+        }
+        #expect(server.route(request("/api/hello", bearer: "pearl-grove", from: "127.0.0.1", forwardedFor: "100.101.102.105")).status == 200)
+        // The right-most entry is tailscale serve's: what the client said
+        // before it is not who it is.
+        #expect(server.route(request("/api/hello", bearer: "pearl-grove", from: "127.0.0.1", forwardedFor: "192.168.1.9, \(tailnet)")).status == 429)
+        #expect(server.route(request("/api/hello", bearer: "pearl-grove", from: "::1", forwardedFor: "\(tailnet), 192.168.1.9")).status == 200)
+        // This computer without the header is never counted.
+        for _ in 0..<(PasswordThrottle.allowed * 2) {
+            #expect(server.route(request("/api/sessions", bearer: "wrong", from: "127.0.0.1")).status == 401)
+        }
+        #expect(server.route(request("/api/sessions", bearer: "pearl-grove", from: "127.0.0.1")).status == 200)
+        // From the network the header is the client's word: its own address
+        // is what is counted, and the address it names never.
+        for _ in 0..<PasswordThrottle.allowed {
+            #expect(server.route(request("/api/hello", bearer: "wrong", from: "192.168.1.66", forwardedFor: "192.168.1.20")).status == 401)
+        }
+        #expect(server.passwordThrottle.retryAfter("192.168.1.66") == 300)
+        #expect(server.passwordThrottle.retryAfter("192.168.1.20") == nil)
+        #expect(server.route(request("/api/hello", bearer: "pearl-grove", from: "192.168.1.20")).status == 200)
+        // Nor can a locked-out address name another to get in.
+        #expect(server.route(request("/api/hello", bearer: "pearl-grove", from: "192.168.1.66", forwardedFor: "192.168.1.20")).status == 429)
+    }
+
+    /// An IPv6 client tailscale serve names is counted by its /64, as one
+    /// that came straight here is.
+    @Test func testTailscaleServesIPv6ClientIsCountedByItsSlash64() {
+        server.password = "pearl-grove"
+        for _ in 0..<PasswordThrottle.allowed {
+            #expect(server.route(request("/api/hello", bearer: "wrong", from: "::1", forwardedFor: "2001:db8:0:7::1")).status == 401)
+        }
+        #expect(server.passwordThrottle.retryAfter("2001:db8:0:7::ffff") == 300)
+        #expect(server.route(request("/api/hello", bearer: "pearl-grove", from: "127.0.0.1", forwardedFor: "2001:db8:0:7::2")).status == 429)
+        #expect(server.route(request("/api/hello", bearer: "pearl-grove", from: "127.0.0.1", forwardedFor: "2001:db8:0:8::1")).status == 200)
+    }
+
+    /// Over the wire, the same: the connection's own address is loopback,
+    /// and the request's X-Forwarded-For names the client.
+    @Test func testTailscaleServesClientIsCountedOverTheWire() {
+        server.password = "pearl-grove"
+        #expect(server.http != nil, "the REST side is served")
+        func call(_ bearer: String, forwardedFor: String) -> String {
+            let stream = PeerStream(from: "127.0.0.1")
+            server.accept(stream)
+            stream.arrive("GET /api/hello HTTP/1.1\r\nHost: visor\r\nAuthorization: Bearer \(bearer)\r\nX-Forwarded-For: \(forwardedFor)\r\n\r\n")
+            return String(decoding: stream.sent, as: UTF8.self)
+        }
+        for _ in 0..<PasswordThrottle.allowed { #expect(call("wrong", forwardedFor: "203.0.113.7").hasPrefix("HTTP/1.1 401 ")) }
+        #expect(call("pearl-grove", forwardedFor: "203.0.113.7").hasPrefix("HTTP/1.1 429 Too Many Requests\r\n"))
+        #expect(call("pearl-grove", forwardedFor: "203.0.113.8").hasPrefix("HTTP/1.1 200 "))
+    }
+
+    /// The socket's login behind `tailscale serve`: counted by the client
+    /// its upgrade's X-Forwarded-For names, over the wire too.
+    @Test func testTailscaleServesClientsLoginIsCountedByItsOwnAddress() {
+        server.password = "pearl-grove"
+        func login(password: String, from address: String, forwardedFor: String? = nil) -> Bool {
+            let client = ClientConnection(stream: PeerStream(from: address))
+            client.headers["x-forwarded-for"] = forwardedFor
+            var envelope = Envelope(type: "login")
+            envelope.password = password
+            server.handle(envelope, from: client)
+            return client.authenticated
+        }
+        for _ in 0..<PasswordThrottle.allowed { #expect(!login(password: "amber-birch", from: "127.0.0.1", forwardedFor: "100.101.102.103")) }
+        #expect(server.passwordThrottle.retryAfter("100.101.102.103") == 300)
+        #expect(!login(password: "pearl-grove", from: "127.0.0.1", forwardedFor: "100.101.102.103"), "locked out")
+        #expect(login(password: "pearl-grove", from: "127.0.0.1", forwardedFor: "100.101.102.104"), "another of its clients")
+        #expect(login(password: "pearl-grove", from: "127.0.0.1"), "this computer")
+        for _ in 0..<PasswordThrottle.allowed { #expect(!login(password: "wrong", from: "192.168.1.66", forwardedFor: "192.168.1.20")) }
+        #expect(server.passwordThrottle.retryAfter("192.168.1.20") == nil, "the network's word is not read")
+        #expect(login(password: "pearl-grove", from: "192.168.1.20"))
+
+        // An upgrade that arrives: its headers are what the login is
+        // counted by.
+        server.settings.vpn = true
+        let stream = PeerStream(from: "127.0.0.1")
+        server.accept(stream)
+        stream.arrive("GET / HTTP/1.1\r\nHost: visor\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\n"
+            + "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nX-Forwarded-For: 100.101.102.103\r\n\r\n")
+        #expect(String(decoding: stream.sent, as: UTF8.self).hasPrefix("HTTP/1.1 101 "))
+        let accepted = server.connections.values.first { $0.peer == "127.0.0.1" }
+        #expect(accepted?.clientAddress == "100.101.102.103")
+    }
+
+    /// With the VPN path off, a tailnet's client is let in through
+    /// `tailscale serve` no more than straight to the server: its request
+    /// is answered 403 and its upgrade closed. Anyone else on loopback, and
+    /// the header from the network, are let in as before.
+    @Test func testTailscaleServeKeepsToTheVPNPath() {
+        server.password = "pearl-grove"
+        server.settings.vpn = false
+        #expect(server.http != nil, "the REST side is served")
+        func call(from address: String = "127.0.0.1", forwardedFor: String?) -> String {
+            let stream = PeerStream(from: address)
+            server.accept(stream)
+            let header = forwardedFor.map { "X-Forwarded-For: \($0)\r\n" } ?? ""
+            stream.arrive("GET /api/hello HTTP/1.1\r\nHost: visor\r\nAuthorization: Bearer pearl-grove\r\n\(header)\r\n")
+            return String(decoding: stream.sent, as: UTF8.self)
+        }
+        func upgrade(forwardedFor: String) -> PeerStream {
+            let stream = PeerStream(from: "127.0.0.1")
+            server.accept(stream)
+            stream.arrive("GET / HTTP/1.1\r\nHost: visor\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\n"
+                + "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nX-Forwarded-For: \(forwardedFor)\r\n\r\n")
+            return stream
+        }
+        let refused = call(forwardedFor: "100.101.102.103")
+        #expect(refused.hasPrefix("HTTP/1.1 403 Forbidden\r\n"))
+        #expect(refused.contains(VisorServer.vpnPathOff))
+        #expect(call(forwardedFor: "fd7a:115c:a1e0::1234").hasPrefix("HTTP/1.1 403 "), "Tailscale's IPv6 range")
+        #expect(call(forwardedFor: nil).hasPrefix("HTTP/1.1 200 "), "this computer")
+        #expect(call(forwardedFor: "203.0.113.7").hasPrefix("HTTP/1.1 200 "), "not a tailnet's: a Funnel's, say")
+        #expect(call(from: "192.168.1.20", forwardedFor: "100.101.102.103").hasPrefix("HTTP/1.1 200 "), "the network's word is not read")
+        let closed = upgrade(forwardedFor: "100.101.102.103")
+        #expect(closed.closed)
+        #expect(closed.sent.isEmpty)
+        #expect(server.connections.isEmpty)
+
+        server.settings.vpn = true
+        #expect(call(forwardedFor: "100.101.102.103").hasPrefix("HTTP/1.1 200 "))
+        let opened = upgrade(forwardedFor: "100.101.102.103")
+        #expect(!opened.closed)
+        #expect(String(decoding: opened.sent, as: UTF8.self).hasPrefix("HTTP/1.1 101 "))
+        #expect(server.connections.count == 1)
     }
 
     /// hello says whether clients may keep the sessions' messages on their
@@ -426,13 +571,14 @@ private final class SetTime {
 private final class PeerStream: ByteStream {
     let remoteAddress: String?
     var sent = Data()
+    var closed = false
     private var reader: (@MainActor (Data?) -> Void)?
 
     init(from address: String) { remoteAddress = address }
 
     func receive(_ chunk: @escaping @MainActor (Data?) -> Void) { reader = chunk }
     func send(_ data: Data, sent: (@MainActor () -> Void)?) { self.sent.append(data); sent?() }
-    func close() {}
+    func close() { closed = true }
     func arrive(_ text: String) { reader?(Data(text.utf8)) }
 }
 

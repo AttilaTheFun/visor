@@ -4,8 +4,9 @@
 // never for the server as a whole, so a stranger on the network can't
 // shut its owner out: an IPv6 address by its /64, which one device holds
 // whole (it picks addresses within it as it likes). This computer
-// (loopback, where a front it sits behind comes from too) and the socket
-// file are never counted, nor a connection the system gives no address.
+// (loopback, where a front it sits behind comes from too, but for the
+// client `tailscale serve` names: ForwardedFor) and the socket file are
+// never counted, nor a connection the system gives no address.
 
 import Foundation
 import VisorSystem

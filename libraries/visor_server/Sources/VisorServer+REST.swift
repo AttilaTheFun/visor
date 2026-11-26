@@ -24,6 +24,11 @@ extension VisorServer {
     }
 
     func route(_ request: HTTPRequest, respond: @escaping (HTTPResponse) -> Void) {
+        // One tailscale serve relays from the tailnet, while the VPN path is
+        // off (VisorServer+Reaching).
+        if !request.trusted, !admits(peer: request.peer, headers: request.headers) {
+            return respond(HTTPResponse(403, Envelope.error(Self.vpnPathOff).encoded()))
+        }
         let path = Self.apiPath(request.path.split(separator: "?").first.map(String.init) ?? request.path)
         let parts = path.split(separator: "/").map(String.init)
         if request.method == "POST", parts.count == 2, parts[0] == "migration", authorized(request) {

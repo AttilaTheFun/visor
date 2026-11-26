@@ -521,8 +521,14 @@ no header names a user. The socket's `login` takes
 wrong ones are counted per peer address (`PasswordThrottle`, from the
 stream's `remoteAddress`: `HTTPRequest.peer`, `ClientConnection.peer`;
 none on Windows yet): five in a minute lock the address out for five
-minutes (429, `Retry-After`). One listener (`FrontDoor` tells an upgrade from a
-request by its first bytes), on loopback or every interface
+minutes (429, `Retry-After`). From loopback, `X-Forwarded-For`'s
+right-most entry is the address instead (`ForwardedFor`, `clientAddress`:
+`tailscale serve`'s clients would otherwise all be this computer), and a
+tailnet's there is let in only while `settings.vpn` is on
+(`admits(peer:headers:)`, on the request and the upgrade, whose headers
+`admits(localAddress:)` never sees); the header from anywhere else is
+ignored. One listener (`FrontDoor` tells an upgrade from a request by its
+first bytes), on loopback or every interface
 (`ServerSettings.lan || vpn`; `admits(localAddress:)` closes a connection
 on a path that is off, `NetworkAddress.Kind` by interface or range),
 plain or TLS (`tlsIdentityPath`,
