@@ -78,6 +78,9 @@ import VisorServer
         /// Quit Visor once up: the marker written as AppKit ends the app
         /// (AppDelegate.applicationWillTerminate), then an exit of 0.
         var quitsOnceUp: String { "\(takesTheLock); touch '\(answering)'; sleep 3; echo $$ > '\(quitMarker)'; exit 0" }
+        /// An exit of 0 once up with no marker: a build that quits on its
+        /// own, which is no Quit.
+        var exitsOnceUp: String { "\(takesTheLock); touch '\(answering)'; sleep 3; exit 0" }
         /// A crash once up the first time it runs, whose marker names
         /// another process (one from a Quit long before); then it serves.
         var crashesTheFirstTime: String {
@@ -289,16 +292,58 @@ import VisorServer
         #expect(scene.starts == 2)
     }
 
-    /// An update's new build that goes within its watch is undone, quit or
-    /// not: what's quit is the build that came, unproven.
-    @Test func aQuitDuringAnUpdatesWatchIsStillRolledBack() throws {
+    /// NCH's lease test of 0.73.1: Quit Visor within two minutes of an
+    /// update (0.73.1 to 0.73.1) was rolled back ("it quit or crashed"),
+    /// registered afresh and started again. Until then this test said a
+    /// Quit during an update's watch was still rolled back; a Quit is no
+    /// failure: the marker names the process the watch followed, and the
+    /// new build stays installed and stopped, the one it replaced removed.
+    @Test func aQuitDuringAnUpdatesWatchLeavesTheNewBuildInstalledAndStopped() throws {
         let scene = try Scene()
         defer { scene.cleanUp() }
         try scene.app(at: scene.destination, name: "old", body: scene.serves)
         try scene.app(at: scene.source, name: "new", body: scene.quitsOnceUp)
         let output = try scene.run(scene.watch(update: true))
+        #expect(output.contains("0.72.3 was quit (process "), "\(output)")
+        #expect(output.contains("ended at a Quit): left stopped, as launchd leaves it; installed, not rolled back"), "\(output)")
+        #expect(!output.contains("rolled back to") && !output.contains("stayed up") && !output.contains("bootout"), "\(output)")
+        #expect(scene.read(scene.destination + "/name") == "new", "the new build stays")
+        #expect(scene.read(scene.note) == nil, "no rollback note")
+        #expect(!FileManager.default.fileExists(atPath: scene.backup), "the build it replaced is removed")
+        #expect(scene.starts == 1, "not started again")
+        #expect(scene.holder == nil, "nothing runs")
+    }
+
+    /// A build that quits on its own at launch (an exit of 0, no marker)
+    /// is no Quit: rolled back, as a crash is.
+    @Test func anUnmarkedExitOf0DuringAnUpdatesWatchIsRolledBack() throws {
+        let scene = try Scene()
+        defer { scene.cleanUp() }
+        try scene.app(at: scene.destination, name: "old", body: scene.serves)
+        try scene.app(at: scene.source, name: "new", body: scene.exitsOnceUp)
+        let output = try scene.run(scene.watch(update: true))
         #expect(output.contains("rolled back to 0.72.2: it quit or crashed"), "\(output)")
+        #expect(!output.contains("was quit"), "\(output)")
         #expect(scene.read(scene.destination + "/name") == "old")
+        #expect(scene.read(scene.note)?.contains("(it quit or crashed)") == true)
+        #expect(scene.starts == 2, "the new build's start, and the previous one's")
+        #expect(scene.holder != nil, "the previous build runs")
+    }
+
+    /// A crash during an update's watch whose marker names another process
+    /// (one from a Quit long before) is rolled back: only a marker naming
+    /// the process followed is the person's Quit.
+    @Test func aCrashDuringAnUpdatesWatchWithAnotherProcesssMarkerIsRolledBack() throws {
+        let scene = try Scene()
+        defer { scene.cleanUp() }
+        try scene.app(at: scene.destination, name: "old", body: scene.serves)
+        try scene.app(at: scene.source, name: "new", body: scene.crashesTheFirstTime)
+        let output = try scene.run(scene.watch(update: true))
+        #expect(output.contains("rolled back to 0.72.2: it quit or crashed"), "\(output)")
+        #expect(!output.contains("was quit"), "\(output)")
+        #expect(scene.read(scene.destination + "/name") == "old")
+        #expect(scene.starts == 2)
+        #expect(scene.holder != nil, "the previous build runs")
     }
 
     /// The app is followed by its pid: launchd's copy, run by the relative
