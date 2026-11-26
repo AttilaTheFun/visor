@@ -14,8 +14,13 @@ public protocol ByteStream: AnyObject {
     /// This computer's address the connection arrived on (which network
     /// path it came by); nil where the system does not say.
     var localAddress: String? { get }
+    /// The address of the other end (whose connection it is), for what is
+    /// kept per address: wrong passwords (PasswordThrottle). Nil on a
+    /// socket file, and where the system does not say.
+    var remoteAddress: String? { get }
 }
 
 public extension ByteStream {
     var localAddress: String? { nil }
+    var remoteAddress: String? { nil }
 }

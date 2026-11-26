@@ -84,10 +84,7 @@ package final class AdminToken {
     /// Whether `bearer` is it.
     package func admits(_ bearer: String?) -> Bool {
         guard let hash, let bearer, !bearer.isEmpty else { return false }
-        let shown = Self.digest(bearer)
-        var difference: UInt8 = 0
-        for index in hash.indices { difference |= hash[index] ^ shown[index] }
-        return difference == 0
+        return SecretToken.same(Self.digest(bearer), hash)
     }
 
     /// The first token, shown this once: only where it is kept, and only

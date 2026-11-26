@@ -36,18 +36,29 @@ extension VisorServer {
         }
         if !client.authenticated {
             guard envelope.type == "login" else { client.send(.error("Log in first")); return }
-            let token = envelope.token ?? ""
-            let byPassword = !password.isEmpty && (envelope.password ?? "") == password
+            client.clientID = envelope.client
+            // An address locked out for wrong passwords is told so, whatever
+            // it shows (PasswordThrottle).
+            if !client.trusted, let wait = passwordThrottle.retryAfter(client.peer) {
+                Self.log("\(describe(client)) was refused: its address is locked out for wrong passwords")
+                client.sendLast(.error(Self.lockedOut(retryAfter: wait)))
+                return
+            }
+            // Each compared whole (SecretToken).
+            let byPassword = SecretToken.same(envelope.password, password)
+            let byToken = SecretToken.any(tokens, is: envelope.token)
             // The admin token too, as the password or the token (the
             // probes' and tools' login): it is the REST side's admin already.
-            let byAdminToken = adminToken.admits(envelope.password) || adminToken.admits(token)
-            client.clientID = envelope.client
+            let byAdminToken = adminToken.admits(envelope.password) || adminToken.admits(envelope.token)
             let vouched = settings.asksNothing && (front?.admits(client.headers) ?? true)
-            guard client.trusted || vouched || byPassword || byAdminToken || (!token.isEmpty && tokens.contains(token)) else {
+            guard client.trusted || vouched || byPassword || byToken || byAdminToken else {
                 Self.log("\(describe(client)) was refused: wrong password or token")
+                let showed = !(envelope.password ?? "").isEmpty || !(envelope.token ?? "").isEmpty
+                if !settings.asksNothing, showed { wrongPassword(from: client.peer) }
                 client.sendLast(.error("Wrong password"))
                 return
             }
+            if byPassword || byToken || byAdminToken { passwordThrottle.succeeded(client.peer) }
             client.authenticated = true
             if vouched, let front { client.user = front.person(client.headers).id }
             Self.log("\(describe(client)) signed in\(client.user.map { " as \($0)" } ?? "") (\(signedIn) signed in now)")

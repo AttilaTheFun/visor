@@ -1,5 +1,6 @@
-// Who is let in: the password, and the tokens `hello` hands out; and
-// where the password is kept.
+// Who is let in: the password, and the tokens `hello` hands out, each
+// compared whole (SecretToken); how many wrong ones an address may show
+// (PasswordThrottle); and where the password is kept.
 
 import ClaudeTranscript
 import MessageCache
@@ -16,7 +17,9 @@ extension VisorServer {
     /// (the socket file, through SSH as this user); the server asks nothing
     /// and the front it sits behind (if it was told of one) vouches for it;
     /// or the bearer is the password, a token `hello` issued, or the admin
-    /// token (AdminToken).
+    /// token (AdminToken). Not while the address it came from is locked
+    /// out for wrong passwords (PasswordThrottle): then nothing it shows is
+    /// looked at.
     ///
     /// Never an agent's token, a session's or a runner's agent's: those act
     /// as their own session over the socket's `agent` and
@@ -32,7 +35,30 @@ extension VisorServer {
         if isAgentToken(request.authorization) { return false }
         if settings.asksNothing { return front?.admits(request.headers) ?? true }
         guard let bearer = request.authorization, !bearer.isEmpty else { return false }
-        return bearer == password || tokens.contains(bearer) || adminToken.admits(bearer)
+        guard passwordThrottle.retryAfter(request.peer) == nil, admits(bearer) else { return false }
+        passwordThrottle.succeeded(request.peer)
+        return true
+    }
+
+    /// Whether `secret` is the password, a token `hello` issued, or the
+    /// admin token: each compared in a time that doesn't say how much of
+    /// it matched.
+    func admits(_ secret: String?) -> Bool {
+        SecretToken.same(secret, password) || SecretToken.any(tokens, is: secret) || adminToken.admits(secret)
+    }
+
+    /// A wrong password (or token) from `address`, counted: the one that
+    /// locks the address out is logged, by the address alone.
+    func wrongPassword(from address: String?) {
+        guard passwordThrottle.failed(address), let address else { return }
+        Self.log("\(address) is locked out for \(Int(PasswordThrottle.lockout / 60)) minutes: "
+            + "\(PasswordThrottle.allowed) wrong passwords within \(Int(PasswordThrottle.window)) seconds")
+    }
+
+    /// What an address locked out for wrong passwords is told, with the
+    /// seconds until it may try again.
+    static func lockedOut(retryAfter seconds: Int) -> String {
+        "Too many wrong passwords from this address: try again in \(seconds) seconds."
     }
 
     /// Whether a connection on the socket file is let in as this user,
@@ -75,11 +101,19 @@ extension VisorServer {
     /// It says whose computer this is (its id, as `hello` does), so a
     /// client that reached it at another computer's path knows the path
     /// is wrong rather than taking it for that computer asking. An agent's
-    /// token is told it is not a REST credential.
+    /// token is told it is not a REST credential. A wrong bearer is counted
+    /// against its address; one locked out is answered 429, with
+    /// `Retry-After`.
     func refusal(_ request: HTTPRequest) -> HTTPResponse {
         if !request.trusted, isAgentToken(request.authorization) {
             return HTTPResponse(401, Envelope.error(Self.agentTokenRefusedOverREST).encoded())
         }
+        if let wait = passwordThrottle.retryAfter(request.peer) {
+            var response = HTTPResponse(429, Envelope.error(Self.lockedOut(retryAfter: wait)).encoded())
+            response.headers["Retry-After"] = "\(wait)"
+            return response
+        }
+        if !settings.asksNothing, let bearer = request.authorization, !bearer.isEmpty { wrongPassword(from: request.peer) }
         return HTTPResponse(401, "{\"error\":\"wrong password\",\"id\":\"\(id)\"}")
     }
 
@@ -104,7 +138,7 @@ extension VisorServer {
     /// Whether `bearer` is the admin token, or a `hello` token handed out
     /// to it.
     func isAdminBearer(_ bearer: String?) -> Bool {
-        adminToken.admits(bearer) || (bearer.map { adminHelloTokens.contains($0) } ?? false)
+        adminToken.admits(bearer) || SecretToken.any(adminHelloTokens, is: bearer)
     }
 
     /// The `hello` tokens the admin token led to, gone (the admin token

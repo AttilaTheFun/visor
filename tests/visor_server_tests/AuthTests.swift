@@ -93,6 +93,90 @@ extension ServerTests {
         #expect((server.route(request("/api/hello")).status) == 401)
     }
 
+    private func request(_ path: String, bearer: String?, from peer: String?) -> HTTPRequest {
+        var made = request(path, bearer: bearer)
+        made.peer = peer
+        return made
+    }
+
+    /// Five wrong passwords from one address within a minute and it is
+    /// answered 429 for five minutes, saying when to try again, whatever it
+    /// shows; another address, and this computer, are let in as before.
+    @Test func testWrongPasswordsLockTheirAddressOut() {
+        let clock = SetTime()
+        server.passwordThrottle = PasswordThrottle(now: { clock.now })
+        server.password = "pearl-grove"
+        let stranger = "192.168.1.66"
+        for _ in 0..<PasswordThrottle.allowed {
+            #expect(server.route(request("/api/hello", bearer: "amber-birch", from: stranger)).status == 401)
+        }
+        let locked = server.route(request("/api/hello", bearer: "pearl-grove", from: stranger))
+        #expect(locked.status == 429, "not even the password, while it's out")
+        #expect(locked.headers["Retry-After"] == "300")
+        #expect(locked.body.contains("try again in 300 seconds"))
+        #expect(server.route(request("/api/sessions", bearer: "pearl-grove", from: "192.168.1.20")).status == 200, "its owner, beside it")
+        #expect(server.route(request("/api/sessions", bearer: "pearl-grove", from: "127.0.0.1")).status == 200)
+        for _ in 0..<(PasswordThrottle.allowed * 2) {
+            #expect(server.route(request("/api/sessions", bearer: "wrong", from: "127.0.0.1")).status == 401, "this computer is never locked out")
+            #expect(server.route(request("/api/sessions", bearer: "wrong", from: nil)).status == 401)
+        }
+        #expect(server.route(request("/api/sessions", bearer: "pearl-grove", from: nil)).status == 200)
+        // No bearer at all is not a guess.
+        for _ in 0..<(PasswordThrottle.allowed * 2) {
+            #expect(server.route(request("/api/hello", bearer: nil, from: "192.168.1.21")).status == 401)
+        }
+        #expect(server.route(request("/api/hello", bearer: "pearl-grove", from: "192.168.1.21")).status == 200)
+
+        clock.now = clock.now.addingTimeInterval(PasswordThrottle.lockout)
+        #expect(server.route(request("/api/hello", bearer: "pearl-grove", from: stranger)).status == 200, "let in once its time is up")
+        // And the right one forgets the wrong ones: four more aren't five.
+        for _ in 1..<PasswordThrottle.allowed {
+            #expect(server.route(request("/api/hello", bearer: "wrong", from: stranger)).status == 401)
+        }
+        #expect(server.route(request("/api/hello", bearer: "pearl-grove", from: stranger)).status == 200)
+    }
+
+    /// Over the wire: a connection's own address is what is counted, and a
+    /// locked-out one is told `429 Too Many Requests` with `Retry-After`.
+    @Test func testALockedOutConnectionIsToldWhenToTryAgain() {
+        server.password = "pearl-grove"
+        #expect(server.http != nil, "the REST side is served")
+        func call(_ bearer: String, from address: String) -> String {
+            let stream = PeerStream(from: address)
+            server.accept(stream)
+            stream.arrive("GET /api/hello HTTP/1.1\r\nHost: visor\r\nAuthorization: Bearer \(bearer)\r\n\r\n")
+            return String(decoding: stream.sent, as: UTF8.self)
+        }
+        for _ in 0..<PasswordThrottle.allowed { #expect(call("wrong", from: "2001:db8:0:7::1").hasPrefix("HTTP/1.1 401 ")) }
+        let locked = call("pearl-grove", from: "2001:db8:0:7::2")
+        #expect(locked.hasPrefix("HTTP/1.1 429 Too Many Requests\r\n"), "its /64 is one address")
+        #expect(locked.contains("\r\nRetry-After: 300\r\n"))
+        #expect(call("pearl-grove", from: "2001:db8:0:8::1").hasPrefix("HTTP/1.1 200 "))
+    }
+
+    /// The socket's login is counted the same, and refused the same while
+    /// its address is locked out.
+    @Test func testWrongPasswordsAtTheSocketsLoginLockTheAddressOut() {
+        server.password = "pearl-grove"
+        func login(password: String? = nil, token: String? = nil, from address: String) -> Bool {
+            let client = ClientConnection(stream: PeerStream(from: address))
+            var envelope = Envelope(type: "login")
+            envelope.password = password
+            envelope.token = token
+            server.handle(envelope, from: client)
+            return client.authenticated
+        }
+        #expect(login(password: "pearl-grove", from: "192.168.1.66"))
+        for _ in 0..<(PasswordThrottle.allowed - 1) { #expect(!login(password: "amber-birch", from: "192.168.1.66")) }
+        #expect(!login(token: "not-a-token", from: "192.168.1.66"))
+        #expect(!login(password: "pearl-grove", from: "192.168.1.66"), "locked out")
+        #expect(server.passwordThrottle.retryAfter("192.168.1.66") == 300)
+        #expect(login(password: "pearl-grove", from: "192.168.1.67"))
+        let hello = Envelope.decode(server.route(request("/api/hello", bearer: "pearl-grove")).body)
+        #expect(login(token: hello?.token, from: "192.168.1.68"))
+        #expect(!login(token: hello?.token, from: "192.168.1.66"), "not even a token, while it's out")
+    }
+
     /// hello says whether clients may keep the sessions' messages on their
     /// disk: only when they may not, so a server from before reads as yes.
     @Test func testHelloAsksClientsToKeepMessagesInMemoryOnlyWhenSet() async throws {
@@ -328,6 +412,28 @@ extension ServerTests {
         #expect((ConnectionCode(parsing: code.encoded)?.paths) == code.paths)
     }
 }
+}
+
+/// The time as a test sets it.
+@MainActor
+private final class SetTime {
+    var now = Date(timeIntervalSince1970: 1_800_000_000)
+}
+
+/// A connection from an address on the network: what is sent to it kept,
+/// and a way to say something to it.
+@MainActor
+private final class PeerStream: ByteStream {
+    let remoteAddress: String?
+    var sent = Data()
+    private var reader: (@MainActor (Data?) -> Void)?
+
+    init(from address: String) { remoteAddress = address }
+
+    func receive(_ chunk: @escaping @MainActor (Data?) -> Void) { reader = chunk }
+    func send(_ data: Data, sent: (@MainActor () -> Void)?) { self.sent.append(data); sent?() }
+    func close() {}
+    func arrive(_ text: String) { reader?(Data(text.utf8)) }
 }
 
 /// A stream that keeps what is sent to it.

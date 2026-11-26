@@ -15,6 +15,9 @@ final class ClientConnection {
     var trusted = false
     /// The client id its login gave (a Visor client's own), for the log.
     var clientID: String?
+    /// The address it came from, where the system says (never on the
+    /// socket file): what wrong passwords at its login are counted by.
+    var peer: String?
     /// Its upgrade's headers (names in lower case): what a front said of it.
     var headers: [String: String] = [:]
     /// Who it is, where a front named them (FrontTrust): their id.
@@ -29,6 +32,7 @@ final class ClientConnection {
 
     init(stream: any ByteStream, received: Data = Data()) {
         socket = WebSocketConnection(stream: stream, received: received)
+        peer = stream.remoteAddress
     }
 
     /// What it says is taken as it is said, in order.

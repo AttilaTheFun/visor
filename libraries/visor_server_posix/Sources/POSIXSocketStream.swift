@@ -22,6 +22,13 @@ final class POSIXSocketStream: ByteStream {
         return text.isEmpty ? nil : text
     }
 
+    var remoteAddress: String? {
+        var buffer = [CChar](repeating: 0, count: 64)
+        visor_remote_address(self.socket.descriptor, &buffer, buffer.count)
+        let text = String(decoding: buffer.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
+        return text.isEmpty ? nil : text
+    }
+
     func receive(_ chunk: @escaping @MainActor (Data?) -> Void) {
         let (chunks, arrived) = AsyncStream.makeStream(of: Data?.self)
         let socket = self.socket

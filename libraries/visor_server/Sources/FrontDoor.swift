@@ -75,4 +75,8 @@ private final class DoorStream: ByteStream {
     func send(_ data: Data, sent: (@MainActor () -> Void)?) { stream.send(data, sent: sent) }
 
     func close() { stream.close() }
+
+    var localAddress: String? { stream.localAddress }
+
+    var remoteAddress: String? { stream.remoteAddress }
 }
