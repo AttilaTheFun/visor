@@ -221,14 +221,75 @@ extension ServerTests {
         #expect(try await movedMemory(of: "L") == "- [Overcast](overcast.md)\n")
     }
 
-    /// A link to a folder by another name: packed as `memory` all the same.
+    /// A link to a folder by another name (inside Claude's projects folder):
+    /// packed as `memory` all the same.
     @Test func testAMemoryLinkedToAFolderByAnotherNameComes() async throws {
         let cwd = home.appendingPathComponent("Developer/app", isDirectory: true)
         let file = try session("N", cwd: cwd, kept: cwd)
-        let notes = home.appendingPathComponent("notes", isDirectory: true)
+        let notes = ClaudeSessionFiles.projectsRoot(home: home).appendingPathComponent("-shared/notes", isDirectory: true)
         try memory(at: notes, "- notes\n")
         try FileManager.default.createSymbolicLink(at: file.deletingLastPathComponent().appendingPathComponent("memory"), withDestinationURL: notes)
         #expect(try await movedMemory(of: "N") == "- notes\n")
+    }
+
+    /// A container's agent writes its Claude folder, and could point a
+    /// `memory` there at any folder of this computer's (NCH, #562): one
+    /// leading out of Claude's projects folder is never read or offered.
+    @Test func testAMemoryLinkedOutOfClaudesProjectsIsRefused() async throws {
+        let cwd = home.appendingPathComponent("Developer/app", isDirectory: true)
+        let file = try session("O", cwd: cwd, kept: cwd)
+        let keys = home.appendingPathComponent(".ssh", isDirectory: true)
+        try memory(at: keys, "a secret key\n")
+        try FileManager.default.createSymbolicLink(at: file.deletingLastPathComponent().appendingPathComponent("memory"), withDestinationURL: keys)
+        let offer = try await offer(of: "O")
+        #expect(!offer.files.contains { $0.id == VisorServer.memoryFileID }, "no memory offered")
+        let out = VisorServer.migrationsFolder.appendingPathComponent("out-" + offer.token, isDirectory: true)
+        #expect(!FileManager.default.fileExists(atPath: out.appendingPathComponent("memory.tgz").path), "nothing packed")
+    }
+
+    /// The offer's packed memory unpacked into a folder of the test's: what
+    /// it holds, as tar puts it.
+    private func unpackedMemory(of offer: MigrationOffer) throws -> URL {
+        let archive = VisorServer.migrationsFolder.appendingPathComponent("out-\(offer.token)/memory.tgz")
+        let into = root.appendingPathComponent("unpacked-\(offer.token)", isDirectory: true)
+        try FileManager.default.createDirectory(at: into, withIntermediateDirectories: true)
+        let tar = Process()
+        tar.executableURL = URL(fileURLWithPath: ToolPath.resolve("tar") ?? "/usr/bin/tar")
+        tar.arguments = ["-xzf", archive.path, "-C", into.path]
+        try tar.run()
+        tar.waitUntilExit()
+        #expect(tar.terminationStatus == 0)
+        return into.appendingPathComponent("memory", isDirectory: true)
+    }
+
+    /// A link inside the memory leading out is packed as the link, never
+    /// followed: what it leads to is never read (and the other end refuses
+    /// a memory with one: MigrationContainment's unsafeTree). Both by its
+    /// own name and copied in by another's first.
+    @Test func testALinkInsideTheMemoryIsPackedAsALink() async throws {
+        let secret = home.appendingPathComponent("secret.txt")
+        try Data("a secret key\n".utf8).write(to: secret)
+        for (id, named) in [("P", "memory"), ("Q", "notes")] {
+            let cwd = home.appendingPathComponent("Developer/app-\(id)", isDirectory: true)
+            let file = try session(id, cwd: cwd, kept: cwd)
+            let folder = file.deletingLastPathComponent()
+            let held = named == "memory" ? folder.appendingPathComponent("memory", isDirectory: true)
+                : ClaudeSessionFiles.projectsRoot(home: home).appendingPathComponent("-shared-\(id)/\(named)", isDirectory: true)
+            try memory(at: held, "- [Key](key.md)\n")
+            try FileManager.default.createSymbolicLink(at: held.appendingPathComponent("key.md"), withDestinationURL: secret)
+            if named != "memory" {
+                try FileManager.default.createSymbolicLink(at: folder.appendingPathComponent("memory"), withDestinationURL: held)
+            }
+            let offer = try await offer(of: id)
+            #expect(offer.files.contains { $0.id == VisorServer.memoryFileID })
+            let unpacked = try unpackedMemory(of: offer)
+            #expect((try? FileManager.default.destinationOfSymbolicLink(atPath: unpacked.appendingPathComponent("key.md").path)) == secret.path,
+                    "kept as a link (\(named))")
+            #expect((try? String(contentsOf: unpacked.appendingPathComponent("MEMORY.md"), encoding: .utf8)) == "- [Key](key.md)\n")
+            try FileManager.default.removeItem(at: secret)
+            #expect(!FileManager.default.fileExists(atPath: unpacked.appendingPathComponent("key.md").path), "nothing of it in the archive")
+            try Data("a secret key\n".utf8).write(to: secret)
+        }
     }
 
     /// Claude Code keeps a repository's memory under the project of its

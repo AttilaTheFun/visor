@@ -12,6 +12,7 @@ import ClaudeTranscript
 import Foundation
 import VisorAgent
 import VisorProtocol
+import VisorServer
 
 enum ConversationFiles {
     /// How much of a file goes in one piece.
@@ -38,20 +39,23 @@ enum ConversationFiles {
             }
         }
         // The project's memory, where Claude Code keeps it.
-        if let conversation, let memory = ClaudeSessionFiles.memoryFolder(conversation: conversation, cwd: cwd) {
+        let refused = { (why: String) in VisorServer.log("driver: a memory refused: \(why)") }
+        if let conversation, let memory = ClaudeSessionFiles.memoryFolder(conversation: conversation, cwd: cwd, refused: refused) {
             let there = ClaudeSessionFiles.memoryProjectDirectoryName(for: workingDirectory)
             found += files(in: memory).map { File(place: "projects/\(there)/memory/\($0.relative)", url: $0.url) }
         }
         return found
     }
 
-    /// The files under `folder`, each with its path relative to it.
+    /// The files under `folder`, each with its path relative to it: plain
+    /// files alone, never a link (looked at as it is, not followed), so one
+    /// inside that leads out of it is never read and sent.
     static func files(in folder: URL) -> [(relative: String, url: URL)] {
         let root = folder.standardizedFileURL.path
         guard let walker = FileManager.default.enumerator(at: folder, includingPropertiesForKeys: [.isRegularFileKey]) else { return [] }
         var found: [(String, URL)] = []
         for case let url as URL in walker {
-            guard (try? url.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true else { continue }
+            guard (try? FileManager.default.attributesOfItem(atPath: url.path))?[.type] as? FileAttributeType == .typeRegular else { continue }
             let path = url.standardizedFileURL.path
             guard path.hasPrefix(root + "/") else { continue }
             found.append((String(path.dropFirst(root.count + 1)), url))

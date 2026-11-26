@@ -77,7 +77,7 @@ import Testing
     @Test func testAMemoryThatIsALinkGoesAsItsFolder() throws {
         let cwd = home.appendingPathComponent("Developer/overcast", isDirectory: true).path
         try write(at: project(cwd).appendingPathComponent("c-2.jsonl"), "{}\n")
-        let target = home.appendingPathComponent("elsewhere/memory", isDirectory: true)
+        let target = ClaudeSessionFiles.projectsRoot(home: home).appendingPathComponent("-elsewhere/memory", isDirectory: true)
         try write(at: target.appendingPathComponent("MEMORY.md"), "- linked\n")
         try FileManager.default.createSymbolicLink(at: project(cwd).appendingPathComponent("memory"), withDestinationURL: target)
         let files = ConversationFiles.of(resume: "c-2", cwd: cwd, for: "/Volumes/Sessions/Claude/s9")
@@ -85,5 +85,25 @@ import Testing
         #expect(files.map(\.place).sorted() == ["projects/\(key)/c-2.jsonl", "projects/\(key)/memory/MEMORY.md"])
         let memory = try #require(files.first { $0.place.hasSuffix("MEMORY.md") })
         #expect((try String(contentsOf: memory.url, encoding: .utf8)) == "- linked\n")
+    }
+
+    /// A memory leading out of Claude's projects folder isn't sent; nor is
+    /// a link inside one, whatever it leads to (NCH, #562).
+    @Test func testNoLinkOutOfClaudesProjectsIsSent() throws {
+        let secret = home.appendingPathComponent("secret.txt")
+        try write(at: secret, "a secret key\n")
+        let out = home.appendingPathComponent("Developer/out", isDirectory: true).path
+        try write(at: project(out).appendingPathComponent("c-3.jsonl"), "{}\n")
+        let keys = home.appendingPathComponent(".ssh", isDirectory: true)
+        try write(at: keys.appendingPathComponent("id_ed25519"), "a secret key\n")
+        try FileManager.default.createSymbolicLink(at: project(out).appendingPathComponent("memory"), withDestinationURL: keys)
+        let key = ClaudeSessionFiles.projectDirectoryName(for: "/Volumes/Sessions/Claude/s10")
+        #expect(ConversationFiles.of(resume: "c-3", cwd: out, for: "/Volumes/Sessions/Claude/s10").map(\.place) == ["projects/\(key)/c-3.jsonl"])
+        let inside = home.appendingPathComponent("Developer/in", isDirectory: true).path
+        try write(at: project(inside).appendingPathComponent("c-4.jsonl"), "{}\n")
+        try write(at: project(inside).appendingPathComponent("memory/MEMORY.md"), "- [Key](key.md)\n")
+        try FileManager.default.createSymbolicLink(at: project(inside).appendingPathComponent("memory/key.md"), withDestinationURL: secret)
+        let files = ConversationFiles.of(resume: "c-4", cwd: inside, for: "/Volumes/Sessions/Claude/s10")
+        #expect(files.map(\.place).sorted() == ["projects/\(key)/c-4.jsonl", "projects/\(key)/memory/MEMORY.md"])
     }
 }

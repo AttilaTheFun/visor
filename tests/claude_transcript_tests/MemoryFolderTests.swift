@@ -77,9 +77,32 @@ import Testing
         try FileManager.default.createDirectory(at: beside, withIntermediateDirectories: true)
         #expect(ClaudeSessionFiles.memoryFolder(conversation: transcript, cwd: cwd.path, home: home)?.path == own.path)
         try FileManager.default.removeItem(at: beside)
-        let target = try folder("notes")
+        let target = projects.appendingPathComponent("-shared/notes", isDirectory: true)
+        try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
         try Data("linked".utf8).write(to: target.appendingPathComponent("MEMORY.md"))
         try FileManager.default.createSymbolicLink(at: beside, withDestinationURL: target)
         #expect(ClaudeSessionFiles.memoryFolder(conversation: transcript, cwd: cwd.path, home: home)?.path == target.path)
+    }
+
+    /// A link out of Claude's projects folder (NCH, #562: a container's
+    /// agent writes its Claude folder) is passed over, said, and never read.
+    @Test func aMemoryLinkedOutOfTheProjectsFolderIsRefused() throws {
+        let projects = ClaudeSessionFiles.projectsRoot(home: home)
+        let cwd = try folder("work")
+        let kept = projects.appendingPathComponent(key(cwd), isDirectory: true)
+        try FileManager.default.createDirectory(at: kept, withIntermediateDirectories: true)
+        let transcript = kept.appendingPathComponent("c.jsonl")
+        try Data("{}\n".utf8).write(to: transcript)
+        let keys = try folder("home/.ssh")
+        try Data("a secret key".utf8).write(to: keys.appendingPathComponent("id_ed25519"))
+        try FileManager.default.createSymbolicLink(at: kept.appendingPathComponent("memory"), withDestinationURL: keys)
+        var said: [String] = []
+        #expect(ClaudeSessionFiles.memoryFolder(conversation: transcript, cwd: cwd.path, home: home, refused: { said.append($0) }) == nil)
+        #expect(said.count == 1 && said.allSatisfy { $0.contains("leads out of") && !$0.contains("a secret key") }, "\(said)")
+        // The projects folder's own link to itself, or a sibling's name that
+        // starts with its own, is no way in either.
+        #expect(!ClaudeSessionFiles.isInsideProjects(projects.path, home: home))
+        #expect(!ClaudeSessionFiles.isInsideProjects(projects.path + "-else/memory", home: home))
+        #expect(ClaudeSessionFiles.isInsideProjects(projects.path + "/-x/memory", home: home))
     }
 }

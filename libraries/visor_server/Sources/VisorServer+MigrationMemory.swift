@@ -24,10 +24,14 @@ extension VisorServer {
     /// link is packed as the folder it leads to, never as the link (which
     /// the other end refuses: it holds no folder).
     static func packMemory(of conversation: URL, cwd: String, into folder: URL) async -> (file: MigrationFile, url: URL, source: URL)? {
-        guard let memory = ClaudeSessionFiles.memoryFolder(conversation: conversation, cwd: cwd) else { return nil }
+        guard let memory = ClaudeSessionFiles.memoryFolder(conversation: conversation, cwd: cwd, refused: { log("a memory refused: \($0)") })
+        else { return nil }
         let archive = folder.appendingPathComponent("memory.tgz", isDirectory: false)
         // tar packs a folder by its own name: one by another name is copied
-        // in as `memory` first.
+        // in as `memory` first. Neither follows a link inside it: copyItem
+        // copies a link as a link, and tar (`-czf <archive> -C <parent>
+        // memory`, no `-h`, `-L`, `-H` or `--dereference`) packs one as
+        // one, which the other end refuses if it leads out.
         var packed = memory
         let staged = folder.appendingPathComponent("memory-staged", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: staged) }

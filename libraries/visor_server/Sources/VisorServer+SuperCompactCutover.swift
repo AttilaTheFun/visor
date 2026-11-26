@@ -188,11 +188,14 @@ extension VisorServer {
     /// Claude's project memory for the old session (where Claude Code keeps
     /// it: ClaudeSessionFiles.memoryFolder, beside its conversation or under
     /// the project of its folder's repository or its folder, a link to it
-    /// followed) copied under the project of `cwd`, unless that has one:
+    /// followed only within Claude's projects folder) copied under the
+    /// project of `cwd`, unless that has one:
     /// what was copied, in words, or nil when there was none.
     static func copyMemory(of old: SessionInfo, conversation: String, to cwd: String) -> String? {
         let files = FileManager.default
-        guard let source = ClaudeSessionFiles.memoryFolder(conversation: URL(fileURLWithPath: conversation, isDirectory: false), cwd: old.cwd)
+        // A link inside it is copied as a link (copyItem follows none).
+        guard let source = ClaudeSessionFiles.memoryFolder(conversation: URL(fileURLWithPath: conversation, isDirectory: false), cwd: old.cwd,
+                                                           refused: { log("the memory of \(old.title) refused: \($0)") })
         else { return nil }
         let project = memoryProject(cwd)
         let destination = project.appendingPathComponent("memory", isDirectory: true)
