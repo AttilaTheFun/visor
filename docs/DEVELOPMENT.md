@@ -1412,7 +1412,9 @@ container agents.
     (`test`: their bundles built and run on an `xcode-27` Mac), tries the
     command-line server on Linux (tools/ci/linux_tests.sh), builds blue
     Visor's web client (tools/ci/container_blue_web.sh `--build-only`) and
-    makes the proof below, and keeps the `proof` artifact; `prerelease`
+    makes the proof below, and keeps the `proof` artifact (for a day: every
+    upload of ci.yml keeps its artifact one day, the repository's own
+    default too, as Actions storage is shared and fills); `prerelease`
     builds and signs the commit's Alphas and proposes a draft pre-release;
     `release` verifies first, with the pins (tools/released_pins.sh), then
     does as `prerelease` and proposes a draft release naming its run. A
