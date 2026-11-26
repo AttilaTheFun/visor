@@ -123,6 +123,8 @@ public enum VisorFixture {
                            model: "sonnet", preview: "Drafted the notes for 2.4 with the three fixes.", age: 7200)
         docs.goal = "The release notes cover every change since 2.3"
         docs.loopCron = "*/30 * * * *"
+        // Pinned, so it lists first, above the latest (Pin in a row's menu).
+        docs.pinnedAt = now - 600
         var widget = session("fixture-busy", .codex, "/Users/visor/Developer/weather", "Widget layout",
                              model: "gpt-5.5", preview: "Laying out the medium widget.", busy: true, age: 300)
         var sessions = [

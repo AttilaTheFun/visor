@@ -39,6 +39,7 @@ extension SessionInfo {
         if let continuedAs { o["continuedAs"] = .string(continuedAs) }
         if let continuedFrom { o["continuedFrom"] = .string(continuedFrom) }
         if let placement { o["placement"] = .string(placement.rawValue) }
+        if let pinnedAt { o["pinnedAt"] = .number(pinnedAt) }
         if let preview { o["preview"] = .string(preview) }
         if let updated { o["updated"] = .number(updated) }
         return .object(o)
@@ -81,6 +82,7 @@ extension SessionInfo {
         continuedAs = json["continuedAs"].string
         continuedFrom = json["continuedFrom"].string
         placement = json["placement"].string.flatMap(SessionPlacement.init(rawValue:))
+        pinnedAt = json["pinnedAt"].double
         preview = json["preview"].string
         updated = json["updated"].double
     }

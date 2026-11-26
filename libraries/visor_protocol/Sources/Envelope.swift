@@ -7,7 +7,7 @@
 
 /// Every message, both directions, is one envelope; `type` says which
 /// fields are set. Client → server: login, start, send, stop, subscribe,
-/// permissions, notifications, settings, approve, archive, unarchive, end. Agent side
+/// permissions, notifications, pin, unpin, settings, approve, archive, unarchive, end. Agent side
 /// (the permission MCP shim, with the app's token): approval_request;
 /// the app answers approval_result. Server → client: welcome, error, sessions, transcript, turn,
 /// entry, activity, busy, failure.
@@ -184,6 +184,10 @@ public struct Envelope: Codable, Sendable {
     /// shows, in memory, and asks again for those it let go of. Absent:
     /// they may.
     public var keepMessages: Bool?
+    /// `hello`: the server keeps sessions' pins (`SessionInfo.pinnedAt`,
+    /// `pin` and `unpin`), from 0.73. Absent: it has none, and a client
+    /// offers no Pin.
+    public var pins: Bool?
     /// `start`: the session's agent runs in a container on the server's
     /// computer rather than on the computer itself, its folder mounted
     /// there. `contain`: the session moves into its container (true) or out
@@ -335,6 +339,15 @@ extension Envelope {
     /// for every device.
     public static func notifications(session: String, on: Bool) -> Envelope {
         var e = Envelope(type: "notifications"); e.session = session; e.on = on; return e
+    }
+    /// The session pinned to the top of its computer's list, after those
+    /// pinned already (`SessionInfo.pinnedAt`), or unpinned: for every
+    /// device.
+    public static func pin(session: String) -> Envelope {
+        var e = Envelope(type: "pin"); e.session = session; return e
+    }
+    public static func unpin(session: String) -> Envelope {
+        var e = Envelope(type: "unpin"); e.session = session; return e
     }
     public static func permissions(session: String, skipPermissions: Bool) -> Envelope {
         var e = Envelope(type: "permissions"); e.session = session; e.skipPermissions = skipPermissions; return e

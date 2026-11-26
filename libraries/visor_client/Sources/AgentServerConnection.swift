@@ -1547,6 +1547,16 @@ public final class AgentServerConnection: Identifiable {
         act(.notifications(on: on), on: sessionID)
     }
 
+    /// Whether its sessions can be pinned: a server before 0.73 keeps no
+    /// pins, and is offered no Pin.
+    public var pins: Bool { server.pins }
+
+    /// Pins the session to the top of the computer's list, after those
+    /// pinned already, or unpins it. The session's own, kept by its
+    /// server, so every device lists the same.
+    public func pin(_ sessionID: String) { act(.pin, on: sessionID) }
+    public func unpin(_ sessionID: String) { act(.unpin, on: sessionID) }
+
     public func setSettings(_ sessionID: String, model: String?, effort: String?) {
         act(.settings(model: model, effort: effort), on: sessionID)
     }

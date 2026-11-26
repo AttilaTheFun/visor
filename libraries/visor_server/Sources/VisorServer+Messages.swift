@@ -82,6 +82,8 @@ extension VisorServer {
         case "signIn": performSignIn(envelope)
         case "permissions": performPermissions(envelope)
         case "notifications": performNotifications(envelope)
+        case "pin": performPin(envelope, pinned: true)
+        case "unpin": performPin(envelope, pinned: false)
         case "approve": performApprove(envelope)
         case "settings": performSettings(envelope)
         case "rename": performRename(envelope)

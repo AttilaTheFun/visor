@@ -245,6 +245,12 @@ public protocol AgentServer: AnyObject {
     /// archived. The new session's id, and the server's sessions.
     func superCompactCutover(_ session: String) async throws -> (session: String, sessions: [SessionInfo])
 
+    // MARK: Pins
+
+    /// Whether this server keeps its sessions' pins (`SessionInfo.pinnedAt`,
+    /// `act`'s `pin` and `unpin`): what Pin is offered by.
+    var pins: Bool { get }
+
     // MARK: Identity and SSH
 
     /// What the server said of itself at the last sign-in: its id and
@@ -323,6 +329,7 @@ public extension AgentServer {
     func superCompactCutover(_ session: String) async throws -> (session: String, sessions: [SessionInfo]) {
         throw AgentServerError.unsupported
     }
+    var pins: Bool { false }
     var identity: ServerIdentity? { nil }
     func authorizeSSHKey(_ line: String) async throws { throw AgentServerError.unsupported }
     func forgetSSHKey(_ line: String) async throws { throw AgentServerError.unsupported }

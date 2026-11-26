@@ -233,6 +233,8 @@ extension VisorServer {
         e.id = id
         e.version = Self.version
         if !settings.clientsKeepMessages { e.keepMessages = false }
+        // Its sessions' pins (`pin`, `unpin`): what tells a client to offer Pin.
+        e.pins = true
         if isStandalone {
             // Reached only where the client found it: nothing more to learn.
             e.standalone = true
@@ -426,7 +428,7 @@ extension VisorServer {
 
     private func restSessionAction(_ call: RESTCall) -> HTTPResponse {
         let action = call.parts[2]
-        guard ["send", "stop", "unqueue", "archive", "unarchive", "restartAgent", "stopAgent", "startAgent", "keepBranch", "continueBranch", "permissions", "notifications", "settings",
+        guard ["send", "stop", "unqueue", "archive", "unarchive", "restartAgent", "stopAgent", "startAgent", "keepBranch", "continueBranch", "permissions", "notifications", "pin", "unpin", "settings",
                "approve", "rename", "acknowledge", "signIn", "fork", "side", "endSide", "toSubagent", "closeSubagent", "mcp"].contains(action) else {
             return HTTPResponse(404, "{\"error\":\"unknown action\"}")
         }

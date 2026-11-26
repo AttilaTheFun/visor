@@ -84,6 +84,48 @@ extension FeatureMapTests {
             FeatureMapNode.sessions.expectShown(on: home)
         }
 
+        /// The computer's sessions, top to bottom.
+        private static func order(_ screen: HeadlessScreen) -> [String] {
+            var seen: [String] = []
+            for element in screen.elements {
+                guard let id = element.id, id.hasPrefix("session-fixture-"), !seen.contains(id) else { continue }
+                seen.append(id)
+            }
+            return seen.map { String($0.dropFirst("session-".count)) }
+        }
+
+        /// Pinned sessions list first, in the order they were pinned, then
+        /// the rest, the latest first: the fixture's release notes pinned
+        /// (marked `pinned-‹id›`) over the chat, the newest. Pin puts one
+        /// after them; Unpin and Pin again, last of the pinned.
+        @Test("Sessions → Sessions: longpress session-‹id›, tap “Pin”; “Unpin”, and “Pin” again")
+        func pinsAndUnpins() throws {
+            let app = try VisorLaunch.fixture("sessions")
+            defer { app.quit() }
+            let first = try app.screen { FeatureMapNode.sessions.isShown(on: $0) && Self.order($0).count == 4 }
+            #expect(Self.order(first) == ["fixture-docs", "fixture-chat", "fixture-busy", "fixture-api"], "\(first.summary)")
+            #expect(first.element("pinned-fixture-docs")?.label == "Pinned", "\(first.summary)")
+            #expect(!first.has(id: "pinned-fixture-chat"), "\(first.summary)")
+
+            let menu = try app.longPress("session-fixture-api")
+            #expect(menu.has(label: "Pin") && !menu.has(label: "Unpin"), "no Pin in the menu: \(menu.summary)")
+            _ = try app.tap("Pin")
+            let pinned = try app.screen { $0.has(id: "pinned-fixture-api") }
+            #expect(Self.order(pinned) == ["fixture-docs", "fixture-api", "fixture-chat", "fixture-busy"], "\(pinned.summary)")
+
+            let pinnedMenu = try app.longPress("session-fixture-docs")
+            #expect(pinnedMenu.has(label: "Unpin") && !pinnedMenu.has(label: "Pin"), "no Unpin in the menu: \(pinnedMenu.summary)")
+            _ = try app.tap("Unpin")
+            let unpinned = try app.screen { !$0.has(id: "pinned-fixture-docs") && $0.has(id: "session-fixture-docs") }
+            #expect(Self.order(unpinned) == ["fixture-api", "fixture-chat", "fixture-busy", "fixture-docs"], "\(unpinned.summary)")
+
+            _ = try app.longPress("session-fixture-docs")
+            _ = try app.tap("Pin")
+            let again = try app.screen { $0.has(id: "pinned-fixture-docs") }
+            #expect(Self.order(again) == ["fixture-api", "fixture-docs", "fixture-chat", "fixture-busy"], "\(again.summary)")
+            FeatureMapNode.sessions.expectShown(on: again)
+        }
+
         @Test("Sessions → Settings: tap settings")
         func opensSettings() throws {
             let app = try VisorLaunch.fixture("sessions")
