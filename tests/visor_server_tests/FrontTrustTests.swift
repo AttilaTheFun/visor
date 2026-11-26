@@ -63,9 +63,9 @@ extension ServerTests {
         #expect(named.device == "Test iPhone")
         #expect(front.person([:]).id == "owner")
         #expect(FrontTrust(trust: .listener).person(["x-forwarded-user": "someone"]).id == "owner", "no header told of: owner")
-        #expect(FrontTrust.same(Array("abc".utf8), Array("abc".utf8)))
-        #expect(!FrontTrust.same(Array("abd".utf8), Array("abc".utf8)))
-        #expect(!FrontTrust.same([], []), "no token is never a match")
+        #expect(SecretToken.same(Array("abc".utf8), Array("abc".utf8)))
+        #expect(!SecretToken.same(Array("abd".utf8), Array("abc".utf8)))
+        #expect(!SecretToken.same([], []), "no token is never a match")
     }
 
     @Test func theFrontIsGivenByTheEnvironmentOrTheArguments() throws {

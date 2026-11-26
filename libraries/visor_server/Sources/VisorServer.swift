@@ -153,6 +153,9 @@ public final class VisorServer {
     /// Those of `tokens` handed out to a request the admin token let in (or
     /// one of these): gone when the admin token is rotated or reset.
     var adminHelloTokens: Set<String> = []
+    /// The wrong passwords each address showed, and those locked out for
+    /// them (VisorServer+Access).
+    var passwordThrottle = PasswordThrottle()
 
     public let port: UInt16
 

@@ -39,16 +39,8 @@ public struct FrontTrust: Equatable, Sendable {
             return true
         case .token(let header, let value):
             guard let given = headers[header.lowercased()] else { return false }
-            return Self.same(Array(given.utf8), Array(value.utf8))
+            return SecretToken.same(given, value)
         }
-    }
-
-    /// Whether two tokens are the same, every byte looked at whichever
-    /// differs first, so how far they agree takes no longer to find.
-    static func same(_ given: [UInt8], _ kept: [UInt8]) -> Bool {
-        var differs = UInt8(given.count == kept.count ? 0 : 1)
-        for index in kept.indices { differs |= kept[index] ^ (index < given.count ? given[index] : 0) }
-        return differs == 0 && !kept.isEmpty
     }
 
     /// The person a front's request names: their id (`owner` without one),

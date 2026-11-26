@@ -517,7 +517,11 @@ server is given it at launch); never an agent's token
 (`AgentTokens`, JWTs signed with `SigningKeys`; docs/protocol.md, "The
 admin token" and "Agents' tokens", with what they don't protect against);
 no header names a user. The socket's `login` takes
-`token` or `password`. One listener (`FrontDoor` tells an upgrade from a
+`token` or `password`. Each is compared whole (`SecretToken.same`), and
+wrong ones are counted per peer address (`PasswordThrottle`, from the
+stream's `remoteAddress`: `HTTPRequest.peer`, `ClientConnection.peer`;
+none on Windows yet): five in a minute lock the address out for five
+minutes (429, `Retry-After`). One listener (`FrontDoor` tells an upgrade from a
 request by its first bytes), on loopback or every interface
 (`ServerSettings.lan || vpn`; `admits(localAddress:)` closes a connection
 on a path that is off, `NetworkAddress.Kind` by interface or range),
