@@ -17,10 +17,11 @@
 //   26 Nov 2026): REST's `DELETE /repos/*/releases/*` (a release, a draft
 //   among them, or its asset); GraphQL's `deleteRelease`, were GitHub to
 //   have it.
-// - Cancelling a release's run: its cancel is a check (GateChecker+Actions)
-//   that refuses a run of a published release and a dispatch on the
-//   default branch (a release's proposal), whatever gate.json says;
-//   force-cancel is no write the gate knows.
+// - Cancelling a release's run, or any on the default branch or main
+//   (NCH's review of #557): its cancel is a check (GateChecker+Actions)
+//   that refuses a run of a published release and any run that isn't on a
+//   branch of the agent's own, whatever gate.json says; force-cancel is no
+//   write the gate knows.
 //
 // A release's proposal is a dispatch on main (gate.json's mainDispatch):
 // its workflow builds and signs main's code and proposes a draft, and

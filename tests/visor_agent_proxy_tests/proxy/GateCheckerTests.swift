@@ -164,6 +164,7 @@ final class GateCheckerTests: XCTestCase {
     private func runs(_ run: String, extra: [String: (Int, String)] = [:]) -> FakeGitHub {
         var answers: [String: (Int, String)] = [
             "/repos/AttilaTheFun/shireworks/actions/runs/77": (200, run),
+            "/repos/AttilaTheFun/shireworks": (200, #"{"default_branch":"main"}"#),
             "/repos/AttilaTheFun/shireworks/pulls?head=AttilaTheFun:feature&state=open&per_page=10": (200, "[{\"head\":{\"sha\":\"\(head)\"}}]"),
             "/repos/AttilaTheFun/shireworks/git/ref/heads/feature": (200, "{\"object\":{\"sha\":\"\(head)\"}}"),
         ]
@@ -321,21 +322,50 @@ final class GateCheckerTests: XCTestCase {
     /// any inputs (within the gate's limits, GitHubGateTests), the lists
     /// of main's never asked.
     func testABranchsDispatchIsAsBefore() async {
+        let applications = "AttilaTheFun/applications"
         var rules = GateRules.standard
         rules.dispatchableWorkflows = ["ci.yml"]
-        let any = await proposing(["run": "agent-image", "other": "x"], branch: "feature", rules: rules)
+        let any = await proposing(["run": "agent-image", "other": "x"], branch: "feature", repository: applications, rules: rules)
         XCTAssertEqual(any, GateChecker.DispatchFinding(outcome: .pass(nil), workflowPath: ".github/workflows/ci.yml", onDefaultBranch: false))
-        let none = await proposing([:], branch: "feature", rules: rules)
+        let none = await proposing([:], branch: "feature", repository: applications, rules: rules)
         XCTAssertEqual(none.outcome, .pass(nil))
-        refused(await proposing(["run": "verify"], branch: "feature").outcome, "isn't among the workflows an agent dispatches")
-        refused(await proposing(["run": "verify"], workflow: 14, branch: "feature", rules: rules).outcome, "isn't among the workflows an agent dispatches")
-        refused(await proposing([:], branch: "gone", rules: rules).outcome, "gone is not a branch")
+        refused(await proposing(["run": "verify"], branch: "feature", repository: applications).outcome, "isn't among the workflows an agent dispatches")
+        refused(await proposing(["run": "verify"], workflow: 14, branch: "feature", repository: applications, rules: rules).outcome,
+                "isn't among the workflows an agent dispatches")
+        refused(await proposing([:], branch: "gone", repository: applications, rules: rules).outcome, "gone is not a branch")
         // Never counted against main's.
         let throttle = DispatchThrottle()
         rules.mainDispatch.perHour = 1
-        for _ in 0..<3 { _ = await proposing([:], branch: "feature", rules: rules, throttle: throttle) }
+        for _ in 0..<3 { _ = await proposing([:], branch: "feature", repository: applications, rules: rules, throttle: throttle) }
         let main = await proposing(["run": "verify"], rules: rules, throttle: throttle)
         XCTAssertEqual(main.outcome, .pass(nil))
+    }
+
+    /// NCH's review of #557: on a branch, Visor's ci.yml with run verify
+    /// alone (branchDispatch, the standard rules'): never prerelease or
+    /// release off main, never agent-image, nothing left out or added; held
+    /// to its list even where dispatchableWorkflows lists its file.
+    func testOnAVisorBranchCIIsVerifyAlone() async {
+        let verify = await proposing(["run": "verify"], branch: "feature")
+        XCTAssertEqual(verify, GateChecker.DispatchFinding(outcome: .pass(nil), workflowPath: ".github/workflows/ci.yml", onDefaultBranch: false))
+        for run in ["agent-image", "prerelease", "release", "populate", "container-apple"] {
+            refused(await proposing(["run": run], branch: "feature").outcome, "CI's run on feature is one of verify, never another value")
+        }
+        refused(await proposing([:], branch: "feature").outcome, "CI on feature is dispatched with run given: one of verify")
+        refused(await proposing(["run": "verify", "extra": "x"], branch: "feature").outcome, "CI on feature takes no input extra: only run (verify)")
+        var loose = GateRules.standard
+        loose.dispatchableWorkflows = ["ci.yml", ".github/workflows/ci.yml"]
+        refused(await proposing(["run": "agent-image"], branch: "feature", rules: loose).outcome, "never another value")
+        let stillVerify = await proposing(["run": "verify"], branch: "feature", rules: loose)
+        XCTAssertEqual(stillVerify.outcome, .pass(nil))
+        // Another of its workflows, unlisted: not dispatched; one dispatchableWorkflows lists, with any inputs.
+        refused(await proposing(["run": "verify"], workflow: 14, branch: "feature").outcome, "isn't among the workflows an agent dispatches")
+        loose.dispatchableWorkflows = ["release.yml"]
+        let release = await proposing(["anything": "x"], workflow: 14, branch: "feature", rules: loose)
+        XCTAssertEqual(release.outcome, .pass(nil))
+        // Its list is its repository's alone.
+        refused(await proposing(["run": "verify"], branch: "feature", repository: "AttilaTheFun/applications").outcome, "isn't among the workflows")
+        XCTAssertEqual(GateChecker.inputsRefusal("CI", on: "x", allowed: ["run": ["verify"]], given: ["run": "verify"]), nil)
     }
 
     /// At most perHour (four) of a repository's an hour, counted by the
@@ -366,26 +396,53 @@ final class GateCheckerTests: XCTestCase {
         refused(await proposing(["run": "verify"], rules: rules).outcome, "has had 0 dispatches")
     }
 
-    /// A release's run is never cancelled, whatever gate.json says: a
-    /// published release's, or a dispatch's on the default branch (a
-    /// proposal, or main's verify); a dispatch's on a branch is.
-    func testARunOnMainByHandIsNeverCancelled() async {
-        let onMain = """
-            {"id":77,"name":"CI","event":"workflow_dispatch","status":"in_progress","head_branch":"main",
-             "head_sha":"\(head)","head_repository":{"full_name":"AttilaTheFun/shireworks"}}
-            """
-        let github = runs(onMain, extra: ["/repos/AttilaTheFun/shireworks": (200, #"{"default_branch":"main"}"#)])
+    /// A run still going, as a cancel reads it.
+    private func going(event: String = "pull_request", branch: String? = "feature", headRepo: String = "AttilaTheFun/shireworks") -> String {
+        let named = branch.map { "\"\($0)\"" } ?? "null"
+        return """
+        {"id":77,"name":"CI","event":"\(event)","status":"in_progress","head_branch":\(named),
+         "head_sha":"\(head)","head_repository":{"full_name":"\(headRepo)"}}
+        """
+    }
+
+    /// NCH's review of #557: an agent cancels a run only on a branch of its
+    /// own, as a push's own branch is told (GateRules' isOwn): never on the
+    /// default branch or main, whatever its event and whatever gate.json
+    /// says; never a fork's, a protected branch's, or one outside
+    /// ownBranchPrefixes.
+    func testAnAgentCancelsARunOnlyOnABranchOfItsOwn() async {
+        let cancel = GateCheck.cancel(repository: repo, run: 77)
         var loose = GateRules.standard
-        loose.dispatchableWorkflows = ["ci.yml"]
         loose.protectedBranches = []
         loose.protectDefaultBranch = false
-        refused(await check(github, .cancel(repository: repo, run: 77), rules: loose), "is a dispatch on main, AttilaTheFun/shireworks's default branch")
-        refused(await check(runs(run(event: "release", status: "in_progress")), .cancel(repository: repo, run: 77), rules: loose), "its publishing must finish")
-        let branch = await check(runs(run(event: "workflow_dispatch", status: "in_progress"), extra: ["/repos/AttilaTheFun/shireworks": (200, #"{"default_branch":"main"}"#)]),
-                                 .cancel(repository: repo, run: 77), rules: loose)
-        XCTAssertEqual(branch, .pass(nil))
-        // Its default branch unread: no cancel.
-        guard case .fail = await check(runs(onMain), .cancel(repository: repo, run: 77)) else { return XCTFail("cancelled unread") }
+        loose.mainDispatch = GateRules.MainDispatch(perHour: 100, workflows: ["AttilaTheFun/shireworks:.github/workflows/ci.yml": ["run": ["x"]]])
+        for event in ["push", "workflow_dispatch", "schedule", "pull_request"] {
+            refused(await check(runs(going(event: event, branch: "main")), cancel, rules: loose), "is on main, AttilaTheFun/shireworks's default branch or main: an agent never cancels a run there")
+            refused(await check(runs(going(event: event, branch: "Main")), cancel), "never cancels a run there")
+        }
+        // The default branch by another name, and main that isn't the default.
+        let develop = ["/repos/AttilaTheFun/shireworks": (200, #"{"default_branch":"develop"}"#)]
+        refused(await check(runs(going(event: "push", branch: "develop"), extra: develop), cancel, rules: loose), "is on develop")
+        refused(await check(runs(going(event: "push", branch: "main"), extra: develop), cancel, rules: loose), "never cancels a run there")
+        // A protected branch, a fork's, a tag's run (no branch).
+        refused(await check(runs(going(event: "push", branch: "master")), cancel), "not one of the agent's own branches")
+        refused(await check(runs(going(headRepo: "someone/shireworks")), cancel), "commit is in another repository")
+        refused(await check(runs(going(event: "push", branch: nil)), cancel), "is on no branch")
+        // Its own: any branch not protected, or of ownBranchPrefixes when it lists any.
+        let own = await check(runs(going()), cancel)
+        XCTAssertEqual(own, .pass(nil))
+        let dispatched = await check(runs(going(event: "workflow_dispatch")), cancel)
+        XCTAssertEqual(dispatched, .pass(nil))
+        var prefixed = GateRules.standard
+        prefixed.ownBranchPrefixes = ["agent/"]
+        refused(await check(runs(going()), cancel, rules: prefixed), "not one of the agent's own branches")
+        let agents = await check(runs(going(branch: "agent/fix")), cancel, rules: prefixed)
+        XCTAssertEqual(agents, .pass(nil))
+        // A release's, and its default branch unread: no cancel.
+        refused(await check(runs(going(event: "release", branch: "v1.0")), cancel), "its publishing must finish")
+        guard case .fail = await check(runs(going(), extra: ["/repos/AttilaTheFun/shireworks": (500, "{}")]), cancel) else {
+            return XCTFail("cancelled unread")
+        }
     }
 
     // MARK: Drafts, nodes and pushes

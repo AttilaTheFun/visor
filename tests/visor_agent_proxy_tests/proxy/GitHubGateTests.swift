@@ -331,6 +331,8 @@ final class GitHubGateTests: XCTestCase {
         quiet.rerunEvents = []
         XCTAssertEqual(quiet.tokenPermissions["actions"], "write", "Visor's proposals on main: actions written")
         quiet.mainDispatch = .off
+        XCTAssertEqual(quiet.tokenPermissions["actions"], "write", "Visor's verify on a branch: actions written")
+        quiet.branchDispatch = .off
         XCTAssertEqual(quiet.tokenPermissions["actions"], "read", "no re-run or dispatch: actions read")
         XCTAssertNil(GateRules.standard.tokenPermissions["workflows"])
     }
@@ -342,6 +344,7 @@ final class GitHubGateTests: XCTestCase {
         XCTAssertEqual(rules.ownBranchPrefixes, [])
         XCTAssertEqual(rules.dispatchableWorkflows, [])
         XCTAssertEqual(rules.mainDispatch, .off, "no dispatch on main, as before it")
+        XCTAssertEqual(rules.branchDispatch, .off, "no inputs listed on a branch, as before it")
         // The gate it makes refuses a dispatch on main, as before, and lets a listed one on a branch go to its check.
         var listed = rules
         listed.dispatchableWorkflows = ["ci.yml"]
@@ -481,6 +484,8 @@ final class GitHubGateTests: XCTestCase {
         XCTAssertEqual(GateRules.standard.mainDispatch.workflows,
                        ["AttilaTheFun/visor:.github/workflows/ci.yml": ["run": ["verify", "prerelease", "release"]]])
         XCTAssertEqual(GateRules.standard.dispatchableWorkflows, [])
+        // NCH's review of #557: on a branch, Visor's ci.yml with run verify alone.
+        XCTAssertEqual(GateRules.standard.branchDispatch.workflows, ["AttilaTheFun/visor:.github/workflows/ci.yml": ["run": ["verify"]]])
         // To the check, with its inputs, which reads which workflow it is and the default branch.
         XCTAssertEqual(dispatch(gate, #"{"ref":"main","inputs":{"run":"release"}}"#),
                        .check(.dispatch(repository: "AttilaTheFun/visor", workflow: 12, branch: "main", inputs: ["run": "release"])))
@@ -526,6 +531,17 @@ final class GitHubGateTests: XCTestCase {
         }
         let read = try JSONDecoder().decode(GateRules.self, from: gateJSON(#"{"perHour":2,"workflows":{"AttilaTheFun/visor:.github/workflows/ci.yml":{"run":["verify"]}}}"#))
         XCTAssertEqual(read.mainDispatch, GateRules.MainDispatch(perHour: 2, workflows: ["AttilaTheFun/visor:.github/workflows/ci.yml": ["run": ["verify"]]]))
+        // branchDispatch as exactly, and read.
+        func branchJSON(_ branchDispatch: String) -> Data {
+            Data((#"{"repositories":["AttilaTheFun/*"],"protectedBranches":["main"],"protectDefaultBranch":true,"merge":{"methods":["squash"],"passingConclusions":["success"],"codeOwners":true},"rerunEvents":["push"],"dispatch":{"maxInputs":10,"maxValueLength":200},"forcePushToOwnBranches":true,"branchDispatch":"#
+                + branchDispatch + "}").utf8)
+        }
+        for loose in [#"{"workflows":{"ci.yml":{"run":["verify"]}}}"#, #"{"workflows":{"AttilaTheFun/visor:.github/workflows/ci.yml":{"run":[]}}}"#] {
+            XCTAssertThrowsError(try JSONDecoder().decode(GateRules.self, from: branchJSON(loose)), loose)
+        }
+        let branchRead = try JSONDecoder().decode(GateRules.self, from: branchJSON(#"{"workflows":{"AttilaTheFun/visor:.github/workflows/ci.yml":{"run":["verify"]}}}"#))
+        XCTAssertEqual(branchRead.branchDispatch, .visor)
+        XCTAssertEqual(branchRead.mainDispatch, .off)
         // perHour left out: four.
         let unsaid = try JSONDecoder().decode(GateRules.self, from: gateJSON(#"{"workflows":{}}"#))
         XCTAssertEqual(unsaid.mainDispatch.perHour, 4)

@@ -216,7 +216,8 @@ extension GitHubGate {
         /// [W15], [D2], [D3]: a workflow by its id, on a branch, with a few
         /// one-line inputs.
         /// A dispatch's workflow must be one gate.json's `dispatchableWorkflows`
-        /// lists, on a branch that is neither protected nor the default (NCH's
+        /// lists (or branchDispatch, with its inputs: NCH's review of #557), on
+        /// a branch that is neither protected nor the default (NCH's
         /// review of #417): a workflow run with the repository's secrets is no
         /// agent's to start otherwise. On main (a protected branch's name),
         /// one `mainDispatch` names for the repository (NCH's conditions,
@@ -224,8 +225,8 @@ extension GitHubGate {
         /// which it is and which branch is the default (GateChecker+Actions).
         private static func dispatch(_ body: [String: GateJSON], workflow: Int, repository: String, rules gate: GateRules) -> GateDecision {
             let rules = gate.dispatch
-            guard !gate.dispatchableWorkflows.isEmpty || !gate.mainDispatch.workflows.isEmpty else {
-                return .refuse("no workflow is dispatched by an agent (gate.json's dispatchableWorkflows lists none, nor its mainDispatch)")
+            guard !gate.dispatchableWorkflows.isEmpty || !gate.mainDispatch.workflows.isEmpty || !gate.branchDispatch.workflows.isEmpty else {
+                return .refuse("no workflow is dispatched by an agent (gate.json's dispatchableWorkflows lists none, nor its mainDispatch or branchDispatch)")
             }
             guard let ref = body["ref"]?.string, !ref.isEmpty, !ref.hasPrefix("refs/"), GitRefName.isBranch(ref) else {
                 return .refuse("a dispatch names a branch (ref)")
@@ -240,9 +241,11 @@ extension GitHubGate {
                     return .refuse("a workflow is never dispatched on \(ref) unless gate.json's mainDispatch names it for \(repository) "
                         + "(it names none of its): dispatch it on a branch of your own")
                 }
-            } else if gate.dispatchableWorkflows.isEmpty && !gate.mainDispatch.names(repository: repository) {
+            } else if gate.dispatchableWorkflows.isEmpty && !gate.branchDispatch.names(repository: repository)
+                        && !gate.mainDispatch.names(repository: repository) {
                 // (A default branch of another name is the check's to find.)
-                return .refuse("no workflow is dispatched by an agent on a branch of its own (gate.json's dispatchableWorkflows lists none)")
+                return .refuse("no workflow of \(repository)'s is dispatched by an agent on a branch of its own "
+                    + "(gate.json's dispatchableWorkflows lists none, nor its branchDispatch)")
             }
             if let returns = body["return_run_details"], returns.bool == nil { return .refuse("return_run_details is true or false") }
             var given: [String: String] = [:]

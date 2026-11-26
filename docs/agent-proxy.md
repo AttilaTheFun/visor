@@ -476,15 +476,17 @@ gate.json for it.
 - on main, Visor's ci.yml with `run` one of `verify`, `prerelease` and
   `release`, at most 4 an hour. These only build, sign main's reviewed
   code, and propose a draft (docs/DEVELOPMENT.md, CI);
-- on an agent's own branch, no workflow yet. Visor's ci.yml with `run:
-  agent-image` on any branch builds that branch's toolchain image and pushes
-  it to ghcr.io (as `latest` too), so a branch's dispatch of it waits on
-  Logan's word, or on ci.yml running that job from main alone. A gate.json
-  lists what a Mac allows (`dispatchableWorkflows`).
+- on an agent's own branch, Visor's ci.yml with `run: verify` alone (NCH's
+  review of #557). Never `prerelease` or `release` off main, and never
+  `agent-image`: on a branch it would build that branch's toolchain image
+  and push it to ghcr.io (#558 makes the job main-only, and the list keeps
+  it off branches regardless). No other workflow is dispatched on a branch
+  unless a gate.json lists it.
 
-**gate.json.** Two fields, both optional, so a gate.json written before them
-is still read. One that leaves `mainDispatch` out has no dispatch on main,
-as before. A gate.json replaces the standard rules wholesale, so to keep
+**gate.json.** Three fields, all optional, so a gate.json written before
+them is still read. One that leaves `mainDispatch` out has no dispatch on
+main, and one that leaves `branchDispatch` out lists no branch's inputs, as
+before. A gate.json replaces the standard rules wholesale, so to keep
 Visor's proposals it lists them itself:
 
 ```json
@@ -494,6 +496,11 @@ Visor's proposals it lists them itself:
   "workflows": {
     "AttilaTheFun/visor:.github/workflows/ci.yml": {"run": ["verify", "prerelease", "release"]}
   }
+},
+"branchDispatch": {
+  "workflows": {
+    "AttilaTheFun/visor:.github/workflows/ci.yml": {"run": ["verify"]}
+  }
 }
 ```
 
@@ -502,6 +509,12 @@ Visor's proposals it lists them itself:
   before. An entry is a file's name (`ci.yml`) or path
   (`.github/workflows/ci.yml`) in any allowed repository, or one
   repository's path (`owner/name:path`).
+- `branchDispatch.workflows`: dispatches on a branch of the agent's own with
+  their inputs listed, named and checked as `mainDispatch`'s are (below):
+  every listed input given, one of its values, and no other. A workflow
+  listed here is held to its list even where `dispatchableWorkflows` names
+  its file too, so `ci.yml` there doesn't let Visor's `agent-image` onto a
+  branch.
 - `mainDispatch.workflows`: dispatches on a repository's default branch.
   Each workflow is `owner/name:.github/workflows/<file>`, exactly. The
   repository is compared case aside, as GitHub compares it, and the path
@@ -534,11 +547,14 @@ with run given: …`, `… isn't among the workflows dispatched on main,
 owner/name:path)`, or `<repo> has had 4 dispatches on main in the last
 hour, the most gate.json's mainDispatch.perHour lets through: the next in
 <n> minutes`. A refusal never repeats the value it refused. The count is the
-gate's, in memory, shared by every container, and it starts again when
-agent-proxy restarts. A dispatch is counted once its checks pass, whether or
-not GitHub then runs it. A protected branch that isn't the default (master,
+gate's, in memory, shared by every container. **It resets when agent-proxy
+restarts** (with the server, where it runs inside it): it is a soft rate
+limit, not a ledger, and the audit's lines below are the record of what
+was dispatched. A dispatch is counted once its checks pass, whether or not
+GitHub then runs it. A protected branch that isn't the default (master,
 say) is never dispatched on. A dispatch on any other branch is checked as
-before: a listed workflow, active, on a branch that is there.
+before: a listed workflow, active, on a branch that is there, with its
+inputs as `branchDispatch` lists them where it lists the workflow.
 
 **The audit.** Each dispatch on main is one line of agent-proxy's log,
 whether it went through or was refused, by the gate or by its check:
@@ -558,12 +574,16 @@ dispatch on a branch.
 
 **Still Logan's alone**, whatever gate.json says: publishing a release
 (REST's release made without `draft: true`, or edited with `draft: false`;
-any release mutation by GraphQL), cancelling a release's run (a published
-release's `release` run, or a dispatch on the default branch, such as a
-proposal or main's verify: an agent's cancel of one is refused after the
-run is read), and deleting a ref or a release (`DELETE …/git/refs/…`,
+any release mutation by GraphQL), cancelling a run on the default branch or
+main, whatever its event (a proposal, main's verify, a push's populate), or
+a published release's `release` run, and deleting a ref or a release (`DELETE …/git/refs/…`,
 `DELETE …/releases/…` and its assets, `deleteRef`, `deleteRelease`, a push
-to the zero commit). The draft itself is CI's, with the run's token, and
+to the zero commit). An agent cancels a run only on a branch of its own,
+told as a push's own branch is (not protected, not the default, of
+`ownBranchPrefixes` when gate.json lists any) and in the repository itself
+(not a fork's): the cancel reads the run and the repository's default
+branch first. Anything else is refused: `… is on main, <repo>'s default
+branch or main: an agent never cancels a run there, whatever its event`. The draft itself is CI's, with the run's token, and
 Logan's Release in Reviews publishes it.
 
 ## How it runs
