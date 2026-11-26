@@ -139,17 +139,26 @@ import VisorServer
         }
     }
 
-    /// What `command` prints, run by /bin/sh.
+    /// What `command` prints, run by /bin/sh: spawned and waited for
+    /// directly, its output read from a file, as the watcher is (`run`):
+    /// Foundation's Process on Linux follows its child by a socket the
+    /// child's children inherit, and the app a start leaves running would
+    /// hold it open.
     static func shell(_ command: String) throws -> String {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/sh")
-        process.arguments = ["-c", command]
-        let output = Pipe()
-        process.standardOutput = output
-        try process.run()
-        let data = output.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        return String(decoding: data, as: UTF8.self)
+        let output = FileManager.default.temporaryDirectory.appendingPathComponent("visor-app-commands-\(UUID().uuidString).out").path
+        defer { try? FileManager.default.removeItem(atPath: output) }
+        var actions = posix_spawn_file_actions_t()
+        posix_spawn_file_actions_init(&actions)
+        defer { posix_spawn_file_actions_destroy(&actions) }
+        posix_spawn_file_actions_addopen(&actions, 1, output, O_WRONLY | O_CREAT | O_TRUNC, 0o644)
+        let argv: [UnsafeMutablePointer<CChar>?] = ["/bin/sh", "-c", command].map { strdup($0) } + [nil]
+        defer { for pointer in argv { free(pointer) } }
+        var pid: pid_t = 0
+        let spawned = posix_spawn(&pid, "/bin/sh", &actions, nil, argv, environ)
+        guard spawned == 0 else { throw POSIXError(POSIXErrorCode(rawValue: spawned) ?? .EIO) }
+        var status: Int32 = 0
+        while waitpid(pid, &status, 0) < 0, errno == EINTR {}
+        return (try? String(contentsOfFile: output, encoding: .utf8)) ?? ""
     }
 
     /// The 0.72.x to 0.72.y update, both sides this watcher: started
