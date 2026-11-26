@@ -104,24 +104,24 @@ extension FeatureMapTests {
             defer { app.quit() }
             let first = try app.screen { FeatureMapNode.sessions.isShown(on: $0) && Self.order($0).count == 4 }
             #expect(Self.order(first) == ["fixture-docs", "fixture-chat", "fixture-busy", "fixture-api"], "\(first.summary)")
-            #expect(first.element("pinned-fixture-docs")?.label == "Pinned", "\(first.summary)")
-            #expect(!first.has(id: "pinned-fixture-chat"), "\(first.summary)")
+            #expect(first.row("Release notes", marked: "pinned-fixture-docs", "Pinned"), "\(first.summary)")
+            #expect(!first.row("Offline sync", marked: "pinned-fixture-chat", "Pinned"), "\(first.summary)")
 
             let menu = try app.longPress("session-fixture-api")
             #expect(menu.has(label: "Pin") && !menu.has(label: "Unpin"), "no Pin in the menu: \(menu.summary)")
             _ = try app.tap("Pin")
-            let pinned = try app.screen { $0.has(id: "pinned-fixture-api") }
+            let pinned = try app.screen { $0.row("Rate limits", marked: "pinned-fixture-api", "Pinned") }
             #expect(Self.order(pinned) == ["fixture-docs", "fixture-api", "fixture-chat", "fixture-busy"], "\(pinned.summary)")
 
             let pinnedMenu = try app.longPress("session-fixture-docs")
             #expect(pinnedMenu.has(label: "Unpin") && !pinnedMenu.has(label: "Pin"), "no Unpin in the menu: \(pinnedMenu.summary)")
             _ = try app.tap("Unpin")
-            let unpinned = try app.screen { !$0.has(id: "pinned-fixture-docs") && $0.has(id: "session-fixture-docs") }
+            let unpinned = try app.screen { !$0.row("Release notes", marked: "pinned-fixture-docs", "Pinned") && $0.has(id: "session-fixture-docs") }
             #expect(Self.order(unpinned) == ["fixture-api", "fixture-chat", "fixture-busy", "fixture-docs"], "\(unpinned.summary)")
 
             _ = try app.longPress("session-fixture-docs")
             _ = try app.tap("Pin")
-            let again = try app.screen { $0.has(id: "pinned-fixture-docs") }
+            let again = try app.screen { $0.row("Release notes", marked: "pinned-fixture-docs", "Pinned") }
             #expect(Self.order(again) == ["fixture-api", "fixture-docs", "fixture-chat", "fixture-busy"], "\(again.summary)")
             FeatureMapNode.sessions.expectShown(on: again)
         }

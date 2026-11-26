@@ -150,9 +150,9 @@ extension FeatureMapTests {
             #expect(chat.texts.contains(words), "the chat's line: \(chat.summary)")
             #expect(chat.has(id: "session-title"), "the chat: \(chat.summary)")
             _ = try app.back()
-            let listed = try app.screen { $0.has(id: "activity-fixture-chat") }
-            #expect(listed.element("activity-fixture-chat")?.label == mark, "the list's mark: \(listed.summary)")
-            #expect(listed.element("goal-fixture-chat")?.label == "Goal: Rows written offline are all on the server after reconnecting",
+            let listed = try app.screen { $0.row("Offline sync", marked: "activity-fixture-chat", mark) }
+            #expect(listed.row("Offline sync", marked: "activity-fixture-chat", mark), "the list's mark: \(listed.summary)")
+            #expect(listed.row("Offline sync", marked: "goal-fixture-chat", "Goal: Rows written offline are all on the server after reconnecting"),
                     "the goal's flag: \(listed.summary)")
             #expect(!listed.has(id: "waiting-fixture-chat"), "no line of the turn's under its row: \(listed.summary)")
         }
