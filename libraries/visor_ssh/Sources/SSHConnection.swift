@@ -68,7 +68,10 @@ public final class SSHConnection {
     private func listen(_ plan: @escaping @Sendable (Channel) -> Result<(SSHChannelType, String?), Error>) async throws -> Int {
         let handler = self.handler
         let gate = self.gate
-        let listener = try await ServerBootstrap(group: group)
+        // On the root's own loop, it and every connection it takes: the
+        // handler and the gate are bound to that loop, so they're touched
+        // only there, however many threads the group has.
+        let listener = try await ServerBootstrap(group: root.eventLoop)
             .serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
             .childChannelInitializer { local in
                 let ready = local.eventLoop.makePromise(of: Void.self)
