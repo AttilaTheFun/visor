@@ -110,6 +110,9 @@ extension FeatureMapTests {
             // (its details have it).
             #expect(first.rowTexts("Rate limits") == ["Rate limits", "The limiter now allows bursts of 20 per minute."], "\(first.summary)")
             #expect(!first.texts.contains("/Users/visor/Developer/api"), "no folder in the list: \(first.summary)")
+            // A preview's markdown rendered: its words, none of its marks.
+            #expect(first.texts.contains("Laying out the medium widget in WidgetView."), "\(first.summary)")
+            #expect(!first.texts.contains { $0.contains("**") || $0.contains("`") || $0.hasPrefix("- ") }, "no markdown marks: \(first.summary)")
 
             let menu = try app.longPress("session-fixture-api")
             #expect(menu.has(label: "Pin") && !menu.has(label: "Unpin"), "no Pin in the menu: \(menu.summary)")

@@ -59,7 +59,8 @@ struct SessionCardRow: View {
                 // the line's spacing on Isomer).
                 if Self.activity(of: session) != .none { activity }
             }
-            Text(session.preview ?? "No messages yet")
+            // Its markdown rendered, not shown (PreviewMarkdown).
+            PreviewMarkdown.text(session.preview ?? "No messages yet")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)

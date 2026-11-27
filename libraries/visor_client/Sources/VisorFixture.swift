@@ -92,6 +92,8 @@ public enum VisorFixture {
     /// An exported session's bytes, as the fixture's computer gives them.
     static let archive = Data("A session archive in the fixture.".utf8)
 
+    /// (The widget's and the rate limits' previews are markdown, as an
+    /// agent's messages are: their rows show it rendered.)
     @MainActor static var sessions: [SessionInfo] {
         func session(_ id: String, _ agent: AgentKind, _ cwd: String, _ title: String, model: String, preview: String,
                      busy: Bool = false, age: Double) -> SessionInfo {
@@ -131,13 +133,13 @@ public enum VisorFixture {
         // Pinned, so it lists first, above the latest (Pin in a row's menu).
         docs.pinnedAt = now - 600
         var widget = session("fixture-busy", .codex, "/Users/visor/Developer/weather", "Widget layout",
-                             model: "gpt-5.5", preview: "Laying out the medium widget.", busy: true, age: 300)
+                             model: "gpt-5.5", preview: "Laying out the **medium** widget in `WidgetView`.", busy: true, age: 300)
         var sessions = [
             chat,
             widget,
             docs,
             session("fixture-api", .codex, "/Users/visor/Developer/api", "Rate limits",
-                    model: "gpt-5.5", preview: "The limiter now allows bursts of 20 per minute.", age: 86_400),
+                    model: "gpt-5.5", preview: "- The limiter now allows bursts of *20* per minute.", age: 86_400),
         ]
         // On the `machines` screen, where each runs: the widget's agent in a
         // container (the server's own), the release notes' in the Mac's
