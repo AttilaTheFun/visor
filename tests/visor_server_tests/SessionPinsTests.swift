@@ -191,6 +191,7 @@ extension ServerTests {
         try Database(path: cache.appendingPathComponent("messages.sqlite").path).execute(
             #"CREATE TABLE "pins" ("session" TEXT PRIMARY KEY NOT NULL); INSERT INTO pins VALUES ('b'), ('c'), ('gone')"#)
         ServerCache.shared = MessageCache.open(named: "messages", in: cache)
+        defer { ServerCache.shared = .inMemory() }
 
         let first = VisorServer(port: 7957)
         defer { first.stop() }
