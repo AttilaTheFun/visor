@@ -1340,10 +1340,11 @@ container agents.
   - **Release builds: rules_applecross, not Xcode** (pinned). A
     proposal's and a release's iPhone app and Visor.app (`alpha-apple`,
     `release-apple`) are built with rules_applecross's toolchain, not
-    Xcode's own Swift, on GitHub's `xcode-27` Mac (`--config=apple_cross_mac`
-    in .bazelrc: swift.org's Swift 6.4.2 and LLVM's ld64.lld compile and
-    link; the Mac's Xcode 27.2 gives the SDKs, actool, ibtool and the macro
-    plugins; MODULE.bazel gives a Mac no ported tools, which it never runs).
+    Xcode's own Swift, unsigned in a Nimbus macOS VM (`xcode_27_2`;
+    `--config=apple_cross_mac` in .bazelrc: swift.org's Swift 6.4.2 and
+    LLVM's ld64.lld compile and link; the VM's Xcode 27.2 gives the SDKs,
+    actool, ibtool and the macro plugins; MODULE.bazel gives a Mac no ported
+    tools, which it never runs).
     Not on Linux (Logan, 27 Nov 2026): apple_on_linux's clean-room actool
     draws Visor's Icon Composer icon flat, and a release keeps Xcode's. All
     this because of the 18–19 Nov 2026 crash: 0.62.1,
@@ -1386,10 +1387,10 @@ container agents.
     a pull request's or a fork's code (Logan, 27 Nov 2026: no paid GitHub
     runner, and the VM's open network taken until Nimbus' VMs have the
     containers' egress rule). Nothing secret goes in (no token, no key, no
-    build setting), and nothing is signed there. A proposal's and a
-    release's Apple apps are built on GitHub's `xcode-27` Macs (above)
-    until build_tools' signing stamps their build settings on GitHub's
-    Ubuntu; then in such a VM too; the iPhone's proof moves to Nimbus'
+    build setting), and nothing is signed there: a proposal's and a
+    release's Apple apps are built there unsigned (above), and the Sign
+    step on GitHub's Ubuntu stamps the build settings they were built
+    without as it signs them. The iPhone's proof moves to Nimbus'
     `nimbus-ios` runners once they run jobs. tools/ci/container_build.sh
     builds the platform's apps where it runs (`VISOR_CI_PLATFORM=apple` for
     the Apple set on Linux). Visor's Linux programs (`linux-programs`) build on
@@ -1454,26 +1455,33 @@ container agents.
     does as `prerelease` and proposes a draft release naming its run. A
     proposal's version comes from the repository's releases and tags
     (tools/ci/version_from_tags.sh: one past the line's highest, the same
-    again for the same commit). The iPhone app and Visor.app are built on
-    an `xcode-27` Mac (`alpha-apple`) with rules_applecross's Swift
+    again for the same commit), on GitHub's Ubuntu (`alpha-version`, the
+    one job of them whose token writes). The iPhone app, Visor.app and
+    Visor Disk Utility are built unsigned in a macOS VM that a Nimbus
+    runner leases (`alpha-apple`), with rules_applecross's Swift
     (`--config=apple_cross_mac`, above), optimized, with `--config=alpha`
     and `--config=ci_device` (the iPhone's a device build signed ad hoc
     with a placeholder profile; Visor.app signed ad hoc asking for push,
-    `app.ci.entitlements`), with the update settings from the
-    `VISOR_UPDATE_APP_GROUP` and `VISOR_UPDATE_APPLICATIONS_BUNDLE_IDS`
-    secrets. The `alpha` job, on Ubuntu, builds Visor for Android (arm64,
+    `app.ci.entitlements`), and without the build settings from the
+    repository's secrets, which no VM or self-hosted runner gets. The `alpha` job, on Ubuntu, builds Visor for Android (arm64,
     `--config=alpha`) with the same version (tools/ci/stamp_android.sh:
     its versionName and versionCode), gives Visor.app Visor's Linux
     programs (tools/ci/mac_app_linux_programs.sh), and signs every build
     in its `Sign` step (tools/ci/sign_builds.sh), the one step the GitHub
     environment `release`'s secrets reach (deployments from main and `v*`
     tags alone; Logan, 15 Nov 2026: a public repository signs with keys in
-    its GitHub secrets), with the signers copied byte for byte from
-    AttilaTheFun/shireworks: the iPhone app with its development profiles
-    and Visor.app with Developer ID, notarized and stapled, on Linux
-    (tools/ci/apple_sign.sh and apple_profiles.py: `APPLE_DEVELOPMENT_P12`
-    and `_PASSWORD`, `APPLE_DEVELOPER_ID_P12` and `_PASSWORD`,
-    `APPLE_NOTARY_KEY`, `_KEY_ID` and `_ISSUER`, `APPLE_PROFILES`), the
+    its GitHub secrets): the Apple apps by build_tools' `sign apple`
+    (third_party/swift_packages, //tools/ci:sign, with the repository's own
+    rcodesign and dmg), first stamping the build settings they were built
+    without (`--add-infoplist`, `--add-groups`, build_tools#18: the
+    `VISOR_UPDATE_APP_GROUP` and `VISOR_UPDATE_APPLICATIONS_BUNDLE_IDS`
+    secrets' UpdateKit keys and app group, both or nothing signed; with the
+    `VISOR_GITHUB_SHARED_CLIENT_ID` secret and the `VISOR_TEAM_ID` variable,
+    the shared sign-in's keys and keychain group), then the iPhone app with
+    its development profiles and Visor.app with Developer ID, notarized and
+    stapled, on Linux (`APPLE_DEVELOPMENT_P12` and `_PASSWORD`,
+    `APPLE_DEVELOPER_ID_P12` and `_PASSWORD`, `APPLE_NOTARY_KEY`, `_KEY_ID`
+    and `_ISSUER`, `APPLE_PROFILES`), the
     APK with its private release key (never Isomer's public debug key;
     tools/ci/android_sign.sh: `ANDROID_SIGNING_KEYSTORE` and
     `ANDROID_SIGNING_PASSWORD`, the JDK Visor's Bazel pins and
@@ -1506,7 +1514,7 @@ container agents.
     nothing publishes them.
   - **Released**: Logan's Release in Reviews publishes a proposed
     release's draft, which makes its tag. Production comes from the tag:
-    `release-apple` (an `xcode-27` Mac, `--config=apple_cross_mac`) and
+    `release-apple` (unsigned in a Nimbus macOS VM, `--config=apple_cross_mac`) and
     `release-android` (Ubuntu)
     build the tag's commit with `--config=prod` and the tag's version
     (never the Alphas stamped again). `release` checks the commit is on
