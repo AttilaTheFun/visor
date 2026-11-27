@@ -61,6 +61,9 @@ if [ -z "${CC:-}" ] && [ -n "${GITHUB_ENV:-}" ]; then
 fi
 # The checkout belongs to the runner's user, not the container's.
 git config --global --add safe.directory "${GITHUB_WORKSPACE:-$PWD}"
+# Bazel's git fetches of github.com with the job's token (GitHub's
+# anonymous limit is by address).
+"$(dirname "$0")/git_auth.sh"
 echo "job_tools: $(bazel --version 2> /dev/null || echo bazel), $(swift --version 2>&1 | head -1), $(git --version), $(uname -m)"
 # The room Bazel has: its tree and its caches (the x86_64 runner's second
 # disk at /mnt, where the job mounts it).
