@@ -184,10 +184,14 @@ keeps the session list and a suffix of rows; the queue is NOT archived
 
 **The sessions' store** (`SessionStore`, from 0.73; swift_sql, WAL). One
 row a session in `sessions`: `id`, `position` (its place in the server's
-list), `title`, `archived`, `pinned_at` (SessionInfo's `pinnedAt`, read
-from its JSON, so it fills whenever pins land), `updated`, and `stored`,
-the session as `StoredSession` encodes it (JSON, keys sorted); `notes`
-holds what the store notes of itself (its import). The schema grows a step
+list), `title`, `archived`, `pinned` (SessionInfo's `pinned`: the
+session's pin is its row's alone, never in its JSON, and is written at
+once), `updated`, and `stored`, the session as `StoredSession` encodes it
+(JSON, keys sorted); `notes` holds what the store notes of itself (its
+imports). The pins a build of 0.73 before the store kept in messages.sqlite
+(a `pins` table, #560) are moved into the rows once, at the start after
+sessions.json's import (`movePinsFromCache`), and noted; the cache's table
+is left as it is, and never read or written again. The schema grows a step
 at a time (`SessionStore.migrations`, `PRAGMA user_version`), never
 dropped as the message cache's is, and a file at a later version than a
 build knows is not opened: the server says so and saves nothing. A save

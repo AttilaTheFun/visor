@@ -9,15 +9,10 @@ public final class MemoryStorage: MessageStorage {
     private var syncs: [String: SyncState] = [:]
     private var nodes: [String: [SourceNode]] = [:]
     private var rows: [String: [String: Row]] = [:]
-    private var pins: Set<String> = []
 
     public init() {}
 
     public func transaction(_ body: () throws -> Void) throws { try body() }
-    public func pinnedSessions() -> Set<String> { pins }
-    public func setPinned(_ pinned: Bool, _ session: String) throws {
-        if pinned { pins.insert(session) } else { pins.remove(session) }
-    }
     public func sourceState(_ session: String) -> SourceState? { sources[session] }
     public func setSourceState(_ state: SourceState, _ session: String) throws { sources[session] = state }
     public func syncState(_ session: String) -> SyncState? { syncs[session] }
