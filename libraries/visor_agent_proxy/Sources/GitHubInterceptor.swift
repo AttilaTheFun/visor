@@ -144,16 +144,26 @@ public final class GitHubInterceptor: GitHubIntercepting, Sendable {
     }
 
     /// A decision, its check made and its token got. `request`: what it was
-    /// made of, read again only when no token is configured.
+    /// made of, read again only when no token is configured, and for a
+    /// dispatch on main, the audit's line (GitHubInterceptor+Dispatch).
     func settle(_ decision: GateDecision, request: GateRequest, caller: EgressProxy.Caller) async -> Settled {
+        let (settled, finding) = await settling(decision, request: request, caller: caller)
+        audit(request, finding: finding, settled: settled, caller: caller)
+        return settled
+    }
+
+    /// `settle`'s, with what a dispatch's check found.
+    private func settling(_ decision: GateDecision, request: GateRequest, caller: EgressProxy.Caller) async
+        -> (Settled, GateChecker.DispatchFinding?) {
         let repository: String?
         var rewrite: CheckOutcome.Rewrite?
+        var finding: GateChecker.DispatchFinding?
         switch decision {
         case .refuse(let reason):
-            return .refuse(reason)
+            return (.refuse(reason), nil)
         case .anonymous(let named):
             // No token at all: none is asked for, and none goes on.
-            return .anonymous(repository: named)
+            return (.anonymous(repository: named), nil)
         case .allow(let named):
             repository = named
         case .check(let check):
@@ -162,19 +172,28 @@ public final class GitHubInterceptor: GitHubIntercepting, Sendable {
             // token, or its bot not found), refused before GitHub is asked.
             var bot: GitHubAppIdentity?
             if check.needsBot {
-                guard let found = await tokens.identity() else { return .refuse(GateChecker.noBot) }
+                guard let found = await tokens.identity() else { return (.refuse(GateChecker.noBot), nil) }
                 bot = found
             }
             let token: String
             do {
                 token = try await tokens.token(session: caller.session, repository: named)
             } catch {
-                return .fail("\(error)")
+                return (.fail("\(error)"), nil)
             }
-            // Read with the token the write goes on with.
-            switch await GateChecker(rules: gate.rules, github: reader(token), bot: bot).run(check) {
-            case .refuse(let reason): return .refuse(reason)
-            case .fail(let reason): return .fail(reason)
+            // Read with the token the write goes on with; a dispatch's, its finding kept for the audit.
+            let checker = GateChecker(rules: gate.rules, github: reader(token), bot: bot, throttle: gate.throttle)
+            let outcome: CheckOutcome
+            if case .dispatch(let dispatched, let workflow, let branch, let inputs) = check {
+                let found = await checker.dispatch(dispatched, workflow, branch: branch, inputs: inputs)
+                finding = found
+                outcome = found.outcome
+            } else {
+                outcome = await checker.run(check)
+            }
+            switch outcome {
+            case .refuse(let reason): return (.refuse(reason), finding)
+            case .fail(let reason): return (.fail(reason), finding)
             case .pass(let given): rewrite = given
             }
             repository = named
@@ -182,14 +201,15 @@ public final class GitHubInterceptor: GitHubIntercepting, Sendable {
         // One token for every agent: the repository is the log's.
         let named = repository ?? ""
         do {
-            return .forward(repository: named, token: try await tokens.token(session: caller.session, repository: named), rewrite: rewrite)
+            let token = try await tokens.token(session: caller.session, repository: named)
+            return (.forward(repository: named, token: token, rewrite: rewrite), finding)
         } catch is NoGitHubToken where gate.isRead(request) {
             // None configured: a read of an allowed repository goes on as
             // one outside them does (Logan, 9 Nov 2026). A token GitHub
             // turned down, or one that couldn't be made, is no reason to.
-            return .anonymous(repository: named)
+            return (.anonymous(repository: named), finding)
         } catch {
-            return .fail("\(error)")
+            return (.fail("\(error)"), finding)
         }
     }
 
@@ -198,7 +218,7 @@ public final class GitHubInterceptor: GitHubIntercepting, Sendable {
     static func repository(of check: GateCheck) -> String? {
         switch check {
         case .merge(let repository, _, _, _), .updateBranch(let repository, _), .rerun(let repository, _, _), .cancel(let repository, _),
-             .dispatch(let repository, _, _), .releaseEdit(let repository, _), .push(let repository, _), .close(let repository, _):
+             .dispatch(let repository, _, _, _), .releaseEdit(let repository, _), .push(let repository, _), .close(let repository, _):
             return repository
         case .graphQLMerge, .graphQLUpdateBranch, .graphQLNodes, .graphQLClose:
             return nil
