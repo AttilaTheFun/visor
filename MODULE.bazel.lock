@@ -701,8 +701,8 @@
   "moduleExtensions": {
     "//tools/shared_sign_in:extension.bzl%shared_sign_in": {
       "general": {
-        "bzlTransitiveDigest": "wpQyZRIJCYvaeNcFA2ORfpFxf8TOz5TgfXf0Y+WoWfU=",
-        "usagesDigest": "XpM62E73OCWIe7KEaJhXLOiaaGrA+hra49yHcYg7owk=",
+        "bzlTransitiveDigest": "DS2KpuhqT0QlVSJthx7/aBPPD5nxWgGA0sPGwprtEYk=",
+        "usagesDigest": "9DO6ykwk3ygVX60bkpodD5jgl+1zTiMc/O6+UYyGsLM=",
         "recordedInputs": [],
         "generatedRepoSpecs": {
           "visor_shared_sign_in": {
@@ -715,7 +715,7 @@
     "//tools/signing:extension.bzl%signing": {
       "general": {
         "bzlTransitiveDigest": "dSr3GkO2vhyxmc87InZ9I0svVrbdp7988KIWluLAdAk=",
-        "usagesDigest": "gOMhX2DtQwWCDbWE3/NmPU0rDTI1N7p6+r7O9lQ8Smo=",
+        "usagesDigest": "jG6B5EiAYdu26rrzXOztaWioUs/GMWqvvvgCFieh6cU=",
         "recordedInputs": [],
         "generatedRepoSpecs": {
           "visor_signing": {
@@ -728,7 +728,7 @@
     "//tools/team_id:extension.bzl%team_id": {
       "general": {
         "bzlTransitiveDigest": "8gO49ZyRE2NqYoHs0v+qdskHp0qnYcjjhVhJM2iPeOo=",
-        "usagesDigest": "uxKJdU133AwajV+UR1txg5raJ+/6PNrhl5LewCvPUEM=",
+        "usagesDigest": "zNGRaXXhF7QlNMmSvLqZ6ZFaDhZSCHCJJ1t4TcfkE98=",
         "recordedInputs": [],
         "generatedRepoSpecs": {
           "visor_team_id": {
@@ -1124,7 +1124,7 @@
           "REPO_MAPPING:rules_swift_package_manager+,bazel_skylib bazel_skylib+",
           "REPO_MAPPING:rules_swift_package_manager+,bazel_tools bazel_tools",
           "REPO_MAPPING:rules_swift_package_manager+,cgrindel_bazel_starlib cgrindel_bazel_starlib+",
-          "FILE:@@//third_party/swift_packages/Package.resolved fd8df2560ea3b4d63cc8dab436b6ef1c1e17c383d50dc160289fe693935993f5"
+          "FILE:@@//third_party/swift_packages/Package.resolved 1716216d72fb9c7231cec6a7df75cda7ee24aba88e06a716329e12653f83bb16"
         ],
         "generatedRepoSpecs": {
           "swift_package": {
@@ -1141,6 +1141,7 @@
                 "swiftpkg_agent_protocol",
                 "swiftpkg_agent_ui",
                 "swiftpkg_async_http_client",
+                "swiftpkg_build_tools",
                 "swiftpkg_containerization",
                 "swiftpkg_grpc_swift_2",
                 "swiftpkg_grpc_swift_nio_transport",
@@ -1172,6 +1173,7 @@
                 "swiftpkg_swift_service_context",
                 "swiftpkg_swift_service_lifecycle",
                 "swiftpkg_swift_sql",
+                "swiftpkg_swift_subprocess",
                 "swiftpkg_swift_syntax",
                 "swiftpkg_swift_system",
                 "swiftpkg_zstd"
@@ -1464,6 +1466,25 @@
               "commit": "0ac42ce27c983074cb4d5f1137ffc2cc862d5338",
               "remote": "https://github.com/apple/containerization.git",
               "version": "0.57.0",
+              "env": {},
+              "env_inherit": [],
+              "cached_json_directory": "",
+              "make_files_read_only": false,
+              "replace_scm_with_registry": false,
+              "target_deps": {},
+              "module_aliases": {},
+              "dep_module_aliases": "",
+              "bazel_target_mods": "",
+              "package_repos": "@@rules_swift_package_manager++swift_deps+swift_deps_package_repos//:package_repos.json"
+            }
+          },
+          "swiftpkg_build_tools": {
+            "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
+            "attributes": {
+              "bazel_package_name": "swiftpkg_build_tools",
+              "commit": "d9d9cca23be4bf501240b86d6769c7d80b1f000e",
+              "remote": "https://github.com/AttilaTheFun/build_tools.git",
+              "version": "0.7.0",
               "env": {},
               "env_inherit": [],
               "cached_json_directory": "",
@@ -1899,6 +1920,25 @@
               "package_repos": "@@rules_swift_package_manager++swift_deps+swift_deps_package_repos//:package_repos.json"
             }
           },
+          "swiftpkg_swift_subprocess": {
+            "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
+            "attributes": {
+              "bazel_package_name": "swiftpkg_swift_subprocess",
+              "commit": "dbe21bd7dfd4ffef8c32588918542a8abfa1b54c",
+              "remote": "https://github.com/swiftlang/swift-subprocess.git",
+              "version": "1.0.2",
+              "env": {},
+              "env_inherit": [],
+              "cached_json_directory": "",
+              "make_files_read_only": false,
+              "replace_scm_with_registry": false,
+              "target_deps": {},
+              "module_aliases": {},
+              "dep_module_aliases": "",
+              "bazel_target_mods": "",
+              "package_repos": "@@rules_swift_package_manager++swift_deps+swift_deps_package_repos//:package_repos.json"
+            }
+          },
           "swiftpkg_swift_syntax": {
             "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
             "attributes": {
@@ -1984,6 +2024,7 @@
             "swiftpkg_swift_sql",
             "swiftpkg_shireworks_kit",
             "swiftpkg_containerization",
+            "swiftpkg_build_tools",
             "swift_package"
           ],
           "explicitRootModuleDirectDevDeps": [],
