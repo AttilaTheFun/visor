@@ -528,7 +528,11 @@ container and proxy the outbound requests to github adding logan-shire-agent
 auth. agents can talk to the visor and nimbus mcps as well which are proxied
 through visor to authenticate them just adding the headers visor saves in its
 keychain." So a container's agent has Visor's own tools (from the driver, as
-before) and **Nimbus's MCP alone** of the servers this computer passes on.
+before) and **Nimbus's MCP alone** of the servers this computer passes on:
+`nimbus` (the MacBook's, VMs and containers) and, beside it, `nimbus-devices`
+(the Mini's devices-only Nimbus, the lab's phones: its `lease` with
+`platform: device`, and that lease's calls to the same server), until Nimbus
+forwards device leases itself (Nimbus, 27 Nov 2026).
 This replaces the 16 Nov rule (no passed-on servers in a container) for
 Nimbus only. gh there is the gh CLI, through the GitHub gate with the
 logan-shire-agent App's tokens ("gh in the container", above), never gh_mcp.

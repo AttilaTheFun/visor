@@ -25,10 +25,13 @@ import Foundation
 public final class NativeMCPProxy: Sendable {
     /// The header a call carries the sessions' token in, as MultiPass read it.
     public static let tokenHeader = "X-Visor-Proxy"
-    /// The servers the Sessions container's agents are given, by name (`/mcp/<name>`): Nimbus's alone (Logan, 25 Nov
-    /// 2026: "agents can talk to the visor and nimbus mcps", gh the CLI through the GitHub gate, oss gone). A
-    /// container agent's call to any other is refused, and its Claude is told of no other (ContainerClaudeMCP).
-    public static let containerServers: Set<String> = ["nimbus"]
+    /// The servers the Sessions container's agents are given, by name (`/mcp/<name>`): Nimbus's (Logan, 25 Nov
+    /// 2026: "agents can talk to the visor and nimbus mcps", gh the CLI through the GitHub gate, oss gone), and the
+    /// Mini's devices-only Nimbus beside it, `nimbus-devices`, which lends the lab's phones (`platform: device`) while
+    /// the MacBook's lends VMs and containers (Nimbus, 27 Nov 2026; one surface again once Nimbus forwards device
+    /// leases itself). A container agent's call to any other is refused, and its Claude is told of no other
+    /// (ContainerClaudeMCP).
+    public static let containerServers: Set<String> = ["nimbus", "nimbus-devices"]
 
     /// An MCP server calls are passed on to: its name (`/mcp/<name>`), its plain HTTP address, its headers, the names
     /// of those whose values are secrets (kept by agent-proxy), and the tools it keeps from sessions.
