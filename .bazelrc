@@ -76,9 +76,10 @@ build:apple_on_linux --macos_cpus=arm64
 # make it byte for byte (Visor's Icon Composer icon, drawn flat).
 build:apple_on_linux --action_env=RULES_APPLECROSS_RESOURCE_OUTPUT_MODE=relaxed
 
-# A proposal's or a release's Apple apps built on a Mac (CI builds them on
-# Linux, apple_on_linux, since 26 Nov 2026), with rules_applecross's
-# toolchains as on Linux: swift.org's Swift 6.4.2 (MODULE.bazel's applecross_swift, its
+# A proposal's and a release's Apple apps, built on a Mac (CI's `xcode-27`:
+# alpha-apple, release-apple; not on Linux, whose clean-room actool draws
+# Visor's Icon Composer icon flat) with rules_applecross's toolchains as on
+# Linux: swift.org's Swift 6.4.2 (MODULE.bazel's applecross_swift, its
 # macOS package) and LLVM's ld64.lld compile and link, the Mac's own Xcode
 # 27.2 gives the SDKs (local_xcode), and Xcode's own actool, ibtool and
 # macro plugins bundle (apple_bundling_on_macos). Not Xcode's own Swift:

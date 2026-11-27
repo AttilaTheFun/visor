@@ -6,17 +6,19 @@
 # - the Apple targets (VISOR_CI_PLATFORM=apple): the iPhone and iPad app,
 #   Visor.app, Visor Server and Visor Disk Utility, the Mac's test bundles,
 #   then the libraries, the staging server and the command-line server for
-#   the Mac. In CI on a Nimbus runner (a Linux container, `visor-ci`: Logan,
-#   26 Nov 2026, GitHub's Mac queue the bottleneck), with rules_applecross
-#   (.bazelrc's apple_on_linux), Xcode 27.2's SDK archive and the ported
-#   tools coming from Nimbus' files (`nimbus job bazel-config`,
+#   the Mac. In CI's builds for the proof, the tests and the cache, on a
+#   Nimbus runner (a Linux container, `visor-ci`: Logan, 26 Nov 2026,
+#   GitHub's Mac queue the bottleneck), with rules_applecross (.bazelrc's
+#   apple_on_linux), Xcode 27.2's SDK archive and the ported tools coming
+#   from Nimbus' files (`nimbus job bazel-config`,
 #   .github/actions/nimbus_bazel), never on GitHub's own runners: Apple's
-#   SDKs may not be redistributed. On a Mac, with its own Xcode, as before:
-#   a builder's own, and the default there.
+#   SDKs may not be redistributed. On a Mac (the default there: a builder's
+#   own, and CI's proposal and release builds, below), with its own Xcode.
 # A proposal's and a release's apps (alpha-apple, release-apple) are built
-# with rules_applecross's Swift, not Xcode's, since 0.62.1 aborted at launch
-# (docs/DEVELOPMENT.md, "Release builds"): on Linux that is apple_on_linux's
-# own; on a Mac, --config=apple_cross_mac.
+# on GitHub's `xcode-27` Macs with --config=apple_cross_mac:
+# rules_applecross's Swift, not Xcode's, since 0.62.1 aborted at launch
+# (docs/DEVELOPMENT.md, "Release builds"), and Xcode's own bundling, which
+# draws Visor's icon as Xcode does (apple_on_linux's draws it flat).
 # Bazel's settings (its caches, the downloads, BuildBuddy's remote cache
 # where the job has its key; on a Nimbus runner, Nimbus' cache and files)
 # are written before this runs (.github/actions/bazel_cache,

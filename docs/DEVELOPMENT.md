@@ -1330,21 +1330,24 @@ container agents.
   after every merge (Logan, 15 Nov 2026: "run all our tests headlessly
   from containers pre and post merge"). It runs on GitHub's own standard
   runners and cache (Logan, 15 Nov 2026; no paid larger runner), but for
-  the Apple builds, which run on Nimbus' self-hosted runners (Logan, 26
-  Nov 2026: GitHub's Mac queue held every Apple job for hours): single-use
-  Linux containers, `runs-on: [self-hosted, visor-ci]`, made by Nimbus'
-  ci-github controller, which never take a pull request's job, hold no
-  signing key and reach only the hosts Nimbus lists for Visor
+  the Apple builds that are neither proposed nor released (the proof's,
+  the Mac's test bundles, populate-apple's and container-apple's), which
+  run on Nimbus' self-hosted runners (Logan, 26 Nov 2026: GitHub's Mac
+  queue held every Apple job for hours): single-use Linux containers,
+  `runs-on: [self-hosted, visor-ci]`, made by Nimbus' ci-github
+  controller, which never take a pull request's job, get no secret and no
+  token that writes, and reach only the hosts Nimbus lists for Visor
   (`ci.egress`). The header of ci.yml has it whole.
   - **Release builds: rules_applecross, not Xcode** (pinned). A
     proposal's and a release's iPhone app and Visor.app (`alpha-apple`,
     `release-apple`) are built with rules_applecross's toolchain, not
-    Xcode's own Swift, on a Nimbus runner (`apple_on_linux`: swift.org's
-    Swift 6.4.2 and LLD compile and link, its clean-room actool, ibtool and
-    codesign bundle and sign ad hoc, with Xcode 27.2's SDKs from Nimbus'
-    files; on a Mac, `--config=apple_cross_mac` does the same with the
-    Mac's Xcode for the SDKs and bundling), because of the 18–19 Nov 2026
-    crash: 0.62.1,
+    Xcode's own Swift, on GitHub's `xcode-27` Mac (`--config=apple_cross_mac`
+    in .bazelrc: swift.org's Swift 6.4.2 and LLVM's ld64.lld compile and
+    link; the Mac's Xcode 27.2 gives the SDKs, actool, ibtool and the macro
+    plugins; MODULE.bazel gives a Mac no ported tools, which it never runs).
+    Not on Linux (Logan, 27 Nov 2026): apple_on_linux's clean-room actool
+    draws Visor's Icon Composer icon flat, and a release keeps Xcode's. All
+    this because of the 18–19 Nov 2026 crash: 0.62.1,
     the first built by Xcode 27.2 (Apple's Swift 6.4.2, on GitHub's
     `xcode-27` Mac), aborted at launch on macOS 27.0 in
     `swift_task_dealloc`, from the short-lived deadline tasks of
@@ -1370,13 +1373,15 @@ container agents.
     tools/ci/job_tools.sh adds (Bazelisk, the Linux client's libraries,
     clang), Bazel's tree on the runner's second disk (Google's Android SDK
     and NDK tools are x86_64, and GitHub's arm runners have no Rosetta).
-    The Apple targets on Nimbus' arm64 runners (`visor-ci`, 8 CPUs and
-    16 GB, in Visor's agent image) with rules_applecross (`apple_on_linux`,
-    above): Apple's SDKs may not be redistributed, so they come from
-    Nimbus' files and never reach GitHub's runners. What needs macOS
+    The Apple targets' builds for the proof, the Mac's tests and the cache
+    on Nimbus' arm64 runners (`visor-ci`, 8 CPUs and 16 GB, in Visor's
+    agent image) with rules_applecross (`apple_on_linux`, above): Apple's
+    SDKs may not be redistributed, so they come from Nimbus' files and
+    never reach GitHub's runners. A proposal's and a release's Apple apps
+    are built on GitHub's `xcode-27` Macs (above), and what needs macOS
     itself (the Mac's tests run, the iPhone's and the Mac's proofs, the
-    launch checks) stays on GitHub's `xcode-27` Macs until Nimbus' macOS VMs
-    have the containers' egress rule; the iPhone's proof moves to Nimbus'
+    launch checks) stays there too until Nimbus' macOS VMs have the
+    containers' egress rule; the iPhone's proof moves to Nimbus'
     `nimbus-ios` runners once they run jobs. tools/ci/container_build.sh
     builds the platform's apps where it runs (`VISOR_CI_PLATFORM=apple` for
     the Apple set on Linux). Visor's Linux programs (`linux-programs`) build on
@@ -1420,7 +1425,7 @@ container agents.
     grants its write for), one at a time: a newer push's waits, and older
     waiting ones are dropped. Its failure opens an issue, "Apple build
     failed on main" (or comments on the open one). A `container-apple` by
-    hand, and verify's and the proposals' Apple builds, read it.
+    hand, and verify's Apple builds, read it.
   - **By hand on main** (`gh workflow run ci.yml --ref main -f run=…`, or
     the gh tools' run_dispatch; a container agent's goes through
     agent-proxy's GitHub gate, `run` one of verify, prerelease and release,
@@ -1442,8 +1447,8 @@ container agents.
     proposal's version comes from the repository's releases and tags
     (tools/ci/version_from_tags.sh: one past the line's highest, the same
     again for the same commit). The iPhone app and Visor.app are built on
-    a Nimbus runner (`alpha-apple`) with rules_applecross (above),
-    optimized, with `--config=alpha`
+    an `xcode-27` Mac (`alpha-apple`) with rules_applecross's Swift
+    (`--config=apple_cross_mac`, above), optimized, with `--config=alpha`
     and `--config=ci_device` (the iPhone's a device build signed ad hoc
     with a placeholder profile; Visor.app signed ad hoc asking for push,
     `app.ci.entitlements`), with the update settings from the
@@ -1492,7 +1497,7 @@ container agents.
     nothing publishes them.
   - **Released**: Logan's Release in Reviews publishes a proposed
     release's draft, which makes its tag. Production comes from the tag:
-    `release-apple` (a Nimbus runner, rules_applecross) and
+    `release-apple` (an `xcode-27` Mac, `--config=apple_cross_mac`) and
     `release-android` (Ubuntu)
     build the tag's commit with `--config=prod` and the tag's version
     (never the Alphas stamped again). `release` checks the commit is on
