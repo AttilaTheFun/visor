@@ -74,6 +74,10 @@ public protocol AgentServer: AnyObject {
     /// A message from the user, with the paths of any pictures already
     /// uploaded. Sent to a working agent, it waits in the session's queue.
     func sendMessage(_ session: String, text: String, images: [String]) async throws -> [SessionInfo]
+    /// The same, under the id of the row it was sent from: a server takes
+    /// a send it has had under that id once, so it may be sent again when
+    /// whether it arrived isn't known.
+    func sendMessage(_ session: String, text: String, images: [String], id: String) async throws -> [SessionInfo]
     /// The session's rows past `revision` in `generation`, as a transcript
     /// envelope; the server holds the answer until the rows have moved
     /// (or for a while, then answers with the same). With `after`, a
@@ -260,6 +264,9 @@ public protocol AgentServer: AnyObject {
 }
 
 public extension AgentServer {
+    func sendMessage(_ session: String, text: String, images: [String], id: String) async throws -> [SessionInfo] {
+        try await sendMessage(session, text: text, images: images)
+    }
     var racesPaths: Bool { false }
     func authenticate(_ record: AgentServerRecord, byFirstOf paths: [String], headStarts: [Int32],
                       timeouts: [Int32]) async throws -> (name: String?, path: String) {

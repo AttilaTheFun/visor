@@ -94,6 +94,36 @@ extension ServerTests {
         #expect(session.info.busy == false, "not left working on a turn its agent never had")
     }
 
+    /// A send asked again under its id, its first answer lost on the way
+    /// back: taken once, and said in the log; another id is another send.
+    @Test func aSendAskedAgainUnderItsIdIsTakenOnce() {
+        listen()
+        let agent = StubbornAgent()
+        let session = record("m", "Manager", agent: agent)
+        server.sessions = [session]
+        var send = Envelope.send(session: "m", text: "ok images is migrating now")
+        send.id = "sending-1"
+        server.perform(send, from: nil)
+        _ = session.apply(.busy(false))
+        server.perform(send, from: nil)
+        #expect(agent.said == ["ok images is migrating now"])
+        #expect(said("came again (sending-1): it was taken the first time"))
+        send.id = "sending-2"
+        server.perform(send, from: nil)
+        #expect(agent.said == ["ok images is migrating now", "ok images is migrating now"], "the same words again are a message of their own")
+    }
+
+    /// The ids are kept a while, and only so many.
+    @Test func sendsIdsAreKeptForAWhile() {
+        let session = record("m", "Manager", agent: StubbornAgent())
+        let start = Date()
+        #expect(session.takeSend("a", now: start))
+        #expect(!session.takeSend("a", now: start.addingTimeInterval(60)))
+        #expect(session.takeSend("a", now: start.addingTimeInterval(SessionRecord.sendsKeptFor + 1)), "forgotten after a while")
+        for n in 0..<(SessionRecord.sendsKept + 10) { _ = session.takeSend("n\(n)", now: start.addingTimeInterval(SessionRecord.sendsKeptFor + 2)) }
+        #expect(session.takenSends.count <= SessionRecord.sendsKept)
+    }
+
     @Test func aMessageItsAgentTookIsNotLogged() {
         listen()
         let agent = StubbornAgent()

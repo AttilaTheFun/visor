@@ -142,6 +142,12 @@ final class ScriptedServer: AgentServer {
         if let sendFailure { throw sendFailure }
         return sendAnswer
     }
+    /// The ids the sends came under, in order.
+    var sentIDs: [String] = []
+    func sendMessage(_ session: String, text: String, images: [String], id: String) async throws -> [SessionInfo] {
+        sentIDs.append(id)
+        return try await sendMessage(session, text: text, images: images)
+    }
 
     /// How it sets up new sessions, its choices, and whether it keeps
     /// titles and an archive of its own.

@@ -1423,7 +1423,9 @@ public final class AgentServerConnection: Identifiable {
     private func post(_ sessionID: String, outgoing id: String, text: String, images: [String]) async {
         let session = transcript(for: sessionID)
         do {
-            let answer = try await server.sendMessage(sessionID, text: text, images: images)
+            // Under the row's id: sent again (here or by `resend`), it is
+            // taken once.
+            let answer = try await server.sendMessage(sessionID, text: text, images: images, id: id)
             take(answer, replacing: false)
             // A command stays out: its log may never write it back.
             if !text.hasPrefix("/"), let info = answer.first(where: { $0.id == sessionID }), !info.queued.contains(text),

@@ -164,6 +164,12 @@ extension VisorServer {
             Self.log("a message for \(record.info.title) (\(record.info.id)) was not taken: it had no text")
             return
         }
+        // Sent again under the same id, its first answer lost: taken once,
+        // and answered as it was.
+        if let id = envelope.id, !id.isEmpty, !record.takeSend(id) {
+            Self.log("a message for \(record.info.title) (\(record.info.id)) came again (\(id)): it was taken the first time")
+            return
+        }
         // Writing to an archived session brings it back, same parameters.
         if record.info.archived { unarchive(record) }
         deliver(text, to: record, images: envelope.images ?? [])

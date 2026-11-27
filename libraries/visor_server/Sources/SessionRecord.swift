@@ -205,6 +205,11 @@ public final class SessionRecord {
     /// The permission mode changed mid-turn: restart the process when the turn ends.
     var restartWhenIdle = false
 
+    /// The ids of the clients' sends taken lately, with when: a send asked
+    /// again (its answer lost on the way back) is taken once
+    /// (`takeSend`).
+    var takenSends: [String: Date] = [:]
+
     /// A turn was handed to the agent and never finished. Set when the
     /// message is sent, cleared when the agent goes idle, and persisted:
     /// after a kill it is the only sign that a reply is owed.

@@ -59,7 +59,23 @@ final class UnsentMessageTests: XCTestCase {
         try await waitFor { ScriptedProvider.server.sent.count == 4 }
         XCTAssertEqual(ScriptedProvider.server.sent.map { $0.1 }, ["first", "second", "first", "second"], "in the order they were said")
         XCTAssertEqual(transcript.sending.map(\.id), ids, "each in its own row still")
+        XCTAssertEqual(ScriptedProvider.server.sentIDs, ids + ids, "under the rows' ids, which the server takes once")
         XCTAssertTrue(transcript.sending.allSatisfy { $0.shown && $0.failure == nil })
+    }
+
+    /// A request that failed on the way, unanswered, may have arrived or
+    /// not: a send goes once more, under its id. An answer (an HTTP status)
+    /// or a refusal said before it went is no such failure.
+    func testOnlyASendLostOnTheWayGoesAgain() {
+        struct Lost: Error, CustomStringConvertible { var description: String { "The network connection was lost." } }
+        struct Answered: Error, CustomStringConvertible { var description: String { "HTTP 404: no such session" } }
+        let saved = VisorHost.http
+        defer { VisorHost.http = saved }
+        VisorHost.http = StatusReadingHTTP()
+        XCTAssertTrue(VisorAgentServer.unanswered(Lost()))
+        XCTAssertFalse(VisorAgentServer.unanswered(Answered()))
+        XCTAssertFalse(VisorAgentServer.unanswered(AgentServerError.message("No HTTP service on this host")))
+        XCTAssertFalse(VisorAgentServer.unanswered(CancellationError()))
     }
 
     func testNotSentMessagesCanBeLetGo() async throws {
@@ -76,4 +92,10 @@ final class UnsentMessageTests: XCTestCase {
         host.sendMessage("s", text: "and now")
         XCTAssertEqual(transcript.sending.map(\.shown), [true])
     }
+}
+
+/// An HTTP service that only reads statuses off its errors, as a host's
+/// does ("HTTP <status>: <body>").
+private struct StatusReadingHTTP: VisorHTTPService {
+    func request(method: String, url: String, body: String, authorization: String) async throws -> String { "" }
 }
