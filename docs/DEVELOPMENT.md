@@ -1379,9 +1379,10 @@ container agents.
     never reach GitHub's runners. What needs macOS itself (the Mac's tests
     run, the iPhone's and the Mac's proofs, the launch checks, the site's
     pictures) runs in a macOS VM (`xcode_27_2`, macOS 27) that such a job
-    leases for its step (tools/ci/mac_vm.sh: the VM's own ssh, its key the
-    step's; renewed while the step runs, released however it ends; two
-    such VMs in all, shared), on a dispatch or a release's tag alone, never
+    leases (tools/ci/mac_vm.sh: the VM's own ssh, its key the job's;
+    renewed while it runs, released at its end; two such VMs in all,
+    shared, so a verify run takes one: its `mac` job runs the Mac's tests,
+    then the Mac's and the iPhone's proofs, in it), on a dispatch or a release's tag alone, never
     a pull request's or a fork's code (Logan, 27 Nov 2026: no paid GitHub
     runner, and the VM's open network taken until Nimbus' VMs have the
     containers' egress rule). Nothing secret goes in (no token, no key, no
@@ -1826,7 +1827,9 @@ found) leaves its screens to launches of their own, and fails the test.
   the app turns itself (its `fixture.orientation` setting, which its
   delegate answers with landscapeRight alone), and the picture, the
   device's upright frame, is turned to stand.
-- The Mac (`tools/ci/proof_mac.sh`, in another macOS VM's desktop session):
+- The Mac (`tools/ci/proof_mac.sh`, in the same VM's desktop session, its
+  pictures cut from Nimbus' picture of the VM's screen,
+  `VISOR_PROOF_SHOT=framebuffer`, until the VMs may picture their own):
   Visor.app, signed ad hoc as its build left it, opened on each of the
   fixture's screens in the light look and pictured cropped to its window.
   Not through the driver yet: Isomer's Mac launcher takes no launch
