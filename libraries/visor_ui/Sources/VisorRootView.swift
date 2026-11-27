@@ -548,8 +548,9 @@ public struct VisorRootView: View {
     }
 
     /// One section per computer, by name, headed by its name and whether
-    /// it is answering: its sessions, those pinned first, then the latest
-    /// activity first (SidebarOrder); its projects' archives. The last section adds a computer. Each computer's
+    /// it is answering: its sessions, those pinned first, each by title
+    /// (SidebarOrder: nothing that happens moves a row); its projects'
+    /// archives. The last section adds a computer. Each computer's
     /// settings and the account are in Settings (VisorSettingsView).
     /// Search narrows the rows in every section at once.
     private var outline: some View {
@@ -662,11 +663,11 @@ public struct VisorRootView: View {
 
     @ViewBuilder private func sessionMenu(_ card: SessionCard) -> some View {
         let host = card.host, session = card.session
-        // To the top of its computer's list, after those pinned already;
-        // unpinned, back among the rest. Not from a server that keeps no
-        // pins (before 0.73).
+        // To the top of its computer's list, among those pinned; unpinned,
+        // back among the rest. Not from a server that keeps no pins
+        // (before 0.73).
         if host.pins {
-            if session.pinnedAt == nil {
+            if !session.pinned {
                 Button { host.pin(session.id) } label: { Label("Pin", systemImage: "pin") }
             } else {
                 Button { host.unpin(session.id) } label: { Label("Unpin", systemImage: "pin.slash") }

@@ -19,7 +19,10 @@ let package = Package(
         .package(url: "https://github.com/AttilaTheFun/isomer.git", revision: "v0.58.1"),
         .package(
             url: "https://github.com/AttilaTheFun/agent_ui.git",
-            exact: "0.51.0"
+            // MarkdownPreview (agent_ui's markdown-preview branch), for the
+            // sidebar's previews (visor#560): by version once AgentUI
+            // releases it, before Visor's next release (CI's pins job).
+            revision: "1ba86cb5deafe7ccbbdb9c628819153c935619ec"
         ),
         // agent_protocol: its services' Swift (VisorDriver, the native
         // runner) and agent-wrapper (the Mac app's Helpers), by release:

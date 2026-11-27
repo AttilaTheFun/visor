@@ -79,7 +79,7 @@ extension VisorServer {
         record.refreshResume()
         record.setArchived(true)
         // Off the top of the list it has left (VisorServer+SessionPins).
-        record.info.pinnedAt = nil
+        if record.info.pinned { setPinned(false, record) }
         removeSessionTokenFile(of: record.info.id)
         record.restartWhenIdle = false
         // Archived means no process and nothing owed: it must not come back

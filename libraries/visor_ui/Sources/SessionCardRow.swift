@@ -40,7 +40,7 @@ struct SessionCardRow: View {
                     .font(.headline)
                     .lineLimit(1)
                 // Pinned to the top of its computer's list (Pin, in its menu).
-                if session.pinnedAt != nil {
+                if session.pinned {
                     Image(systemName: "pin.fill").font(.caption).foregroundStyle(.secondary)
                         .accessibilityLabel("Pinned")
                         .accessibilityIdentifier("pinned-" + session.id)
@@ -59,8 +59,9 @@ struct SessionCardRow: View {
                 // the line's spacing on Isomer).
                 if Self.activity(of: session) != .none { activity }
             }
-            // Its markdown rendered, not shown (PreviewMarkdown).
-            PreviewMarkdown.text(session.preview ?? "No messages yet")
+            // Its markdown as the thread reads it, flattened to its words
+            // (AgentUI's MarkdownPreview): not shown raw.
+            MarkdownPreview(session.preview ?? "No messages yet")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)

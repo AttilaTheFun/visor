@@ -10,9 +10,8 @@ public enum SessionAction: Equatable, Sendable {
     /// The session's notifications on or off, for every device
     /// (`SessionInfo.notifications`).
     case notifications(on: Bool)
-    /// The session pinned to the top of its computer's list, after those
-    /// pinned already, or unpinned, for every device
-    /// (`SessionInfo.pinnedAt`).
+    /// The session pinned to the top of its computer's list, or
+    /// unpinned, for every device (`SessionInfo.pinned`).
     case pin
     case unpin
     case settings(model: String?, effort: String?)

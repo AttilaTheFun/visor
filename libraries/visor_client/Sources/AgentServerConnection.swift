@@ -1551,8 +1551,7 @@ public final class AgentServerConnection: Identifiable {
     /// pins, and is offered no Pin.
     public var pins: Bool { server.pins }
 
-    /// Pins the session to the top of the computer's list, after those
-    /// pinned already, or unpins it. The session's own, kept by its
+    /// Pins the session to the top of the computer's list, or unpins it. The session's own, kept by its
     /// server, so every device lists the same.
     public func pin(_ sessionID: String) { act(.pin, on: sessionID) }
     public func unpin(_ sessionID: String) { act(.unpin, on: sessionID) }

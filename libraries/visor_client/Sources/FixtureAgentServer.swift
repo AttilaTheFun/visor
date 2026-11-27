@@ -134,10 +134,10 @@ final class FixtureAgentServer: AgentServer {
     /// setting the fixture keeps, as a server keeps it, so its switch in
     /// Session details stays where it was put.
     private var muted: Set<String> = []
-    /// The sessions pinned here, and when, and those unpinned here: kept,
-    /// as a server keeps them, so a pin or an unpin stays (the fixture's
-    /// own pins until then).
-    private var pinned: [String: Double] = [:]
+    /// The sessions pinned here, and those unpinned here: kept, as a
+    /// server keeps them, so a pin or an unpin stays (the fixture's own
+    /// pins until then).
+    private var pinned: Set<String> = []
     private var unpinned: Set<String> = []
     /// It keeps pins, as a server of 0.73 or later does.
     var pins: Bool { true }
@@ -150,7 +150,7 @@ final class FixtureAgentServer: AgentServer {
         sessions.map { info in
             var info = info
             info.notifications = !muted.contains(info.id)
-            if let at = pinned[info.id] { info.pinnedAt = at } else if unpinned.contains(info.id) { info.pinnedAt = nil }
+            if pinned.contains(info.id) { info.pinned = true } else if unpinned.contains(info.id) { info.pinned = false }
             if let place = placed[info.id] { info.placement = place }
             return info
         }
@@ -232,13 +232,11 @@ final class FixtureAgentServer: AgentServer {
         }
         switch action {
         case .notifications(let on): if on { muted.remove(session) } else { muted.insert(session) }
-        // A pin after every other, as a server makes it.
         case .pin:
-            guard kept(listed).first(where: { $0.id == session })?.pinnedAt == nil else { break }
             unpinned.remove(session)
-            pinned[session] = max(VisorFixture.now, kept(listed).compactMap(\.pinnedAt).max() ?? 0) + 1
+            pinned.insert(session)
         case .unpin:
-            pinned.removeValue(forKey: session)
+            pinned.remove(session)
             unpinned.insert(session)
         default: return []
         }

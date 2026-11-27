@@ -184,7 +184,7 @@ public struct Envelope: Codable, Sendable {
     /// shows, in memory, and asks again for those it let go of. Absent:
     /// they may.
     public var keepMessages: Bool?
-    /// `hello`: the server keeps sessions' pins (`SessionInfo.pinnedAt`,
+    /// `hello`: the server keeps sessions' pins (`SessionInfo.pinned`,
     /// `pin` and `unpin`), from 0.73. Absent: it has none, and a client
     /// offers no Pin.
     public var pins: Bool?
@@ -340,9 +340,8 @@ extension Envelope {
     public static func notifications(session: String, on: Bool) -> Envelope {
         var e = Envelope(type: "notifications"); e.session = session; e.on = on; return e
     }
-    /// The session pinned to the top of its computer's list, after those
-    /// pinned already (`SessionInfo.pinnedAt`), or unpinned: for every
-    /// device.
+    /// The session pinned to the top of its computer's list
+    /// (`SessionInfo.pinned`), or unpinned: for every device.
     public static func pin(session: String) -> Envelope {
         var e = Envelope(type: "pin"); e.session = session; return e
     }

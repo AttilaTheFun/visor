@@ -133,12 +133,17 @@ public struct SessionInfo: Codable, Identifiable, Hashable, Sendable {
     /// container, or a runner's. Nil from a server before 0.64, which a
     /// client takes as the computer's own (or `inContainer`'s).
     public var placement: SessionPlacement?
-    /// When it was pinned to the top of its computer's list (seconds since
-    /// 1970), nil when it isn't: pinned sessions list first, the first
-    /// pinned on top, so an unpin and a pin again puts it last of them.
-    /// The session's, kept on its server, so every device lists the same.
-    /// Nil from a server before 0.73, which has no pins.
-    public var pinnedAt: Double?
+    /// Pinned to the top of its computer's list: pinned sessions list
+    /// first. The session's, kept by its server (in its database, not
+    /// sessions.json), so every device lists the same. False from a server
+    /// before 0.73, which has no pins.
+    public var pinned: Bool {
+        get { pin == true }
+        set { pin = newValue ? true : nil }
+    }
+    /// `pinned` as it is kept: nil unless pinned, so the store, whose copy
+    /// is never pinned (its pins are the database's), writes nothing of it.
+    private var pin: Bool?
 
     public init(id: String, agent: AgentKind, cwd: String, title: String, busy: Bool = false, ended: Bool = false,
                 skipPermissions: Bool = true, archived: Bool = false, resumeCommand: String? = nil,
@@ -211,6 +216,5 @@ public struct SessionInfo: Codable, Identifiable, Hashable, Sendable {
         continuedFrom = try c.decodeIfPresent(String.self, forKey: .continuedFrom)
         // A placement a later build wrote, which this one has not heard of, is none.
         placement = (try? c.decodeIfPresent(SessionPlacement.self, forKey: .placement)) ?? nil
-        pinnedAt = try c.decodeIfPresent(Double.self, forKey: .pinnedAt)
     }
 }

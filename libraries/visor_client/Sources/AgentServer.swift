@@ -247,7 +247,7 @@ public protocol AgentServer: AnyObject {
 
     // MARK: Pins
 
-    /// Whether this server keeps its sessions' pins (`SessionInfo.pinnedAt`,
+    /// Whether this server keeps its sessions' pins (`SessionInfo.pinned`,
     /// `act`'s `pin` and `unpin`): what Pin is offered by.
     var pins: Bool { get }
 
