@@ -76,5 +76,11 @@ let package = Package(
         // (ContainerPins). It asks for swift-collections 1.2 or later, and
         // brings async-http-client and zstd.
         .package(url: "https://github.com/apple/containerization.git", exact: "0.57.0"),
+        // build_tools (AttilaTheFun/build_tools): its `sign`, which CI's
+        // signing job (tools/ci/sign_builds.sh, //tools/ci:sign) signs the
+        // Apple apps with, stamping the build settings they were built
+        // without (`sign apple --add-infoplist`, `--add-groups`: 0.7.0,
+        // build_tools#18 and #20). It brings swift-subprocess.
+        .package(url: "https://github.com/AttilaTheFun/build_tools.git", exact: "0.7.0"),
     ]
 )
