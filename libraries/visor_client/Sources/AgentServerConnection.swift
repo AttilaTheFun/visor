@@ -1401,7 +1401,8 @@ public final class AgentServerConnection: Identifiable {
     /// working one, in the composer's queue.
     private func outgoing(_ text: String, images: [String], in sessionID: String, _ session: SessionTranscript) -> SessionTranscript.Outgoing {
         let info = sessions.first { $0.id == sessionID }
-        let idle = !session.busy && !(info?.busy ?? false) && (info?.queued.isEmpty ?? true) && session.sending.isEmpty
+        let idle = !session.busy && !(info?.busy ?? false) && (info?.queued.isEmpty ?? true)
+            && session.sending.allSatisfy { $0.failure != nil }
         let entry = TranscriptEntry(id: "sending-" + AgentServerRecord.newID(), role: .user, text: text, images: images)
         var outgoing = SessionTranscript.Outgoing(id: entry.id, entry: entry, sinceRevision: session.revision)
         outgoing.shown = idle
@@ -1415,12 +1416,16 @@ public final class AgentServerConnection: Identifiable {
     /// the server handed straight to the agent though it looked busy from
     /// here (the session's state a moment behind) goes in the thread now,
     /// as if it had looked idle, rather than nowhere until the agent's log
-    /// has it, after the reply has begun. Not taken, it is not on its way
-    /// at all, and the user is told.
+    /// has it, after the reply has begun. Not taken, it stays in the
+    /// thread, marked as not sent and why, to be sent again or let go of
+    /// (`resend`, `discardUnsent`), and the connection log says so: it
+    /// once left the thread with nothing said anywhere (26 Nov 2026).
     private func post(_ sessionID: String, outgoing id: String, text: String, images: [String]) async {
         let session = transcript(for: sessionID)
         do {
-            let answer = try await server.sendMessage(sessionID, text: text, images: images)
+            // Under the row's id: sent again (here or by `resend`), it is
+            // taken once.
+            let answer = try await server.sendMessage(sessionID, text: text, images: images, id: id)
             take(answer, replacing: false)
             // A command stays out: its log may never write it back.
             if !text.hasPrefix("/"), let info = answer.first(where: { $0.id == sessionID }), !info.queued.contains(text),
@@ -1431,10 +1436,47 @@ public final class AgentServerConnection: Identifiable {
             }
             commandError = nil
         } catch {
-            session.sending.removeAll { $0.id == id }
             let words = text.count > 60 ? String(text.prefix(60)) + "…" : text
-            commandError = "Not sent (“\(words)”): \(error)"
+            let reason = Self.sendFailure(error)
+            note("thread \(sessionID.prefix(8)): a message was not sent (\(text.count) characters): \(reason)")
+            commandError = "Not sent (“\(words)”): \(reason)"
+            if let index = session.sending.firstIndex(where: { $0.id == id }) {
+                session.sending[index].failure = reason
+                session.sending[index].shown = true
+            }
         }
+        session.flush()
+    }
+
+    /// Why a send failed, in words for the thread: what the computer said
+    /// when it answered, else what the connection said.
+    static func sendFailure(_ error: Error) -> String {
+        if case AgentServerError.message(let words) = error { return words }
+        let said = "\(error)"
+        return said.isEmpty ? "the computer did not answer" : said
+    }
+
+    /// Sends again, in order, the messages of the session that were not
+    /// sent: each its own row still, on its way again.
+    public func resend(_ sessionID: String) {
+        let session = transcript(for: sessionID)
+        let again = session.unsent
+        guard !again.isEmpty else { return }
+        for out in again {
+            guard let index = session.sending.firstIndex(where: { $0.id == out.id }) else { continue }
+            session.sending[index].failure = nil
+        }
+        note("thread \(sessionID.prefix(8)): \(again.count == 1 ? "a message" : "\(again.count) messages") sent again")
+        session.flush()
+        Task { [weak self] in
+            for out in again { await self?.post(sessionID, outgoing: out.id, text: out.entry.text, images: out.entry.images) }
+        }
+    }
+
+    /// Lets go of the messages of the session that were not sent.
+    public func discardUnsent(_ sessionID: String) {
+        let session = transcript(for: sessionID)
+        session.sending.removeAll { $0.failure != nil }
         session.flush()
     }
 

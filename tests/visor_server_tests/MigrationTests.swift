@@ -7,7 +7,10 @@
 // that conversation for the new folder and starts a session on it, told
 // where it came from. No path of the other server's, or of the client's,
 // is used; a move over the caps, or one that would not fit, is refused;
-// and the project steps of before are gone.
+// and the project steps of before are gone. Claude's memory is found where
+// Claude Code keeps it for that conversation: beside its transcript (a
+// link followed), else under its folder's repository's project or its
+// folder's.
 
 import ClaudeTranscript
 import Foundation
@@ -161,6 +164,166 @@ extension ServerTests {
         #expect(server.session("S") != nil)
         #expect(FileManager.default.fileExists(atPath: file.path))
         #expect(FileManager.default.fileExists(atPath: cwd.appendingPathComponent("main.swift").path))
+    }
+
+    // MARK: Claude's memory, where Claude Code keeps it
+
+    /// A session in `cwd` on the conversation, its transcript under the
+    /// project `kept` (the folder Claude Code was started in), and nothing else.
+    private func session(_ id: String, cwd: URL, kept: URL) throws -> URL {
+        try FileManager.default.createDirectory(at: cwd, withIntermediateDirectories: true)
+        let folder = project(kept.path)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let file = folder.appendingPathComponent(conversation + ".jsonl")
+        try Data((#"{"type":"user","message":{"content":"hello"}}"# + "\n").utf8).write(to: file)
+        let info = SessionInfo(id: id, agent: .claude, cwd: cwd.path, title: "Remembering", created: 0)
+        server.sessions = [SessionRecord(info: info, process: ClaudeProcess(cwd: cwd.path, skipPermissions: true, resume: conversation))]
+        return file
+    }
+
+    /// A memory folder at `folder`, its index saying `words`.
+    private func memory(at folder: URL, _ words: String) throws {
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try Data(words.utf8).write(to: folder.appendingPathComponent("MEMORY.md"))
+    }
+
+    /// The session `id` moved end to end: the new folder's project's
+    /// memory index, if one was put there.
+    private func movedMemory(of id: String) async throws -> String? {
+        let offer = try await offer(of: id)
+        #expect(offer.files.contains { $0.id == VisorServer.memoryFileID }, "the memory offered")
+        let planned = await plan(offer)
+        let plan = try #require(planned.plan, Comment(rawValue: planned.message ?? "no plan"))
+        for carried in offer.files { carry(carried, offer: offer.token, plan: plan.id) }
+        var finishing = Envelope(type: "migration")
+        finishing.migration = plan.id
+        let finished = await server.migrationFinish(finishing)
+        #expect(finished.type != "error", Comment(rawValue: finished.message ?? ""))
+        let placed = project(plan.cwd).appendingPathComponent("memory", isDirectory: true)
+        var isFolder: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: placed.path, isDirectory: &isFolder) else { return nil }
+        #expect(isFolder.boolValue && (try? FileManager.default.destinationOfSymbolicLink(atPath: placed.path)) == nil, "a folder, not a link")
+        return try? String(contentsOf: placed.appendingPathComponent("MEMORY.md"), encoding: .utf8)
+    }
+
+    /// Overcast's (26 Nov 2026): its conversation kept under the project of
+    /// the folder it began in, which it has since left, and its memory a
+    /// link there to another project's. The memory comes as the folder it
+    /// leads to, never as the link (which the other end refused: "it holds
+    /// memory, which is not a folder").
+    @Test func testAMemoryThatIsALinkComesAsTheFolderItLeadsTo() async throws {
+        let began = home.appendingPathComponent("Developer/overcast", isDirectory: true)
+        let now = home.appendingPathComponent("Developer/overcast_isomer", isDirectory: true)
+        let file = try session("L", cwd: now, kept: began)
+        let elsewhere = project(now.path).appendingPathComponent("memory", isDirectory: true)
+        try memory(at: elsewhere, "- [Overcast](overcast.md)\n")
+        try FileManager.default.createSymbolicLink(at: file.deletingLastPathComponent().appendingPathComponent("memory"), withDestinationURL: elsewhere)
+        #expect(try await movedMemory(of: "L") == "- [Overcast](overcast.md)\n")
+    }
+
+    /// A link to a folder by another name (inside Claude's projects folder):
+    /// packed as `memory` all the same.
+    @Test func testAMemoryLinkedToAFolderByAnotherNameComes() async throws {
+        let cwd = home.appendingPathComponent("Developer/app", isDirectory: true)
+        let file = try session("N", cwd: cwd, kept: cwd)
+        let notes = ClaudeSessionFiles.projectsRoot(home: home).appendingPathComponent("-shared/notes", isDirectory: true)
+        try memory(at: notes, "- notes\n")
+        try FileManager.default.createSymbolicLink(at: file.deletingLastPathComponent().appendingPathComponent("memory"), withDestinationURL: notes)
+        #expect(try await movedMemory(of: "N") == "- notes\n")
+    }
+
+    /// A container's agent writes its Claude folder, and could point a
+    /// `memory` there at any folder of this computer's (NCH, #562): one
+    /// leading out of Claude's projects folder is never read or offered.
+    @Test func testAMemoryLinkedOutOfClaudesProjectsIsRefused() async throws {
+        let cwd = home.appendingPathComponent("Developer/app", isDirectory: true)
+        let file = try session("O", cwd: cwd, kept: cwd)
+        let keys = home.appendingPathComponent(".ssh", isDirectory: true)
+        try memory(at: keys, "a secret key\n")
+        try FileManager.default.createSymbolicLink(at: file.deletingLastPathComponent().appendingPathComponent("memory"), withDestinationURL: keys)
+        let offer = try await offer(of: "O")
+        #expect(!offer.files.contains { $0.id == VisorServer.memoryFileID }, "no memory offered")
+        let out = VisorServer.migrationsFolder.appendingPathComponent("out-" + offer.token, isDirectory: true)
+        #expect(!FileManager.default.fileExists(atPath: out.appendingPathComponent("memory.tgz").path), "nothing packed")
+    }
+
+    /// The offer's packed memory unpacked into a folder of the test's: what
+    /// it holds, as tar puts it.
+    private func unpackedMemory(of offer: MigrationOffer) throws -> URL {
+        let archive = VisorServer.migrationsFolder.appendingPathComponent("out-\(offer.token)/memory.tgz")
+        let into = root.appendingPathComponent("unpacked-\(offer.token)", isDirectory: true)
+        try FileManager.default.createDirectory(at: into, withIntermediateDirectories: true)
+        let tar = Process()
+        tar.executableURL = URL(fileURLWithPath: ToolPath.resolve("tar") ?? "/usr/bin/tar")
+        tar.arguments = ["-xzf", archive.path, "-C", into.path]
+        try tar.run()
+        tar.waitUntilExit()
+        #expect(tar.terminationStatus == 0)
+        return into.appendingPathComponent("memory", isDirectory: true)
+    }
+
+    /// A link inside the memory leading out is packed as the link, never
+    /// followed: what it leads to is never read (and the other end refuses
+    /// a memory with one: MigrationContainment's unsafeTree). Both by its
+    /// own name and copied in by another's first.
+    @Test func testALinkInsideTheMemoryIsPackedAsALink() async throws {
+        let secret = home.appendingPathComponent("secret.txt")
+        try Data("a secret key\n".utf8).write(to: secret)
+        for (id, named) in [("P", "memory"), ("Q", "notes")] {
+            let cwd = home.appendingPathComponent("Developer/app-\(id)", isDirectory: true)
+            let file = try session(id, cwd: cwd, kept: cwd)
+            let folder = file.deletingLastPathComponent()
+            let held = named == "memory" ? folder.appendingPathComponent("memory", isDirectory: true)
+                : ClaudeSessionFiles.projectsRoot(home: home).appendingPathComponent("-shared-\(id)/\(named)", isDirectory: true)
+            try memory(at: held, "- [Key](key.md)\n")
+            try FileManager.default.createSymbolicLink(at: held.appendingPathComponent("key.md"), withDestinationURL: secret)
+            if named != "memory" {
+                try FileManager.default.createSymbolicLink(at: folder.appendingPathComponent("memory"), withDestinationURL: held)
+            }
+            let offer = try await offer(of: id)
+            #expect(offer.files.contains { $0.id == VisorServer.memoryFileID })
+            let unpacked = try unpackedMemory(of: offer)
+            #expect((try? FileManager.default.destinationOfSymbolicLink(atPath: unpacked.appendingPathComponent("key.md").path)) == secret.path,
+                    "kept as a link (\(named))")
+            #expect((try? String(contentsOf: unpacked.appendingPathComponent("MEMORY.md"), encoding: .utf8)) == "- [Key](key.md)\n")
+            try FileManager.default.removeItem(at: secret)
+            #expect(!FileManager.default.fileExists(atPath: unpacked.appendingPathComponent("key.md").path), "nothing of it in the archive")
+            try Data("a secret key\n".utf8).write(to: secret)
+        }
+    }
+
+    /// Claude Code keeps a repository's memory under the project of its
+    /// top, for every folder in it, while a conversation begun in one of
+    /// those folders is kept under that folder's: the memory is the top's.
+    @Test func testTheMemoryOfAConversationInARepositorysFolderIsTheRepositorys() async throws {
+        let top = home.appendingPathComponent("Developer/app", isDirectory: true)
+        try FileManager.default.createDirectory(at: top.appendingPathComponent(".git"), withIntermediateDirectories: true)
+        let inside = top.appendingPathComponent("Sources/App", isDirectory: true)
+        let file = try session("R", cwd: inside, kept: inside)
+        #expect(file.deletingLastPathComponent() != project(top.path))
+        try memory(at: project(top.path).appendingPathComponent("memory"), "- the repository's\n")
+        #expect(ClaudeSessionFiles.memoryProjectDirectoryName(for: inside.path) == ClaudeSessionFiles.projectDirectoryName(for: top.path))
+        #expect(try await movedMemory(of: "R") == "- the repository's\n")
+    }
+
+    /// A conversation kept under another project than its folder's, with
+    /// the memory beside it: that memory, before the folder's own.
+    @Test func testTheMemoryBesideTheTranscriptComesFirst() async throws {
+        let began = home.appendingPathComponent("Developer", isDirectory: true)
+        let cwd = home.appendingPathComponent("Developer/overcast", isDirectory: true)
+        let file = try session("T", cwd: cwd, kept: began)
+        try memory(at: file.deletingLastPathComponent().appendingPathComponent("memory"), "- beside the transcript\n")
+        try memory(at: project(cwd.path).appendingPathComponent("memory"), "- the folder's\n")
+        #expect(try await movedMemory(of: "T") == "- beside the transcript\n")
+    }
+
+    /// None beside the transcript: the folder's project's, as before.
+    @Test func testWithNoneBesideTheTranscriptTheFoldersMemoryComes() async throws {
+        let began = home.appendingPathComponent("Developer", isDirectory: true)
+        let cwd = home.appendingPathComponent("Developer/overcast", isDirectory: true)
+        _ = try session("F", cwd: cwd, kept: began)
+        try memory(at: project(cwd.path).appendingPathComponent("memory"), "- the folder's\n")
+        #expect(try await movedMemory(of: "F") == "- the folder's\n")
     }
 
     // MARK: No path of the peer's or the client's
