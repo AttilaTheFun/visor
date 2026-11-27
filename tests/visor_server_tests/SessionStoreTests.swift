@@ -214,11 +214,15 @@ extension ServerTests {
         #expect(mode == 0o444)
         #expect(logged.all.contains { $0.contains("imported 2 sessions from sessions.json") })
 
-        // The next launch reads the database, and has what the first had.
+        // What the first launch wrote is what the database gives back, and
+        // the next launch reads it.
         let first = try server.sessions.map { try SessionStore.Row.encoded($0.stored) }
+        #expect(try reader().rows().map(\.stored) == first)
         let again = launch()
         #expect(again.sessions.map(\.info.id) == ["beta", "alpha"])
-        #expect(try again.sessions.map { try SessionStore.Row.encoded($0.stored) } == first)
+        #expect((again.session("alpha")?.info.title) == "Alpha")
+        #expect((again.session("alpha")?.mailbox.inbox.map(\.id)) == ["m1"])
+        #expect((again.session("beta")?.info.archived) == true)
     }
 
     @Test func testTheImportRunsOnceAndAgainOnlyForAnOlderBuildsFile() throws {
