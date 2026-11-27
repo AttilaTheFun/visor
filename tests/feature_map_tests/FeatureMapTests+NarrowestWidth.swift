@@ -19,7 +19,7 @@ extension FeatureMapTests {
             try app.screen(within: 15) { FeatureMapNode.chat.isShown(on: $0) }
             let layout = try app.layout()
             #expect(layout.width == Self.width, "the window: \(layout.width) by \(layout.height)")
-            #expect(layout.items.contains { $0.label == FeatureMapTests.Chat.composer || $0.identifier == "model" },
+            #expect(layout.items.contains { $0.label == "Message Claude Code" || $0.identifier == "model" },
                     "the composer is laid out: \(Self.listing(layout))")
             let out = Self.outside(layout)
             #expect(out.isEmpty, "off the window's side: \(Self.listing(out))")
