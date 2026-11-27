@@ -10,11 +10,11 @@
 // - Move to Container ends the agent here, and starts one in the container
 //   on the same conversation (the driver's Conversation sends it down). A
 //   session working under a folder the container shares (Sessions, the
-//   checkouts' folder) keeps it; any other works in
-//   `<Sessions>/Claude/<agent>`, with the repositories it worked in cloned
-//   there (pushed first, as for a runner). Its prompts are skipped (the
-//   container is its sandbox). One whose agent can't start there is moved
-//   straight back.
+//   checkouts' folder) keeps it; any other works in a folder of its own,
+//   `<Sessions>/Claude/<id>`, with nothing cloned into it (Logan, 26 Nov
+//   2026): its agent clones what it needs into the checkouts' folder
+//   itself. Its prompts are skipped (the container is its sandbox). One
+//   whose agent can't start there is moved straight back.
 // - Its agent's end, unless it was let go (Stop Agent, Restart Agent, Move
 //   Back, archived or ended), starts another on its latest conversation:
 //   the container restarted under it (an update of its image, a crash), or
@@ -44,10 +44,11 @@ extension VisorServer {
     /// Move to Container: the session's agent here ended, and one started
     /// in the Sessions container on the same conversation. Refused for a
     /// session that isn't here, isn't Claude Code's, is archived or
-    /// mid-turn, has no conversation yet, or works in a repository outside
-    /// the container's folders with work not yet pushed; and while the
-    /// container can't take sessions (off, no egress). Answered once its
-    /// agent has started there (or the session is back, saying why not).
+    /// mid-turn, has no conversation yet, or whose own folder is in a
+    /// repository outside the container's folders with work not yet pushed
+    /// (left here, out of its agent's reach there); and while the container
+    /// can't take sessions (off, no egress). Answered once its agent has
+    /// started there (or the session is back, saying why not).
     package func moveToContainer(_ id: String) async -> Result<Void, AgentJobRefusal> {
         guard let container = sessionsContainer, drivenProcess != nil else {
             return .failure(AgentJobRefusal(Self.noContainerEngine))
@@ -61,24 +62,24 @@ extension VisorServer {
         }
         let shared = container.sharedFolders
         let cwd = (record.info.cwd as NSString).expandingTildeInPath
-        let conversation = SessionCatalog.conversationFiles(agent: .claude, id: resume, cwd: cwd).first { !$0.folder }?.url
-        let projects = await ProjectSurvey.projects(cwd: cwd, conversation: conversation, home: SessionCatalog.home.path)
-        // What the container shares is there as it is; the rest is cloned.
-        let outside = projects.filter { project in !shared.contains { Self.isInside(project.path, $0) } }
-        if let unpushed = outside.first(where: { $0.unshared }) {
-            return .failure(AgentJobRefusal("\(unpushed.path) has work that isn't pushed: push it first, so the container's clone has it."))
-        }
-        // Looked at again: the survey took a while.
-        if let refusal = containerMoveRefusal(record) { return .failure(refusal) }
-        let sources = outside.compactMap { project -> AgentJobSource? in
-            guard let remote = project.remote.flatMap(Self.cloneURL) else { return nil }
-            return AgentJobSource(repository: remote, ref: project.branch ?? "", name: (project.path as NSString).lastPathComponent)
-        }
-        let agent = UUID().uuidString.lowercased()
         guard let sessions = shared.first else { return .failure(AgentJobRefusal(Self.noSessionsShared)) }
-        let folder = shared.contains { Self.isInside(cwd, $0) } ? cwd : "\(sessions)/Claude/\(agent)"
+        // What the container shares is there as it is. Nothing else goes
+        // with it: no repository is cloned for it (once, the repositories its
+        // conversation named under this home folder were, and Overcast, moved
+        // from another Mac, was given isomer, a checkout of this Mac's its
+        // transcript named). Its own folder's repository stays here, so work
+        // in it that isn't pushed would be out of its agent's reach.
+        let keeps = shared.contains { Self.isInside(cwd, $0) }
+        if !keeps, let own = await ProjectSurvey.repository(at: cwd), own.unshared {
+            return .failure(AgentJobRefusal("\(own.path) has work that isn't pushed: push it first, so its agent in the Sessions container "
+                + "can clone it."))
+        }
+        // Looked at again: git took a while.
+        if let refusal = containerMoveRefusal(record) { return .failure(refusal) }
+        let agent = UUID().uuidString.lowercased()
+        let folder = keeps ? cwd : SessionFolders(sessions: sessions).folder(agent: .claude, id: record.info.id)
         let move = AgentJobMove(agent: agent, session: record.info.id, title: record.info.title, model: record.info.model ?? "",
-                                effort: record.info.effort ?? "", resume: resume, cwd: cwd, sources: sources,
+                                effort: record.info.effort ?? "", resume: resume, cwd: cwd,
                                 runsOn: ContainerRunner.runsOn, workingDirectory: folder, skipPermissions: true)
         // The agent here goes first.
         await record.process.end(within: .seconds(5))
@@ -88,11 +89,11 @@ extension VisorServer {
         // container runner's always were (#391), and asked again back here.
         record.setPermissions(skip: true)
         record.move = move
-        record.notice = nil
+        record.notice = keeps ? nil : Self.dated(Self.newFolderNotice(folder, leaving: cwd, checkouts: shared.dropFirst().first))
         record.runsInContainer = true
         setAgentState(record, .starting)
         Self.log("moving \(record.info.title) (\(record.info.id)) into the Sessions container, carrying on \(resume) in \(folder)"
-            + (sources.isEmpty ? "" : ", with \(sources.count) repositories cloned"))
+            + (keeps ? "" : ", a folder of its own, nothing cloned"))
         saveArchiveNow()
         broadcastSessions()
         return await startInContainer(record, first: true)
@@ -159,6 +160,14 @@ extension VisorServer {
         return nil
     }
 
+    /// What a session moved into the container from a folder it doesn't
+    /// share is told: where it works there, that nothing came with it, and
+    /// where its agent clones what it needs (`checkouts`, when shared).
+    static func newFolderNotice(_ folder: String, leaving cwd: String, checkouts: String?) -> String {
+        "In the Sessions container, in a folder of its own, \(folder): nothing was cloned into it, and \(cwd) stays on this computer. "
+            + "Its agent clones what it needs" + (checkouts.map { " into \($0)" } ?? "") + "."
+    }
+
     /// What a session is told when the container shares no Sessions volume
     /// (its engine names it, from volumes.json: never a path assumed here).
     static let noSessionsShared = "The Sessions container shares no Sessions volume: make it with Visor Disk Utility."
@@ -200,8 +209,7 @@ extension VisorServer {
             agent: agent, session: id, title: move.title, harness: harness == "claude" ? nil : harness,
             model: move.model.isEmpty ? nil : move.model, effort: move.effort.isEmpty ? nil : move.effort,
             workingDirectory: move.workingDirectory, resumeSessionID: move.resumeOnRunner, skipPermissions: move.skipPermissions,
-            sources: move.sources.map { ContainerAgent.Source(repository: $0.repository, ref: $0.ref, name: $0.name) },
-            sourcesDirectory: move.sources.isEmpty ? nil : move.workingDirectory, token: containerRunner.token(for: agent),
+            token: containerRunner.token(for: agent),
             // The container's Claude folder is on Sessions, so what its
             // agents say survives the container, and the host can read it;
             // its credential is agent-proxy's, a placeholder here; it

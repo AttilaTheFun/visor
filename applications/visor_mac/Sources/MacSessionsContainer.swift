@@ -78,10 +78,13 @@ final class MacSessionsContainer: SessionsContainer {
     /// The settings as the engine takes them, for this Mac: the checkouts'
     /// folder the setting's, else the Sources volume when it's mounted
     /// (`sources`), shared at the same path; and agent-proxy's MCP
-    /// pass-through's servers for the Claude folder on Sessions (`sessions`).
+    /// pass-through's servers for the Claude folder on Sessions (`sessions`),
+    /// and its CLAUDE.md, importing the checkouts' AGENTS.md.
     static func configuration(_ settings: ServerSettings, manifest: ContainerManifest?, sources: String?,
                               sessions: String) -> ContainerEngineConfiguration {
         let container = settings.container ?? ContainerSettings()
+        let checkouts = container.checkouts ?? sources
+        let claudeFolder = VisorServer.containerClaudeFolder(sessions: sessions)
         let info = ProcessInfo.processInfo
         return ContainerEngineConfiguration(
             enabled: container.enabled,
@@ -90,9 +93,9 @@ final class MacSessionsContainer: SessionsContainer {
             idleMinutes: container.idleMinutes,
             image: ContainerAssets.image(manifest: manifest, override: container.imageDigest),
             relayPort: settings.agentProxy?.relayPort,
-            checkouts: container.checkouts ?? sources,
-            claudeMCP: ContainerClaudeMCP(folder: VisorServer.containerClaudeFolder(sessions: sessions),
-                                          servers: VisorServer.containerMCPServers(settings.agentProxy)))
+            checkouts: checkouts,
+            claudeMCP: ContainerClaudeMCP(folder: claudeFolder, servers: VisorServer.containerMCPServers(settings.agentProxy)),
+            claudeInstructions: ContainerClaudeInstructions(folder: claudeFolder, checkouts: checkouts))
     }
 
     func status() async -> ContainerStatus { await engine.status() }

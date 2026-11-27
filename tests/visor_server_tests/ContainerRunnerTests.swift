@@ -22,6 +22,8 @@
 // And its lifecycle: an agent that ends is started again, three quick ends
 // stop it, a container held stopped stops it, Stop Agent and Start Agent,
 // and a move refused, or one whose agent can't start coming straight back.
+// A session from a folder the container doesn't share works in a folder of
+// its own there, nothing cloned into it, whatever its conversation named.
 
 import AgentProtocol
 import ClaudeTranscript
@@ -334,7 +336,8 @@ extension ServerTests {
         #expect(record.move?.runsOn == ContainerRunner.runsOn && record.move?.agent == agent.agent)
         #expect(agent.session == "m1" && agent.resumeSessionID == conversation)
         #expect(agent.workingDirectory == record.move?.cwd, "a folder on Sessions is kept: the container shares it at the same path")
-        #expect(agent.sources.isEmpty && agent.sourcesDirectory == nil, "nothing to clone")
+        #expect(record.move?.sources.isEmpty == true, "nothing to clone")
+        #expect(record.notice == nil, "its own folder: nothing to tell")
         #expect(agent.skipPermissions && record.info.skipPermissions, "the container is its sandbox")
         #expect(agent.environment["CLAUDE_CONFIG_DIR"] == sessions.path + "/.claude", "its Claude folder on Sessions")
         // Its credential agent-proxy's: a placeholder here, never a token,
@@ -832,8 +835,60 @@ extension ServerTests {
         server.sessions.append(record)
         _ = await server.moveToContainer("outside")
         let started = try #require(container.all.first)
-        #expect(started.agent.workingDirectory == sessions.path + "/Claude/" + started.agent.agent)
+        #expect(started.agent.workingDirectory == sessions.path + "/Claude/outside", "the session's own folder there, by its id")
         #expect(record.move?.cwd == outside.path, "where its conversation is here")
+        #expect(record.move?.sources.isEmpty == true)
+        #expect(record.notice?.contains("nothing was cloned into it") == true, Comment(rawValue: record.notice ?? "no notice"))
+    }
+
+    /// A git repository of this home folder's, with a commit and no remote:
+    /// work that isn't pushed.
+    private func unpushedRepository(_ path: String) async throws -> URL {
+        let folder = ClaudeSessionFiles.home.appendingPathComponent(path, isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try Data("let a = 1\n".utf8).write(to: folder.appendingPathComponent("main.swift"))
+        _ = await ProjectSurvey.git(["init", "-q", "-b", "main"], in: folder.path)
+        _ = await ProjectSurvey.git(["add", "."], in: folder.path)
+        _ = await ProjectSurvey.git(["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-q", "-m", "First"], in: folder.path)
+        return folder
+    }
+
+    /// Overcast's move (26 Nov 2026): its transcript, from another Mac, ran
+    /// git in and edited a checkout this Mac has too (isomer), which was
+    /// cloned for it. Nothing is cloned now, whatever its conversation
+    /// named; and work not pushed there isn't the move's to refuse.
+    @Test func aRepositoryItsConversationWorkedInIsNeverClonedForIt() async throws {
+        let isomer = try await unpushedRepository("Developer/isomer")
+        let outside = root.appendingPathComponent("elsewhere", isDirectory: true)
+        try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+        let project = ClaudeSessionFiles.projectsRoot().appendingPathComponent(ClaudeSessionFiles.projectDirectoryName(for: outside.path))
+        try FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
+        let uses = [
+            #"{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"git -C \#(isomer.path) log --oneline -3"}}"#,
+            #"{"type":"tool_use","id":"t2","name":"Edit","input":{"file_path":"\#(isomer.path)/main.swift","old_string":"1","new_string":"2"}}"#,
+        ]
+        let lines = uses.map { #"{"type":"assistant","message":{"role":"assistant","content":[\#($0)]}}"# + "\n" }
+        try Data(lines.joined().utf8).write(to: project.appendingPathComponent("\(conversation).jsonl"))
+        let record = SessionRecord(info: SessionInfo(id: "overcast", agent: .claude, cwd: outside.path, title: "Overcast", created: 0),
+                                   process: HostAgent(conversation: conversation))
+        server.sessions.append(record)
+        let result = await server.moveToContainer("overcast")
+        #expect(refusal(result) == nil, "a repository its conversation named is no reason to refuse it")
+        let started = try #require(container.all.first { $0.agent.session == "overcast" })
+        #expect(started.agent.workingDirectory == sessions.path + "/Claude/overcast")
+        #expect(record.move?.sources.isEmpty == true, "isomer isn't cloned for it")
+    }
+
+    /// Its own folder's repository stays on this computer: work in it that
+    /// isn't pushed would be out of its agent's reach there.
+    @Test func aMoveFromAFolderWithWorkNotPushedIsRefused() async throws {
+        let own = try await unpushedRepository("Developer/app")
+        let record = SessionRecord(info: SessionInfo(id: "unpushed", agent: .claude, cwd: own.path, title: "Unpushed", created: 0),
+                                   process: HostAgent(conversation: conversation))
+        server.sessions.append(record)
+        let result = await server.moveToContainer("unpushed")
+        #expect(refusal(result)?.contains("isn't pushed") == true, Comment(rawValue: refusal(result) ?? "not refused"))
+        #expect(container.all.isEmpty && !record.driven)
     }
 
     /// `/login` in a session placed in the container signs in nothing here:
