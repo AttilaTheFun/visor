@@ -285,7 +285,11 @@ public enum VisorFixture {
                                     TurnWait(kind: .subagent, id: "toolu_b", label: "Check the banner's copy", work: .subagent)]),
         TurnState(.responding),
     ]
-    static let turnStep: UInt64 = 1_500_000_000
+    /// Four seconds: a headless check's look at the screen on a busy CI
+    /// runner can take longer than the one and a half it was, and a state
+    /// gone before it's looked at failed feature_map_chat_tests' turn walk
+    /// (#554's and #568's container checks, 26–27 Nov 2026).
+    static let turnStep: UInt64 = 4_000_000_000
     static let turnReply = TranscriptEntry(id: "msg_fixture_reply", role: .assistant,
                                            text: "All 42 sync tests pass, offline rows included, and the banner shows how many are still waiting.")
 

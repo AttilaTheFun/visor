@@ -6,7 +6,9 @@
 //   GET /api/settings        ServerControls: how it is reached and signed
 //                            in to, what it is doing, its settings
 //   PUT /api/settings        ServerControlsChange: the fields given set, the
-//                            rest left; the same answer, as it is now
+//                            rest left; the same answer, as it is now (the
+//                            container's CPUs and memory taken at its next
+//                            start: VisorServer+ContainerResources)
 //   GET /api/session-table   {text}: every session as a markdown table
 //
 // Each is an admin route, as every REST route is (authorized).
@@ -55,7 +57,9 @@ extension VisorServer {
                                                     publicAddress: settings.publicAddress, tlsIdentityPath: settings.tlsIdentityPath,
                                                     detachAgents: settings.detachAgents, clientsKeepMessages: settings.clientsKeepMessages,
                                                     containerEnabled: settings.container?.enabled ?? false,
-                                                    containerImageDigest: settings.container?.imageDigest ?? "")
+                                                    containerImageDigest: settings.container?.imageDigest ?? "",
+                                                    containerCPUs: settings.container?.cpus, containerMemoryGiB: settings.container?.memoryGiB,
+                                                    containerIdleMinutes: settings.container?.idleMinutes ?? ContainerSettings.defaultIdleMinutes)
         controls.detachingSet = Self.detachingSet()
         let key = apnsKey
         controls.apnsKeyID = key.keyID
@@ -63,6 +67,7 @@ extension VisorServer {
         controls.apnsConfigured = key.configured
         controls.pushDevices = pushDeviceCount
         controls.hasAdminToken = hasAdminToken
+        controls.containerLimits = containerLimits
         return controls
     }
 
@@ -86,9 +91,11 @@ extension VisorServer {
         if let tlsIdentityPath = change.tlsIdentityPath { next.tlsIdentityPath = tlsIdentityPath }
         if let detachAgents = change.detachAgents { next.detachAgents = detachAgents }
         if let clientsKeepMessages = change.clientsKeepMessages { next.clientsKeepMessages = clientsKeepMessages }
-        if let containerEnabled = change.containerEnabled {
+        if change.containerEnabled != nil || change.containerCPUs != nil || change.containerMemoryGiB != nil
+            || change.containerIdleMinutes != nil {
             var container = next.container ?? ContainerSettings()
-            container.enabled = containerEnabled
+            if let containerEnabled = change.containerEnabled { container.enabled = containerEnabled }
+            if let problem = applyContainerResources(change, to: &container) { return problem }
             next.container = container
         }
         if next != settings { settings = next }

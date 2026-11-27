@@ -1,14 +1,17 @@
 // `visor-agent-host mcp-headers`: the headers a Sessions container agent's
 // Claude shows agent-proxy's MCP pass-through (docs/containers.md, "MCP in
 // the container"), as the pass-through's servers' headersHelper. Claude Code
-// runs it as it connects to each of them, and again when one answers 401 (a
-// token past its hour), and takes the JSON object it prints as the headers.
+// runs it as it connects to each of them, and again when one answers 401
+// (which it does because the headers include `Authorization`), and takes
+// the JSON object it prints as the headers.
 // It asks the agent's wrapper for them on the wrapper's MCP socket
 // (AGENT_MCP_SOCKET, which the wrapper gives its harness): one JSON-RPC
 // request, `visor/passThroughHeaders`, which the wrapper relays to Visor's
 // driver as it does any of its harness's MCP, over the stream its own token
-// opened; Visor answers with a fresh token of the agent's (an hour's, for
-// MCP alone). Nothing is kept: no file, no variable, no command line has it.
+// opened; Visor answers with a fresh token of the agent's (a week's, for
+// MCP alone, no one's once its agent ends), as `X-Visor-Proxy` and as
+// `Authorization: Bearer`. Nothing is kept: no file, no variable, no
+// command line has it.
 
 import CVisorPOSIX
 import Foundation

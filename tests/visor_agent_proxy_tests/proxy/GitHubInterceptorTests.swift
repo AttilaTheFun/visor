@@ -84,6 +84,21 @@ private struct DefaultBranchMain: GitHubReading {
     func graphQL(_ query: String, variables: [String: GateJSON]) async -> GitHubAnswer { GitHubAnswer(status: 404, json: nil) }
 }
 
+/// GitHub's API as a dispatch's check reads it: Visor's default branch is
+/// main, its workflow 12 is ci.yml, active.
+private struct VisorWorkflows: GitHubReading {
+    func get(_ path: String) async -> GitHubAnswer {
+        switch path {
+        case "/repos/AttilaTheFun/visor": GitHubAnswer(status: 200, json: .object(["default_branch": .string("main")]))
+        case "/repos/AttilaTheFun/visor/actions/workflows/12":
+            GitHubAnswer(status: 200, json: .object(["name": .string("CI"), "path": .string(".github/workflows/ci.yml"), "state": .string("active")]))
+        default: GitHubAnswer(status: 404, json: nil)
+        }
+    }
+
+    func graphQL(_ query: String, variables: [String: GateJSON]) async -> GitHubAnswer { GitHubAnswer(status: 404, json: nil) }
+}
+
 /// GitHub played over TLS: it answers each request with what it was sent,
 /// and keeps what it was sent.
 private final class EchoGitHub: Sendable {
@@ -221,7 +236,8 @@ final class GitHubInterceptorTests: XCTestCase {
     /// it held back `delay`, or to nothing at all (`unreachable`).
     private func launch(host: String = "api.github.com", delay: TimeAmount = .zero, unreachable: Bool = false,
                         tokens: any GitHubTokenSource = FixedTokens(),
-                        reader: @escaping @Sendable (String) -> any GitHubReading = { _ in DefaultBranchMain() }) throws {
+                        reader: @escaping @Sendable (String) -> any GitHubReading = { _ in DefaultBranchMain() },
+                        gate: GitHubGate = GitHubGate()) throws {
         relay?.stop()
         interceptor?.stop()
         github?.stop()
@@ -231,7 +247,7 @@ final class GitHubInterceptorTests: XCTestCase {
         trust.trustRoots = .certificates([try NIOSSLCertificate(bytes: Array(try githubCA.pem.utf8), format: .pem)])
         let githubPort = unreachable ? 1 : github.port
         let lines = self.lines
-        interceptor = try GitHubInterceptor(gate: GitHubGate(), ca: proxyCA, tokens: tokens, reader: reader,
+        interceptor = try GitHubInterceptor(gate: gate, ca: proxyCA, tokens: tokens, reader: reader,
                                             upstream: .init(address: { _ in ("127.0.0.1", githubPort) }, tls: trust, delay: delay),
                                             egress: egress, log: { lines.add($0) })
         let proxy = EgressProxy(connect: { agent_proxy_connect_tcp($0.host, $0.port) }, interceptor: interceptor, egress: egress,
@@ -704,6 +720,59 @@ final class GitHubInterceptorTests: XCTestCase {
             XCTAssertFalse(text.lowercased().contains(secret.lowercased()), "\(secret) in the egress log")
         }
         XCTAssertFalse(lines.all.contains { $0.contains("ghs_fixedtoken") || $0.contains("placeholder") }, "\(lines.all)")
+    }
+
+    /// NCH's conditions (26 Nov 2026): each dispatch on main, let through or
+    /// refused, before its check or by it, is one line of agent-proxy's log:
+    /// the container and agent, the repository, the workflow, the ref, the
+    /// inputs (a value the lists don't have, its length alone) and how it
+    /// went; never the token. A branch's dispatch is the egress log's alone.
+    func testEachDispatchOnMainIsALineOfTheLogWithNoSecret() throws {
+        try launch(reader: { _ in VisorWorkflows() })
+        let path = "/repos/AttilaTheFun/visor/actions/workflows/12/dispatches"
+        let proposed = try agent(.POST, path, body: json(#"{"ref":"main","inputs":{"run":"release"}}"#))
+        XCTAssertEqual(proposed.status, 200, proposed.body)
+        let outside = try agent(.POST, path, body: json(#"{"ref":"main","inputs":{"run":"ghp_secretvalue"}}"#))
+        XCTAssertEqual(outside.status, 403, outside.body)
+        XCTAssertTrue(outside.body.contains("CI's run on main is one of verify, prerelease, release"), outside.body)
+        let extra = try agent(.POST, path, body: json(#"{"ref":"main","inputs":{"run":"verify","note":"a secret note"}}"#))
+        XCTAssertEqual(extra.status, 403, extra.body)
+        let early = try agent(.POST, "/repos/AttilaTheFun/shireworks/actions/workflows/12/dispatches", body: json(#"{"ref":"main"}"#))
+        XCTAssertEqual(early.status, 403, early.body)
+        let branch = try agent(.POST, path, body: json(#"{"ref":"feature","inputs":{"run":"verify"}}"#))
+        XCTAssertEqual(branch.status, 403, branch.body)
+        let who = "github: dispatch on main: container:lease-7 agent 0b5e7a52-1c1b-4e2a-9c3d-5f6a7b8c9d0e"
+        XCTAssertEqual(lines.all.filter { $0.hasPrefix("github: dispatch on main:") }, [
+            "\(who), AttilaTheFun/visor .github/workflows/ci.yml on main, inputs run=release: allowed",
+            "\(who), AttilaTheFun/visor .github/workflows/ci.yml on main, inputs run=(15 characters, not written): "
+                + "refused: CI's run on main is one of verify, prerelease, release, never another value",
+            "\(who), AttilaTheFun/visor .github/workflows/ci.yml on main, inputs note=(13 characters, not written) run=verify: "
+                + "refused: CI on main takes no input note: only run (verify, prerelease, release)",
+            "\(who), AttilaTheFun/shireworks workflow 12 on main, inputs none: refused: a workflow is never dispatched on main unless "
+                + "gate.json's mainDispatch names it for AttilaTheFun/shireworks (it names none of its): dispatch it on a branch of your own",
+        ])
+        XCTAssertEqual(github.requests, ["POST /repos/AttilaTheFun/visor/actions/workflows/12/dispatches Bearer ghs_fixedtoken"])
+        let text = try String(contentsOf: egress.file, encoding: .utf8)
+        for secret in ["ghs_fixedtoken", "placeholder", "ghp_secretvalue", "a secret note"] {
+            XCTAssertFalse(lines.all.contains { $0.contains(secret) }, "\(secret) in the log")
+            XCTAssertFalse(text.contains(secret), "\(secret) in the egress log")
+        }
+    }
+
+    /// The fifth proposal of an hour is refused, saying so, and never
+    /// reaches GitHub; its line says why.
+    func testTheFifthProposalOfAnHourIsRefused() throws {
+        try launch(reader: { _ in VisorWorkflows() })
+        let path = "/repos/AttilaTheFun/visor/actions/workflows/12/dispatches"
+        for _ in 0..<4 {
+            let proposed = try agent(.POST, path, body: json(#"{"ref":"main","inputs":{"run":"prerelease"}}"#))
+            XCTAssertEqual(proposed.status, 200, proposed.body)
+        }
+        let fifth = try agent(.POST, path, body: json(#"{"ref":"main","inputs":{"run":"verify"}}"#))
+        XCTAssertEqual(fifth.status, 403, fifth.body)
+        XCTAssertTrue(fifth.body.contains("AttilaTheFun/visor has had 4 dispatches on main in the last hour"), fifth.body)
+        XCTAssertEqual(github.requests.count, 4)
+        XCTAssertTrue(lines.all.last { $0.hasPrefix("github: dispatch on main:") }?.hasSuffix("the next in 60 minutes") == true, "\(lines.all)")
     }
 
     /// A stream without the relay's token is closed before its CONNECT is

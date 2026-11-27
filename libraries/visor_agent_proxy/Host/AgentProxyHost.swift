@@ -278,7 +278,7 @@ public enum AgentProxyHost {
                                              secrets.get(AgentProxySettings.secretKey(AgentProxySettings.mcpSecretName(upstream: upstream,
                                                                                                                        header: header)))
                                          }, inProcess: inProcess, inProcessWithheld: inProcessWithheld, agentSession: agentSession,
-                                         agentTokenCheck: agentTokenCheck) else {
+                                         agentTokenCheck: agentTokenCheck, log: log) else {
             log("loopback port \(mcp.port) can't be had for the MCP pass-through (another listener on it?)")
             return nil
         }

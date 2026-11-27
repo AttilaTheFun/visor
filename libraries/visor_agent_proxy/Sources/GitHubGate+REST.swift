@@ -216,13 +216,17 @@ extension GitHubGate {
         /// [W15], [D2], [D3]: a workflow by its id, on a branch, with a few
         /// one-line inputs.
         /// A dispatch's workflow must be one gate.json's `dispatchableWorkflows`
-        /// lists (none by default), on a branch that is neither protected nor
-        /// the default (NCH's review of #417): a workflow run with the
-        /// repository's secrets is no agent's to start otherwise.
+        /// lists (or branchDispatch, with its inputs: NCH's review of #557), on
+        /// a branch that is neither protected nor the default (NCH's
+        /// review of #417): a workflow run with the repository's secrets is no
+        /// agent's to start otherwise. On main (a protected branch's name),
+        /// one `mainDispatch` names for the repository (NCH's conditions,
+        /// 26 Nov 2026), its workflow and inputs checked once GitHub has said
+        /// which it is and which branch is the default (GateChecker+Actions).
         private static func dispatch(_ body: [String: GateJSON], workflow: Int, repository: String, rules gate: GateRules) -> GateDecision {
             let rules = gate.dispatch
-            guard !gate.dispatchableWorkflows.isEmpty else {
-                return .refuse("no workflow is dispatched by an agent (gate.json's dispatchableWorkflows lists none)")
+            guard !gate.dispatchableWorkflows.isEmpty || !gate.mainDispatch.workflows.isEmpty || !gate.branchDispatch.workflows.isEmpty else {
+                return .refuse("no workflow is dispatched by an agent (gate.json's dispatchableWorkflows lists none, nor its mainDispatch or branchDispatch)")
             }
             guard let ref = body["ref"]?.string, !ref.isEmpty, !ref.hasPrefix("refs/"), GitRefName.isBranch(ref) else {
                 return .refuse("a dispatch names a branch (ref)")
@@ -232,27 +236,37 @@ extension GitHubGate {
             guard !lowered.hasPrefix("heads/"), !lowered.hasPrefix("tags/"), !lowered.hasPrefix("remotes/") else {
                 return .refuse("a dispatch names a branch by its name alone, never heads/… or tags/…: \(ref)")
             }
-            guard ref.lowercased() != "main", !gate.protects(ref, defaultBranch: nil) else {
-                return .refuse("a workflow is never dispatched on \(ref): dispatch it on a branch of your own")
+            if lowered == "main" || gate.protects(ref, defaultBranch: nil) {
+                guard gate.mainDispatch.names(repository: repository) else {
+                    return .refuse("a workflow is never dispatched on \(ref) unless gate.json's mainDispatch names it for \(repository) "
+                        + "(it names none of its): dispatch it on a branch of your own")
+                }
+            } else if gate.dispatchableWorkflows.isEmpty && !gate.branchDispatch.names(repository: repository)
+                        && !gate.mainDispatch.names(repository: repository) {
+                // (A default branch of another name is the check's to find.)
+                return .refuse("no workflow of \(repository)'s is dispatched by an agent on a branch of its own "
+                    + "(gate.json's dispatchableWorkflows lists none, nor its branchDispatch)")
             }
             if let returns = body["return_run_details"], returns.bool == nil { return .refuse("return_run_details is true or false") }
+            var given: [String: String] = [:]
             switch body["inputs"] {
             case nil, .null?:
                 break
             case .object(let inputs)?:
                 guard inputs.count <= rules.maxInputs else { return .refuse("at most \(rules.maxInputs) inputs") }
                 for (name, value) in inputs {
-                    guard (1...64).contains(name.count), name.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "_" || $0 == "-") }) else {
+                    guard GateRules.isInputName(name) else {
                         return .refuse("an input's name is letters, digits, _ and -: \(name)")
                     }
                     guard let text = value.string, text.count <= rules.maxValueLength, !text.contains(where: \.isNewline) else {
                         return .refuse("input \(name) is one line of at most \(rules.maxValueLength) characters")
                     }
+                    given[name] = text
                 }
             default:
                 return .refuse("inputs is a JSON object of strings, like {\"kind\": \"quick\"}")
             }
-            return .check(.dispatch(repository: repository, workflow: workflow, branch: ref))
+            return .check(.dispatch(repository: repository, workflow: workflow, branch: ref, inputs: given))
         }
     }
 }
