@@ -77,5 +77,8 @@ swift_test(
         # gh_mcp in agent-proxy, listed by MCPProxy over loopback
         # (InProcessGitHubMCPTests).
         "//libraries/visor_agent_proxy:visor_agent_proxy_host",
+        # A sessions' store from a later build, made by hand
+        # (SessionStoreTests).
+        "@swiftpkg_swift_sql//:SwiftSQL",
     ],
 )

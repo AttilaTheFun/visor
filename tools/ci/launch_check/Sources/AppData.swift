@@ -1,7 +1,7 @@
 import Foundation
 
 /// The app's data folder while it is checked (~/Library/Application
-/// Support/Visor, the server's sessions.json and settings.json): one of
+/// Support/Visor, the server's sessions' store and settings.json): one of
 /// the check's own, made fresh and removed after. Its settings ask nothing
 /// (`"authentication": "none"`): a server with no password, as on a Mac
 /// where Visor was never set up, doesn't listen, and with nothing asked it

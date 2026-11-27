@@ -1,5 +1,5 @@
 // The dispatcher across a restart of this server (visor#424): the moves
-// sessions.json keeps are adopted whatever jobs.json kept, a runner's
+// the sessions' store keeps are adopted whatever jobs.json kept, a runner's
 // renewal, report or wrapper's redial for a moved session's agent takes its
 // job back rather than being dropped, a stopped agent's job is let go while
 // its session stays moved, and a release that this restart (or an
@@ -10,7 +10,7 @@ import Foundation
 import VisorServer
 
 extension JobQueue {
-    /// The moves sessions.json keeps (VisorServer.takeUpDrivenSessions):
+    /// The moves the sessions' store keeps (VisorServer.takeUpDrivenSessions):
     /// each agent the queue doesn't know (jobs.json missing, or behind) is
     /// its session's again, and if `expected` to be running, a claim is held
     /// for it for `redialGrace`, as one taken up from jobs.json is: renewed,

@@ -19,9 +19,8 @@ extension ServerTests {
         VisorServer.secrets = MemorySecrets()
     }
 
-    /// One kept by an older server is dropped at load, and the file is
-    /// written again without it; the chats beside it come back as they
-    /// were.
+    /// One kept by an older server is dropped as its sessions.json is
+    /// imported; the chats beside it come back as they were.
     @Test func testAStoredTerminalSessionIsDroppedAtLoad() throws {
         let file = """
             [{"info":{"id":"T","agent":"shell","cwd":"/tmp","title":"Terminal 1","created":1,"mode":{"kind":"tui","controller":"phone","cols":80,"rows":24}},"entries":[]},
@@ -33,8 +32,7 @@ extension ServerTests {
         #expect(server.sessions.map(\.info.id) == ["C"])
         #expect((server.sessions.first?.info.agent) == .claude)
         #expect(server.storeIsReadable)
-        let written = try JSONSerialization.jsonObject(with: Data(contentsOf: root.appendingPathComponent("sessions.json"))) as? [[String: Any]]
-        #expect((written?.compactMap { ($0["info"] as? [String: Any])?["id"] as? String }) == ["C"])
+        #expect(try SessionStore(path: VisorServer.storeURL.path).rows().map(\.id) == ["C"])
     }
 
     /// An older client's terminal is not started, and what it says to one

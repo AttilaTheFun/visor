@@ -11,10 +11,10 @@
 //   /Volumes/Visor/run/server.sock       ~/.visor/server.sock
 //   /Volumes/Visor/Containers/           (the Sessions container needs the volume)
 //
-// The data folder holds the server's sessions.json, settings, push, relay,
-// jobs, images, backups, migrations, super-compact, agent-proxy, run/ and
-// hosts/, and volumes.json; the caches are the server's and the client's
-// messages.sqlite. What was in the home folder is moved onto the volume
+// The data folder holds the server's sessions' store (server.sqlite),
+// settings, push, relay, jobs, images, backups, migrations, super-compact,
+// agent-proxy, run/ and hosts/, and volumes.json; the caches are the
+// server's and the client's messages.sqlite. What was in the home folder is moved onto the volume
 // once, at the server's start (VisorFolderMove). Foundation alone, with no
 // disk tool: the same on Linux, where its tests run.
 

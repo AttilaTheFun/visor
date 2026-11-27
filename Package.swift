@@ -52,10 +52,11 @@ let shared: [Target] = [
     .target(name: "VisorAgent", dependencies: ["AgentHostWire", "ClaudeTranscript", "MessageCache", "VisorProtocol", "VisorSystem"],
             path: "libraries/visor_agent/Sources", swiftSettings: strict),
     // swift-crypto: HMAC-SHA256 for the agents' tokens (JWT), SHA-256 for
-    // the admin token's hash.
+    // the admin token's hash; swift_sql: SQLite for the sessions' store.
     .target(name: "VisorServer",
             dependencies: ["VisorProtocol", "ClaudeTranscript", "MessageCache", "AgentHostWire", "VisorSystem", "VisorAgent",
-                           .product(name: "Crypto", package: "swift-crypto")],
+                           .product(name: "Crypto", package: "swift-crypto"),
+                           .product(name: "SwiftSQL", package: "swift_sql")],
             path: "libraries/visor_server/Sources", swiftSettings: strict),
     .target(name: "VisorServerCLI", dependencies: ["VisorServer", "VisorProtocol", "VisorSystem"],
             path: "libraries/visor_server_cli/Sources", swiftSettings: strict),

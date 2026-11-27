@@ -49,7 +49,7 @@ by Visor Disk Utility, which records them in `volumes.json`:
 | --- | --- | --- |
 | **Sessions** | `/Volumes/Sessions` | The sessions' working folders (`Claude/<id>`, also those moved in from another computer and Super Compact's new ones), the container's Claude folder (`.claude`) and staged exports. Never erased. |
 | **Sources** | `/Volumes/Sources` | The sessions' checkouts: the container's checkouts' folder unless `container.checkouts` names another. |
-| **Visor** | `/Volumes/Visor` (not shared, but for `Containers/`'s parts below) | Everything else of Visor's: `Data/` (the server's data folder: sessions.json, settings, push, relay, jobs, images, backups, migrations, super-compact, agent-proxy, `run/`, `hosts/`, and `volumes.json`), `Caches/Server` and `Caches/Client` (the two `messages.sqlite`), `Logs/` (Visor-server, agent-proxy and egress, and the relaunch log), `tmp/` (an export before it's saved; emptied at the app's start), `run/server.sock` (the server's socket file) and `Containers/` (below). It replaced 0.64's Containers volume: a `volumes.json` that says `containers` reads as `visor`. |
+| **Visor** | `/Volumes/Visor` (not shared, but for `Containers/`'s parts below) | Everything else of Visor's: `Data/` (the server's data folder: server.sqlite, the sessions' store, settings, push, relay, jobs, images, backups, migrations, super-compact, agent-proxy, `run/`, `hosts/`, and `volumes.json`), `Caches/Server` and `Caches/Client` (the two `messages.sqlite`), `Logs/` (Visor-server, agent-proxy and egress, and the relaunch log), `tmp/` (an export before it's saved; emptied at the app's start), `run/server.sock` (the server's socket file) and `Containers/` (below). It replaced 0.64's Containers volume: a `volumes.json` that says `containers` reads as `visor`. |
 
 Each volume Visor Disk Utility makes is given to the person who made it,
 as Nimbus gives its own: a volume made in the administrator prompt is
@@ -89,9 +89,10 @@ The engine and the container runner take Sessions' and Sources' paths from
 there, the process about to run the server moves what was in the home
 folder onto it, once, at its start (`VisorFolderMove`): the data folder (but
 for its `Sessions/`, the working folders of sessions moved in before 0.65,
-which sessions.json and Claude's project keys know by their paths, and
-which go with Migrate… or Move to Container), the server's cache and the
-logs; the app moves its own cache. Not while an agent's host still answers
+which the sessions' store and Claude's project keys know by their paths, and
+which go with Migrate… or Move to Container; server.sqlite goes with the
+files SQLite keeps beside it, and is put aside with them when the volume has
+one), the server's cache and the logs; the app moves its own cache. Not while an agent's host still answers
 in the data folder's `hosts/` (an update leaves the agents running): then
 the data folder stays in the home folder until a start with none running (a
 restart of the Mac, or Quit Visor). Without the volume, everything is where

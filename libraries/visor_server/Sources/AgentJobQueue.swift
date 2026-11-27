@@ -17,7 +17,7 @@ package protocol AgentJobQueue: AnyObject {
     /// refused, so the runner ends it), but the session stays moved: its
     /// agents are still its own, and a resume job carries it on again.
     func stopJobs(of session: String)
-    /// The moves sessions.json keeps for driven sessions, at the driver's
+    /// The moves the sessions' store keeps for driven sessions, at the driver's
     /// start: each one the queue doesn't know is known again (its agent is
     /// its session's), and, for those in `expected`, a claim is held for its
     /// runner to renew, or its job is queued again once that claim lapses.
@@ -30,7 +30,7 @@ package protocol AgentJobQueue: AnyObject {
 }
 
 /// A session moved to a runner, as its resume job carries it; kept on the
-/// session's record (sessions.json) while it is driven, so a restart knows
+/// session's record (the sessions' store) while it is driven, so a restart knows
 /// which agent carries it on even without the dispatcher's jobs.json.
 package struct AgentJobMove: Codable, Equatable, Sendable {
     /// The agent its job is for (a UUID, as runners hold an agent's id to
@@ -83,7 +83,7 @@ package struct AgentJobMove: Codable, Equatable, Sendable {
         self.skipPermissions = skipPermissions
     }
 
-    /// What sessions.json kept: the session, its conversation and folder
+    /// What the sessions' store kept: the session, its conversation and folder
     /// here, and its runner's kind; the rest as far as it was known.
     package init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)

@@ -307,16 +307,19 @@ public final class VisorServer {
         settings.standalone || ProcessInfo.processInfo.environment["VISOR_STANDALONE"] == "1"
     }
 
-    /// sessions.json in the platform's data directory (on a Mac
-    /// ~/Library/Application Support/Visor; archive.json before sessions
-    /// were all kept, read once and folded in).
+    /// The platform's data directory (on a Mac /Volumes/Visor/Data, or
+    /// ~/Library/Application Support/Visor without the volume), where the
+    /// sessions' store is, and the rest of what the server keeps.
     /// Tests point this at a scratch folder: a server built over the real
-    /// archive ends the agents it records as orphans of a previous life.
+    /// store ends the agents it records as orphans of a previous life.
     static var storeRoot: URL? {
         get { HostFolders.dataRoot }
         set { HostFolders.dataRoot = newValue }
     }
-    static var storeURL: URL { HostFolders.dataFolder.appendingPathComponent("sessions.json", isDirectory: false) }
+    /// The sessions' store: server.sqlite in the data directory
+    /// (SessionStore; sessions.json before 0.73, imported once:
+    /// VisorServer+SessionImport).
+    static var storeURL: URL { HostFolders.dataFolder.appendingPathComponent("server.sqlite", isDirectory: false) }
 
     /// Beside the sessions: the slash commands each agent last listed.
     static var commandsURL: URL { storeURL.deletingLastPathComponent().appendingPathComponent("commands.json", isDirectory: false) }
@@ -339,9 +342,15 @@ public final class VisorServer {
         off, checking the state of anything you had started before you carry on.
         """
 
-    /// False once a store failed to decode: nothing is written until the
-    /// app is restarted against a file it understands.
+    /// False once a store failed to open or decode: nothing is written
+    /// until the app is restarted against one it understands.
     var storeIsReadable = true
+    /// The sessions' store, opened as the sessions are first read; nil if
+    /// it couldn't be.
+    @ObservationIgnored var sessionStore: SessionStore?
+    /// Each session's row as it was last written or read, by id: what a
+    /// save compares the sessions with, to write only those that changed.
+    @ObservationIgnored var writtenRows: [String: SessionStore.Row] = [:]
 
     /// The last write of the sessions failed; cleared by the next that works.
     var savingFailed = false
@@ -418,8 +427,9 @@ public final class VisorServer {
     }
 
     /// The sessions' store, written once `archiveSaveDelay` after a change
-    /// however many come in it (saveArchive): written whole on each, it
-    /// was most of the gigabytes a day the Mac saw Visor write.
+    /// however many come in it (saveArchive): written whole on each, when
+    /// it was sessions.json, it was most of the gigabytes a day the Mac saw
+    /// Visor write.
     var archiveSavePending = false
     /// How long a change waits to be written with those after it.
     var archiveSaveDelay: Duration = .seconds(30)

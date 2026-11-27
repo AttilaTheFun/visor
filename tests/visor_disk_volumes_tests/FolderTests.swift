@@ -173,6 +173,40 @@ import Testing
         #expect(!FileManager.default.fileExists(atPath: legacy.path))
     }
 
+    /// The sessions' store, a database with its log beside it, goes
+    /// together: the volume's database is never left beside the home
+    /// folder's log.
+    @Test func aDatabaseAndItsFilesGoTogether() throws {
+        let scratch = try Scratch()
+        defer { try? FileManager.default.removeItem(at: scratch.root) }
+        let legacy = scratch.folders.legacyData
+        let data = scratch.folders.data
+        let database = ["server.sqlite", "server.sqlite-wal", "server.sqlite-shm"]
+        for name in database { try scratch.write("home", name, in: legacy) }
+        try scratch.write("{}", "settings.json", in: legacy)
+        #expect(VisorFolderMove(folders: scratch.folders, answers: { _ in false }).moveData()
+            == .moved(["server.sqlite", "server.sqlite-shm", "server.sqlite-wal", "settings.json"]))
+        for name in database { #expect(scratch.read(name, in: data) == "home") }
+
+        // The volume has a database of its own, without a log: all three
+        // of the home folder's are put aside, under the same name, twice.
+        for round in ["first", "second"] {
+            for name in database { try scratch.write(round, name, in: legacy) }
+            try scratch.write("volume", "server.sqlite", in: data)
+            try? FileManager.default.removeItem(at: data.appendingPathComponent("server.sqlite-wal"))
+            try? FileManager.default.removeItem(at: data.appendingPathComponent("server.sqlite-shm"))
+            _ = VisorFolderMove(folders: scratch.folders, answers: { _ in false }).moveData()
+            #expect(scratch.read("server.sqlite", in: data) == "volume")
+            #expect(!scratch.exists("server.sqlite-wal", in: data), "not beside the volume's")
+        }
+        #expect(scratch.read("moved-aside/server.sqlite", in: data) == "first")
+        #expect(scratch.read("moved-aside/server.sqlite-wal", in: data) == "first")
+        let aside = try FileManager.default.contentsOfDirectory(atPath: data.appendingPathComponent("moved-aside").path)
+        let second = try #require(aside.first(where: { $0.hasPrefix("server.sqlite-") && !$0.hasSuffix("-wal") && !$0.hasSuffix("-shm") }))
+        #expect(aside.contains(second + "-wal") && aside.contains(second + "-shm"), "\(aside)")
+        #expect(scratch.read("moved-aside/" + second + "-wal", in: data) == "second")
+    }
+
     @Test func aCacheMovesWholeOrIsDropped() throws {
         let scratch = try Scratch()
         defer { try? FileManager.default.removeItem(at: scratch.root) }

@@ -5,11 +5,14 @@
 //
 // - The data folder's items are moved into `/Volumes/Visor/Data/`, all but
 //   `Sessions/`, the working folders of sessions moved in from another
-//   computer, which sessions.json and Claude's project keys know by their
-//   path: those stay where they are, and go with Migrate… or Move to
+//   computer, which the sessions' store and Claude's project keys know by
+//   their path: those stay where they are, and go with Migrate… or Move to
 //   Container. volumes.json, which Visor Disk Utility writes to the volume
 //   once it's there, is dropped if the volume has one already. Any other
-//   item the volume already has is put in `Data/moved-aside/`, never lost.
+//   item the volume already has is put in `Data/moved-aside/`, never lost;
+//   a database (server.sqlite, the sessions' store) with its own files
+//   beside it (`-wal`, `-shm`, `-journal`), which go where it goes, so a
+//   database is never put beside another's log.
 // - Not while an agent's host still answers in its `hosts/` folder: an
 //   in-place relaunch leaves the agents running, and their hosts' sockets
 //   and token files are in that folder. The move waits for a start with no
@@ -41,6 +44,14 @@ public struct VisorFolderMove: Sendable {
     public static let staying: Set<String> = ["Sessions", ".DS_Store"]
     /// Where an item the volume already had is put, in its data folder.
     public static let movedAside = "moved-aside"
+    /// The files SQLite keeps beside a database, by the end of their names.
+    public static let databaseCompanions = ["-wal", "-shm", "-journal"]
+
+    /// The item a name goes with: a database's, for one of its companions;
+    /// else itself.
+    static func unit(of name: String) -> String {
+        databaseCompanions.first { name.hasSuffix($0) && name.count > $0.count }.map { String(name.dropLast($0.count)) } ?? name
+    }
 
     /// What the data move did.
     public enum Outcome: Equatable, Sendable {
@@ -99,19 +110,30 @@ public struct VisorFolderMove: Sendable {
             log("the data folder couldn't be made at \(data.path): \(error.localizedDescription); it stays at \(legacy.path)")
             return .waiting("\(data.path) couldn't be made")
         }
+        // Whether the volume has an item already, a database's companions
+        // with it, told before any moves; and the name each kept aside goes
+        // by there, the same for all of a database's files.
+        let aside = data.appendingPathComponent(Self.movedAside, isDirectory: true)
+        let together = { (unit: String) in [unit] + Self.databaseCompanions.map { unit + $0 } }
+        let taken = Set(items.map(Self.unit(of:)).filter { unit in
+            together(unit).contains { files.fileExists(atPath: data.appendingPathComponent($0).path) || isLink(data.appendingPathComponent($0)) }
+        })
+        var asideTags: [String: String] = [:]
         for name in items {
             let from = legacy.appendingPathComponent(name)
             var to = data.appendingPathComponent(name)
-            if files.fileExists(atPath: to.path) || isLink(to) {
+            let unit = Self.unit(of: name)
+            if taken.contains(unit) {
                 if name == VolumesStatus.fileName {
                     try? files.removeItem(at: from)
                     continue
                 }
-                let aside = data.appendingPathComponent(Self.movedAside, isDirectory: true)
                 try? files.createDirectory(at: aside, withIntermediateDirectories: true)
-                to = aside.appendingPathComponent(name)
-                if files.fileExists(atPath: to.path) { to = aside.appendingPathComponent("\(name)-\(UUID().uuidString.prefix(8).lowercased())") }
-                log("\(data.path) has \(name) already: the home folder's is kept as \(to.path)")
+                let tag = asideTags[unit] ?? (together(unit).contains { files.fileExists(atPath: aside.appendingPathComponent($0).path) }
+                    ? "-\(UUID().uuidString.prefix(8).lowercased())" : "")
+                asideTags[unit] = tag
+                to = aside.appendingPathComponent(unit + tag + name.dropFirst(unit.count))
+                log("\(data.path) has \(unit) already: the home folder's \(name) is kept as \(to.path)")
             }
             do {
                 try files.moveItem(at: from, to: to)

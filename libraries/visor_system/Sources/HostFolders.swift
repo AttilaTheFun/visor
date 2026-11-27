@@ -5,7 +5,7 @@ import Synchronization
 /// picker's.
 package enum HostFolders {
     /// The data folder, when something other than the platform's is wanted
-    /// (tests, a staging server): sessions.json, the hosts' log and the rest.
+    /// (tests, a staging server): the sessions' store, the hosts' log and the rest.
     package static var dataRoot: URL? {
         get { root.withLock { $0 } }
         set { root.withLock { $0 = newValue } }
