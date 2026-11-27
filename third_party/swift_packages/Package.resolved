@@ -28,6 +28,15 @@
       }
     },
     {
+      "identity" : "build_tools",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/AttilaTheFun/build_tools.git",
+      "state" : {
+        "revision" : "d9d9cca23be4bf501240b86d6769c7d80b1f000e",
+        "version" : "0.7.0"
+      }
+    },
+    {
       "identity" : "containerization",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/containerization.git",
@@ -86,8 +95,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/AttilaTheFun/shireworks_kit.git",
       "state" : {
-        "revision" : "0e524abc3737870fbdddba159c23d1c986c8eb79",
-        "version" : "0.2.1"
+        "revision" : "ad0a314212859541e9d1c2bb5ff1424309bccc42",
+        "version" : "0.3.0"
       }
     },
     {
@@ -295,6 +304,15 @@
       "state" : {
         "revision" : "a18ee16b8039866fd919bdb4e8e906882d4ecc75",
         "version" : "2.13.0"
+      }
+    },
+    {
+      "identity" : "swift-subprocess",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/swiftlang/swift-subprocess.git",
+      "state" : {
+        "revision" : "dbe21bd7dfd4ffef8c32588918542a8abfa1b54c",
+        "version" : "1.0.2"
       }
     },
     {
