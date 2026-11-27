@@ -473,6 +473,9 @@ extension ServerTests {
         let parsed = try #require(parseJSON(answer.json))
         #expect(parsed["id"].string == "h", "answered under the helper's own id")
         let token = try #require(parsed["result"]["headers"]["X-Visor-Proxy"].string)
+        // The same as a bearer's: Claude Code takes the helper as the server's authentication, run again on a 401.
+        #expect(parsed["result"]["headers"]["Authorization"].string == "Bearer " + token)
+        #expect(parsed["result"]["headers"].object?.count == 2)
         #expect(server.passThroughSession(for: token) == "pass")
         guard case .success(let claims) = server.agentTokens.verify(token, as: .runnerAgent, agent: agent, scope: .mcp) else {
             Issue.record("its token isn't its agent's")
@@ -523,6 +526,54 @@ extension ServerTests {
         let again = try #require(await eventually { wrapper.down.first { $0.mcp.id == "w-again" }?.mcp })
         #expect(parseJSON(again.json)?["error"]["code"].int == -32601, "\(again.json)")
         wrapper.finish()
+    }
+
+    /// Its pass-through token lasts as long as its agent may run (a week), not an hour: Claude Code runs the
+    /// headersHelper as it connects and keeps the headers (on the Mini, 0.72.3: an hour on, every Nimbus call was
+    /// refused 401). Past an hour, and past a day, it's still taken, by the server and by agent-proxy's fast check,
+    /// while its agent runs; past its week, or once its agent is let go or has ended, it's no one's.
+    @Test func itsPassThroughTokenIsTakenPastAnHourWhileItsAgentRuns() async throws {
+        let week: TimeInterval = 7 * 24 * 3600
+        #expect(server.agentTokens.passThroughLifetime == week)
+        #expect(server.agentTokens.runnerAgentLifetime == 3600, "its wrapper's own still an hour's, refreshed")
+        let check = server.passThroughTokenCheck
+        let runner = server.containerRunner
+
+        // Let go.
+        let (first, firstWrapper, _) = try await placed("long-pass")
+        let agent = first.agent.agent
+        let now = Date()
+        let fresh = try #require(runner.passThroughToken(for: agent))
+        #expect(server.agentTokens.expiry(of: fresh).map { abs($0.timeIntervalSince(now) - week) < 60 } == true, "a week's")
+        let anHourOld = try #require(runner.passThroughToken(for: agent, now: now.addingTimeInterval(-2 * 3600)))
+        let aDayOld = try #require(runner.passThroughToken(for: agent, now: now.addingTimeInterval(-(24 + 2) * 3600)))
+        let pastItsWeek = try #require(runner.passThroughToken(for: agent, now: now.addingTimeInterval(-week - 60)))
+        for taken in [fresh, anHourOld, aDayOld] {
+            #expect(server.passThroughSession(for: taken) == "long-pass")
+            #expect(await Task.detached { check(taken) }.value, "agent-proxy's fast check takes it too")
+        }
+        #expect(server.passThroughSession(for: pastItsWeek) == nil)
+        #expect(await Task.detached { check(pastItsWeek) }.value == false)
+        // The wrapper's own job token is still an hour's: two hours old, it's refused.
+        let oldJobToken = server.agentTokens.mint(.runnerAgent, session: "long-pass", agent: agent, now: now.addingTimeInterval(-2 * 3600))
+        #expect(server.passThroughSession(for: oldJobToken) == nil)
+        runner.release(agent)
+        for refused in [fresh, anHourOld, aDayOld] {
+            #expect(server.passThroughSession(for: refused) == nil, "its agent let go: no one's")
+        }
+        #expect(runner.passThroughToken(for: agent) == nil, "and it's given none")
+        firstWrapper.finish()
+        first.run.end(0)
+
+        // Ended.
+        let (second, secondWrapper, _) = try await placed("long-pass-ends")
+        let ending = second.agent.agent
+        let old = try #require(runner.passThroughToken(for: ending, now: now.addingTimeInterval(-3 * 3600)))
+        #expect(server.passThroughSession(for: old) == "long-pass-ends")
+        secondWrapper.finish()
+        second.run.end(0)
+        #expect(await eventually { runner.holds(ending) ? nil : true } == true, "its agent gone")
+        #expect(server.passThroughSession(for: old) == nil, "its agent ended: no one's")
     }
 
     /// Check 2: mail both ways.

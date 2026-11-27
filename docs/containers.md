@@ -575,15 +575,31 @@ its agent:
   A change to agent-proxy's settings takes a restart of the server, as
   agent-proxy's does, and so a new boot.
 - **The auth:** the agent's own token. Claude runs the headersHelper as it
-  connects to each server, and again when one answers 401.
+  connects to each server (at its start, and on a reconnect, `/mcp`'s
+  among them) and keeps those headers for the connection: there is no
+  refresh interval. It runs it again when a call answers 401 or 403 only
+  where the helper gives the server's `Authorization`; without one, a 401
+  sent it to OAuth instead (Dynamic Client Registration, which the
+  pass-through refused too: "Dynamic Client Registration rejected (HTTP
+  401): No sessions' token for this proxy", on the Mini, 0.72.3, an hour
+  after the agent started).
   `visor-agent-host mcp-headers` asks the agent's wrapper on its MCP socket
   (`AGENT_MCP_SOCKET`, the one `agent-wrapper mcp` uses) with one JSON-RPC
   request, `visor/passThroughHeaders`. The wrapper relays it to Visor's
   driver as it does any of its harness's MCP, over the stream its own token
   opened, and the driver (DrivenMCP) answers for that agent:
-  `{"headers": {"X-Visor-Proxy": "<token>"}}`, a fresh JWT of the container
-  runner's (`visor.runner-agent`, naming the session and the agent, an hour's,
-  scope `mcp` alone, so it can't open the driver's Connect). The helper
+  `{"headers": {"X-Visor-Proxy": "<token>", "Authorization": "Bearer <token>"}}`,
+  a fresh JWT of the container runner's (`visor.runner-agent`, naming the
+  session and the agent, scope `mcp` alone, so it can't open the driver's
+  Connect). It lasts a week (AgentTokens.passThroughLifetime), as long as
+  its agent may run, not an hour as the wrapper's own does: a token is
+  checked at each call, so it is no one's once its agent ends or is let go,
+  or its session isn't live, whatever its `exp`; an emergency rotation of
+  the signing keys ends it at once, an ordinary one a day on, and the
+  helper, run again on the 401, gets a fresh one. The `Authorization` is
+  there for Claude alone: the pass-through reads `X-Visor-Proxy`, and
+  sends neither on (an upstream's own `Authorization` is agent-proxy's to
+  add). The helper
   prints that object, and nothing is kept: no file, no variable, no command
   line has the token. The pass-through takes `X-Visor-Proxy` as before: the
   sessions' token, or else a JWT-shaped token it asks the server about (in
@@ -602,7 +618,11 @@ its agent:
   expired, forged or other session's token, a native session's, or one of an
   agent that has ended, is refused (401). The wrapper's own token (its
   job's, MCP among the rest) is taken too; the harness is given its own, for
-  MCP alone.
+  MCP alone. A refusal is said in agent-proxy's log (`the MCP pass-through
+  refused a call to /mcp/nimbus of agent <id> (401): <why>`: no header, an
+  expired token, one not this server's, one of no agent running now, or no
+  answer in time), once for each agent and reason until a call of that
+  agent is taken again, and never with the token.
 - **What doesn't change:** a native session's MCP. It is still Visor's
   `visor` server alone, its passed-on servers through it (`gh__pr_create`,
   each of them, as before),

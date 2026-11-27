@@ -18,6 +18,10 @@
 // checked here first (`agentTokenCheck`: signed with a live key of the server's, for `visor.runner-agent`, unexpired),
 // one that fails refused at once (401), and at most `maxVouches` calls wait at a time, any more refused at once (503):
 // forged tokens can't fill the places (NCH's check of #536).
+// A call refused 401 is said in the log (`log`), once for each agent (the `agent` its token claims, unverified) and
+// reason until a call of that agent is taken again: no header, a token past its end, one not this server's, one of no
+// agent running now, or no answer in time. Never the token (on the Mini, 0.72.3: a container agent's hour-long token
+// ended under it and every Nimbus call was refused, with nothing in the log to say why).
 
 import CAgentProxyPOSIX
 import Foundation
@@ -90,6 +94,12 @@ public final class NativeMCPProxy: Sendable {
     public let maxVouches: Int
     /// The calls waiting so.
     private let vouching = Locked(0)
+    /// Where a refused call is said (agent-proxy's log); none: not said.
+    private let log: (@Sendable (String) -> Void)?
+    /// The refusals said already, by agent and reason (`refusalKey`).
+    private let refusalsSaid = Locked<Set<String>>([])
+    /// The most refusals remembered as said: past it, they're forgotten, and each is said once more.
+    static let maxRefusalsSaid = 256
 
     public static let defaultMaxConnections = 64
     public static let defaultMaxVouches = 8
@@ -103,7 +113,8 @@ public final class NativeMCPProxy: Sendable {
                  agentTokenCheck: (@Sendable (String) -> Bool)? = nil,
                  agentServers: Set<String> = NativeMCPProxy.containerServers,
                  maxConnections: Int = NativeMCPProxy.defaultMaxConnections,
-                 maxVouches: Int = NativeMCPProxy.defaultMaxVouches) {
+                 maxVouches: Int = NativeMCPProxy.defaultMaxVouches,
+                 log: (@Sendable (String) -> Void)? = nil) {
         agent_proxy_ignore_broken_pipes()
         let listener = agent_proxy_listen(port, 0)
         guard listener >= 0 else { return nil }
@@ -119,6 +130,7 @@ public final class NativeMCPProxy: Sendable {
         self.agentServers = agentServers
         self.maxConnections = maxConnections
         self.maxVouches = maxVouches
+        self.log = log
     }
 
     public func start() {
@@ -252,6 +264,7 @@ public final class NativeMCPProxy: Sendable {
     private func answer(_ client: Int32) {
         guard var request = Self.read(client) else { return }
         guard let token = request.header(Self.tokenHeader) else {
+            logRefusal(.noHeader, token: nil, path: request.path)
             return Self.reply(client, "401 Unauthorized", "No sessions' token for this proxy.")
         }
         // The sessions' token (a native session's call, through Visor's server), else a container agent's own.
@@ -259,8 +272,12 @@ public final class NativeMCPProxy: Sendable {
         if !admits(token) {
             let agents: String
             switch agentsSession(of: token) {
-            case .session(let named): agents = named
-            case .refused: return Self.reply(client, "401 Unauthorized", "No sessions' token for this proxy.")
+            case .session(let named):
+                agents = named
+                forgetRefusals(of: token)
+            case .refused(let refusal):
+                logRefusal(refusal, token: token, path: request.path)
+                return Self.reply(client, "401 Unauthorized", "No sessions' token for this proxy.")
             case .busy: return Self.reply(client, "503 Service Unavailable", "Too many container agents' tokens being checked at once.")
             }
             // A container's agent reaches the servers it's given alone.
@@ -281,8 +298,8 @@ public final class NativeMCPProxy: Sendable {
     enum Vouch: Equatable {
         /// A container agent's own: the session it acts as.
         case session(String)
-        /// No one's (or not said in time).
-        case refused
+        /// No one's (or not said in time), and why.
+        case refused(Refusal)
         /// Not asked: `maxVouches` calls wait already.
         case busy
     }
@@ -291,9 +308,9 @@ public final class NativeMCPProxy: Sendable {
     /// this call's thread waits, at most `agentSessionWithin`); refused for any other, or with nothing to ask. Only a
     /// JWT's shape that `agentTokenCheck` lets through is asked, by at most `maxVouches` calls at once.
     private func agentsSession(of token: String) -> Vouch {
-        guard let agentSession, Self.isJWTShaped(token) else { return .refused }
+        guard let agentSession, Self.isJWTShaped(token) else { return .refused(.notAgents) }
         // A forged, expired or another server's token is refused here, at once, never waited on.
-        if let agentTokenCheck, !agentTokenCheck(token) { return .refused }
+        if let agentTokenCheck, !agentTokenCheck(token) { return .refused(Self.hasEnded(token) ? .expired : .notThisServers) }
         let room = vouching.withLock { waiting in
             guard waiting < maxVouches else { return false }
             waiting += 1
@@ -308,9 +325,72 @@ public final class NativeMCPProxy: Sendable {
             found.withLock { $0 = session }
             done.signal()
         }
-        guard done.wait(timeout: .now() + Self.agentSessionWithin) == .success,
-              let session = found.withLock({ $0 }) else { return .refused }
+        guard done.wait(timeout: .now() + Self.agentSessionWithin) == .success else { return .refused(.unanswered) }
+        guard let session = found.withLock({ $0 }) else { return .refused(Self.hasEnded(token) ? .expired : .notRunning) }
         return .session(session)
+    }
+
+    /// Why a call was refused (401), as the log says it.
+    enum Refusal: String, Equatable, Sendable {
+        case noHeader = "it shows no token (no X-Visor-Proxy header)"
+        case notAgents = "its token is neither the sessions' nor shaped as a container agent's"
+        case expired = "its token has expired"
+        case notThisServers = "its token isn't one of this server's (its key, signature, issuer or audience)"
+        case notRunning = "its token names no agent running in the Sessions container now (ended or let go, its session gone, or not its own)"
+        case unanswered = "the server didn't say whose its token is in time"
+    }
+
+    /// A refused call said in the log, never its token: once for each agent its token claims (unverified: only to tell
+    /// one agent's refusals from another's) and reason, until a call of that agent is taken again (`forgetRefusals`).
+    func logRefusal(_ refusal: Refusal, token: String?, path: String) {
+        guard let log else { return }
+        let agent = token.map(Self.claimedAgent) ?? ""
+        let first = refusalsSaid.withLock { known in
+            if known.count >= Self.maxRefusalsSaid { known.removeAll() }
+            return known.insert(Self.refusalKey(agent: agent, refusal)).inserted
+        }
+        guard first else { return }
+        let server = Self.shown(Self.serverName(path))
+        log("the MCP pass-through refused a call" + (server.isEmpty ? "" : " to /mcp/\(server)")
+            + (agent.isEmpty ? "" : " of agent \(agent)") + " (401): \(refusal.rawValue); said once until its agent's next call is taken")
+    }
+
+    /// A container agent's call taken: its refusals, said before, are said again if they come again.
+    private func forgetRefusals(of token: String) {
+        guard log != nil else { return }
+        let agent = Self.claimedAgent(token)
+        guard !agent.isEmpty else { return }
+        refusalsSaid.withLock { known in known = known.filter { !$0.hasPrefix(agent + " ") } }
+    }
+
+    static func refusalKey(agent: String, _ refusal: Refusal) -> String {
+        (agent.isEmpty ? "-" : agent) + " " + refusal.rawValue
+    }
+
+    /// `token`'s payload's claims, read without its signature checked (only to say why it was refused).
+    static func claims(of token: String) -> [String: Any]? {
+        let parts = token.split(separator: ".", omittingEmptySubsequences: false)
+        guard parts.count == 3 else { return nil }
+        var text = parts[1].replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+        text += String(repeating: "=", count: (4 - text.count % 4) % 4)
+        guard let data = Data(base64Encoded: text) else { return nil }
+        return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+    }
+
+    /// The agent `token` claims to be (unverified), as the log shows it; "" for none.
+    static func claimedAgent(_ token: String) -> String {
+        (claims(of: token)?["agent"] as? String).map(shown) ?? ""
+    }
+
+    /// Whether `token` says it has ended (its `exp`, unverified: one that says so is refused, whoever signed it).
+    static func hasEnded(_ token: String, now: Date = Date()) -> Bool {
+        guard let ended = (claims(of: token)?["exp"] as? NSNumber)?.doubleValue else { return false }
+        return ended <= now.timeIntervalSince1970
+    }
+
+    /// The caller's word as the log shows it: lower-case letters, digits and hyphens, at most 64 of them.
+    static func shown(_ text: String) -> String {
+        String(text.lowercased().filter { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-") }.prefix(64))
     }
 
     /// The server a call's path names: `/mcp/<name>`'s name, up to a `?` or `/`; "" for any other path.
@@ -325,10 +405,12 @@ public final class NativeMCPProxy: Sendable {
     }
 
     /// A container agent's call, as its token's `session`'s: whatever CLIENT_ID it sent (in any case, or as CLIENT-ID)
-    /// taken off, and its session's own put in its place, so gh_mcp, and an upstream, know it by its token alone.
+    /// taken off, and its session's own put in its place, so gh_mcp, and an upstream, know it by its token alone. Its
+    /// `Authorization` (its token again, as a bearer's, for Claude Code: DrivenMCP) taken off too: an upstream's own
+    /// is agent-proxy's to add.
     static func asSession(_ request: Request, _ session: String) -> Request {
         var request = request
-        request.headers.removeAll { $0.name.lowercased().replacingOccurrences(of: "_", with: "-") == "client-id" }
+        request.headers.removeAll { ["client-id", "authorization"].contains($0.name.lowercased().replacingOccurrences(of: "_", with: "-")) }
         request.headers.append((name: "CLIENT_ID", value: session))
         return request
     }
