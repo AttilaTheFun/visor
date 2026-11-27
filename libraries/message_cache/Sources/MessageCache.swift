@@ -206,15 +206,11 @@ public final class MessageCache: Sendable {
 
     // MARK: Pins
 
-    /// The sessions pinned to the top of a computer's list: the server's,
-    /// kept in its database beside the rows (Logan, 26 Nov 2026), not in
-    /// sessions.json. Not a cache: a session's reset and a new schema
-    /// leave them.
+    /// The sessions a server of 0.73 before its sessions' store kept
+    /// pinned here (a `pins` table): read once by the server, which keeps
+    /// them in its store (server.sqlite) from then on. Nothing writes them
+    /// now; none in a cache that never had the table.
     public func pinnedSessions() -> Set<String> { storage.withLock { $0.pinnedSessions() } }
-
-    public func setPinned(_ pinned: Bool, for session: String) throws {
-        try storage.withLock { try $0.setPinned(pinned, session) }
-    }
 
     // MARK: Search
 

@@ -158,7 +158,7 @@ extension ServerTests {
         #expect(rows.map(\.title) == ["Beta", "Alpha", "Gamma"])
         #expect(rows.map(\.archived) == [true, false, false])
         #expect(rows.map(\.updated) == [nil, 1763900100.25, nil])
-        #expect(rows.allSatisfy { $0.pinnedAt == nil })
+        #expect(rows.allSatisfy { !$0.pinned }, "sessions.json kept no pins")
 
         let original = try #require(try JSONSerialization.jsonObject(with: Data(text.utf8)) as? [Any])
         for (row, kept) in zip(rows, original) {

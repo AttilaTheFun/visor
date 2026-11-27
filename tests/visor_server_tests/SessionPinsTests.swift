@@ -1,11 +1,13 @@
 // A session pinned to the top of its computer's list, or unpinned: the
-// session's own, kept in the server's database (messages.sqlite), not in
-// sessions.json, and sent with it, so every client lists the same; kept
-// through a restart. Archiving or ending takes the pin; an archived
-// session isn't pinned.
+// session's own, kept in its row of the sessions' store (server.sqlite),
+// never in its JSON, and sent with it, so every client lists the same;
+// kept through a restart. Archiving or ending takes the pin; an archived
+// session isn't pinned. The pins an earlier build of 0.73 kept in
+// messages.sqlite move into the store once.
 
 import Foundation
 import MessageCache
+import SwiftSQL
 @testable import VisorAgent
 import VisorProtocol
 @testable import VisorServer
@@ -67,12 +69,17 @@ extension ServerTests {
         server.stop()
     }
 
+    /// The sessions pinned in the store, as a second reader of it has them.
+    private func pinnedRows() throws -> Set<String> {
+        Set(try SessionStore(path: VisorServer.storeURL.path).rows().filter(\.pinned).map(\.id))
+    }
+
     private func record(_ id: String, _ title: String? = nil) -> SessionRecord {
         SessionRecord(info: SessionInfo(id: id, agent: .claude, cwd: "/tmp", title: title ?? id, created: 0), process: IdleAgent(), entries: [])
     }
 
     /// Pinned and unpinned, over the socket's envelopes; pinned again,
-    /// nothing changes. Kept in the database, never in sessions.json.
+    /// nothing changes. Kept in the store's rows, never in their JSON.
     @Test func testAPinIsKeptInTheDatabase() throws {
         let (a, b) = (record("a"), record("b"))
         server.sessions = [a, b]
@@ -81,26 +88,23 @@ extension ServerTests {
         server.perform(.pin(session: "a"), from: nil)
         server.perform(.pin(session: "a"), from: nil)
         #expect(a.info.pinned && b.info.pinned)
-        #expect(ServerCache.shared.pinnedSessions() == ["a", "b"])
+        #expect(try pinnedRows() == ["a", "b"])
         server.perform(.unpin(session: "b"), from: nil)
         #expect(!b.info.pinned)
-        #expect(ServerCache.shared.pinnedSessions() == ["a"])
+        #expect(try pinnedRows() == ["a"])
 
-        // The store's copy says nothing of it.
+        // The session's JSON says nothing of it.
         let stored = try JSONEncoder().encode(a.stored)
-        #expect(!String(decoding: stored, as: UTF8.self).contains("\"pin"), "no pin in sessions.json")
+        #expect(!String(decoding: stored, as: UTF8.self).contains("\"pin"), "no pin in its JSON")
         #expect(try JSONDecoder().decode(StoredSession.self, from: stored).info.pinned == false)
     }
 
-    /// Through a restart: the next launch reads the pins from the database,
-    /// with the sessions from sessions.json.
+    /// Through a restart: the next launch reads the pins with the sessions.
     @Test func testPinsOutliveARestart() throws {
         server.sessions = [record("a", "Alpha"), record("b", "Beta")]
         server.perform(.pin(session: "b"), from: nil)
-        server.saveArchiveNow()
 
-        // The app again: its database opened anew, its sessions read back.
-        ServerCache.shared = MessageCache.open(named: "messages", in: root)
+        // The app again: its sessions read back.
         let again = VisorServer(port: 7958)
         again.harnesses = AgentHarnesses([IdleHarness()])
         again.loadSessions()
@@ -131,7 +135,7 @@ extension ServerTests {
         #expect(unpinned.status == 200)
         #expect(!session.info.pinned)
         #expect(Envelope.decode(unpinned.body)?.sessions?.first?.pinned == false)
-        #expect(ServerCache.shared.pinnedSessions().isEmpty)
+        #expect(try pinnedRows().isEmpty)
 
         // The socket's envelopes, as they go.
         #expect(Envelope.decode(Envelope.pin(session: "s").encoded())?.type == "pin")
@@ -149,7 +153,7 @@ extension ServerTests {
 
     /// Archiving takes the pin; an archived session isn't pinned. Ending
     /// one takes its pin from the database too.
-    @Test func testAnArchivedOrEndedSessionIsNotPinned() {
+    @Test func testAnArchivedOrEndedSessionIsNotPinned() throws {
         let session = record("s")
         server.sessions = [session, record("t")]
         server.perform(.pin(session: "s"), from: nil)
@@ -157,7 +161,7 @@ extension ServerTests {
         server.perform(Envelope.archive(session: "s"), from: nil)
         #expect(session.info.archived)
         #expect(!session.info.pinned, "off the top of the list it has left")
-        #expect(ServerCache.shared.pinnedSessions().isEmpty)
+        #expect(try pinnedRows().isEmpty)
         server.perform(.pin(session: "s"), from: nil)
         #expect(!session.info.pinned, "not while archived")
         server.perform(Envelope.unarchive(session: "s"), from: nil)
@@ -165,7 +169,46 @@ extension ServerTests {
 
         server.perform(.pin(session: "t"), from: nil)
         server.perform(Envelope.end(session: "t"), from: nil)
-        #expect(ServerCache.shared.pinnedSessions().isEmpty, "gone with the session")
+        #expect(try pinnedRows().isEmpty, "gone with the session")
+    }
+
+    /// An earlier build of 0.73 kept its pins in messages.sqlite: they move
+    /// into the store once, the archived and the gone passed over, and the
+    /// cache's are never read again (an unpin holds through a restart).
+    @Test func testPinsTheCacheKeptMoveInOnce() throws {
+        let earlier = FileManager.default.temporaryDirectory.appendingPathComponent("visor-session-pins-cache-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: earlier, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: earlier) }
+        VisorServer.storeRoot = earlier
+        let file = #"""
+            [{"info":{"id":"a","agent":"claude","cwd":"/tmp","title":"Alpha","created":1},"entries":[]},
+             {"info":{"id":"b","agent":"claude","cwd":"/tmp","title":"Beta","created":2},"entries":[]},
+             {"info":{"id":"c","agent":"claude","cwd":"/tmp","title":"Gamma","created":3,"archived":true},"entries":[]}]
+            """#
+        try Data(file.utf8).write(to: earlier.appendingPathComponent("sessions.json"))
+        let cache = earlier.appendingPathComponent("cache", isDirectory: true)
+        _ = MessageCache.open(named: "messages", in: cache)
+        try Database(path: cache.appendingPathComponent("messages.sqlite").path).execute(
+            #"CREATE TABLE "pins" ("session" TEXT PRIMARY KEY NOT NULL); INSERT INTO pins VALUES ('b'), ('c'), ('gone')"#)
+        ServerCache.shared = MessageCache.open(named: "messages", in: cache)
+
+        let first = VisorServer(port: 7957)
+        defer { first.stop() }
+        #expect(first.sessions.map(\.info.id) == ["a", "b", "c"])
+        #expect(first.sessions.map(\.info.pinned) == [false, true, false], "an archived one isn't pinned")
+        #expect(try pinnedRows() == ["b"])
+        #expect(try SessionStore(path: VisorServer.storeURL.path).note(VisorServer.pinsMovedNote) != nil)
+
+        // Unpinned here: the cache still has it, and isn't read again.
+        first.perform(.unpin(session: "b"), from: nil)
+        first.perform(.pin(session: "a"), from: nil)
+        let second = VisorServer(port: 7956)
+        defer { second.stop() }
+        #expect(second.sessions.map(\.info.pinned) == [true, false, false])
+        #expect(ServerCache.shared.pinnedSessions() == ["b", "c", "gone"], "the cache's table left as it was")
+        let third = VisorServer(port: 7955)
+        defer { third.stop() }
+        #expect(third.sessions.map(\.info.pinned) == [true, false, false])
     }
 }
 }

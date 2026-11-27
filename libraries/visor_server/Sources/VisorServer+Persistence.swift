@@ -29,13 +29,10 @@ extension VisorServer {
     func loadSessions() {
         guard let stored = readStore() else { return }
         let asked = Self.requestedResumes()
-        // Its pins are the database's, not the file's (VisorServer+SessionPins).
-        let pinned = ServerCache.shared.pinnedSessions()
         var orphans: [(session: String, pid: Int32, resume: String?)] = []
         var hosted: [(record: SessionRecord, host: StoredHost, pid: Int32?, resume: String?)] = []
         for item in stored {
             var info = item.info
-            info.pinned = pinned.contains(info.id) && !info.archived
             info.busy = false
             info.ended = false
             // A stopped agent stays stopped; one the app went away under
@@ -133,8 +130,9 @@ extension VisorServer {
         }
     }
 
-    /// The sessions as the store has them (sessions.json's read into it
-    /// first, the first time: VisorServer+SessionImport), and each one's row
+    /// The sessions as the store has them, pinned as their rows say
+    /// (sessions.json's read into it first, the first time, and the pins
+    /// messages.sqlite kept: VisorServer+SessionImport), and each one's row
     /// noted as written. Nil when there's no store to read: it couldn't be
     /// opened, or read, and nothing is written this launch (lastError says
     /// why).
@@ -150,6 +148,7 @@ extension VisorServer {
         }
         sessionStore = store
         guard importLegacyStore(into: store) else { return nil }
+        movePinsFromCache(into: store)
         do {
             rows = try store.rows()
         } catch {
@@ -161,10 +160,12 @@ extension VisorServer {
         for row in rows where read[row.id] == nil {
             // A row we cannot read is kept, and so is every other: nothing
             // is written until a build that reads them all.
-            guard let session = try? JSONDecoder().decode(StoredSession.self, from: Data(row.stored.utf8)) else {
+            guard var session = try? JSONDecoder().decode(StoredSession.self, from: Data(row.stored.utf8)) else {
                 refuseStore("Could not read the session \(row.title) (\(row.id)) in \(name). Sessions are not being saved.")
                 return nil
             }
+            // Its pin is the row's (an archived session isn't pinned).
+            session.info.pinned = row.pinned && !session.info.archived
             read[row.id] = row
             stored.append(session)
         }
@@ -215,13 +216,14 @@ extension VisorServer {
     /// Writes the sessions down now (the name is historical: it began as
     /// the archive), and with them any change waiting to be: in one
     /// transaction, the rows of the sessions that changed since they were
-    /// last written, the places of those that moved in the list, and the
-    /// rows of those gone. A session as it was is not written again.
+    /// last written, the places and pins of those that moved in the list or
+    /// were pinned or unpinned, and the rows of those gone. A session as it
+    /// was is not written again.
     func saveArchiveNow() {
         archiveSavePending = false
         guard storeIsReadable, let store = sessionStore else { return }
         var put: [SessionStore.Row] = []
-        var placed: [(id: String, position: Int)] = []
+        var placed: [(id: String, position: Int, pinned: Bool)] = []
         var present: Set<String> = []
         do {
             for (position, record) in sessions.enumerated() {
@@ -229,16 +231,21 @@ extension VisorServer {
                 guard present.insert(session.info.id).inserted else { continue }
                 let encoded = try SessionStore.Row.encoded(session)
                 if let written = writtenRows[session.info.id], written.stored == encoded {
-                    if written.position != position { placed.append((session.info.id, position)) }
+                    if written.position != position || written.pinned != record.info.pinned {
+                        placed.append((session.info.id, position, record.info.pinned))
+                    }
                 } else {
-                    put.append(SessionStore.Row(session, encoded: encoded, position: position))
+                    put.append(SessionStore.Row(session, encoded: encoded, position: position, pinned: record.info.pinned))
                 }
             }
             let removed = writtenRows.keys.filter { !present.contains($0) }.sorted()
             if !put.isEmpty || !placed.isEmpty || !removed.isEmpty {
                 try store.write(put: put, placed: placed, removed: removed)
                 for row in put { writtenRows[row.id] = row }
-                for place in placed { writtenRows[place.id]?.position = place.position }
+                for place in placed {
+                    writtenRows[place.id]?.position = place.position
+                    writtenRows[place.id]?.pinned = place.pinned
+                }
                 for id in removed { writtenRows[id] = nil }
             }
             if savingFailed {

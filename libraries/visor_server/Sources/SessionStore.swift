@@ -2,8 +2,9 @@
 // (server.sqlite in its data folder; swift_sql, as the message cache). Each
 // row is the session as StoredSession has it, as JSON, beside the few
 // things of it a query or an order wants as columns of their own: its
-// place in the server's list, its title, whether it's archived, when it
-// was pinned and when its latest message came. A write is of the rows that
+// place in the server's list, its title, whether it's archived or pinned,
+// and when its latest message came. Its pin is the column's alone: the
+// session's JSON never has one (SessionRecord.stored). A write is of the rows that
 // changed, in one transaction; the file is in WAL mode, so a crash in the
 // middle of one leaves the one before. Before 0.73 the store was
 // sessions.json, written whole on every change (VisorServer+SessionImport
@@ -25,8 +26,8 @@ final class SessionStore: Sendable {
         var position: Int
         var title: String
         var archived: Bool
-        /// When it was pinned (SessionInfo's `pinnedAt`), nil when it isn't.
-        var pinnedAt: Double?
+        /// Pinned to the top of its computer's list (SessionInfo's `pinned`).
+        var pinned: Bool = false
         /// When its latest message came (SessionInfo's `updated`).
         var updated: Double?
         /// The session, as StoredSession encodes it (`encoded`).
@@ -47,10 +48,10 @@ final class SessionStore: Sendable {
     /// build after it.
     static let migrations: [String] = [
         // 1 (0.73): the sessions, and what the store notes of itself (its
-        // import from sessions.json).
+        // imports: sessions.json, and the pins messages.sqlite kept).
         """
         CREATE TABLE "sessions" ("id" TEXT PRIMARY KEY NOT NULL, "position" INTEGER NOT NULL, "title" TEXT NOT NULL,
-            "archived" INTEGER NOT NULL, "pinned_at" REAL, "updated" REAL, "stored" TEXT NOT NULL);
+            "archived" INTEGER NOT NULL, "pinned" INTEGER NOT NULL DEFAULT 0, "updated" REAL, "stored" TEXT NOT NULL);
         CREATE INDEX "index_sessions_on_position" ON "sessions" ("position");
         CREATE TABLE "notes" ("key" TEXT PRIMARY KEY NOT NULL, "value" TEXT NOT NULL);
         """,
@@ -81,9 +82,9 @@ final class SessionStore: Sendable {
 
     /// Every row, in the list's order.
     func rows() throws -> [Row] {
-        try db.query("SELECT id, position, title, archived, pinned_at, updated, stored FROM sessions ORDER BY position, rowid") { row in
+        try db.query("SELECT id, position, title, archived, pinned, updated, stored FROM sessions ORDER BY position, rowid") { row in
             Row(id: row.text(0) ?? "", position: row.int(1), title: row.text(2) ?? "", archived: row.bool(3),
-                pinnedAt: row.isNull(4) ? nil : row.double(4), updated: row.isNull(5) ? nil : row.double(5), stored: row.text(6) ?? "")
+                pinned: row.bool(4), updated: row.isNull(5) ? nil : row.double(5), stored: row.text(6) ?? "")
         }
     }
 
@@ -99,14 +100,14 @@ final class SessionStore: Sendable {
     // MARK: Writing
 
     /// One write, in one transaction: the rows `put` (inserted, or in
-    /// place of the row of the same id), the rows `placed` moved to their
-    /// new places alone, the rows of `removed` deleted.
-    func write(put: [Row], placed: [(id: String, position: Int)] = [], removed: [String] = []) throws {
+    /// place of the row of the same id), the rows `placed` given their new
+    /// places and pins alone, the rows of `removed` deleted.
+    func write(put: [Row], placed: [(id: String, position: Int, pinned: Bool)] = [], removed: [String] = []) throws {
         try db.transaction(.immediate) { connection in
             try Self.insert(put, into: connection)
-            try connection.prepare("UPDATE sessions SET position = ? WHERE id = ?") { statement in
+            try connection.prepare("UPDATE sessions SET position = ?, pinned = ? WHERE id = ?") { statement in
                 for place in placed {
-                    try statement.bind(place.position, place.id)
+                    try statement.bind(place.position, place.pinned, place.id)
                     try statement.run()
                 }
             }
@@ -131,11 +132,32 @@ final class SessionStore: Sendable {
             guard written == distinct else {
                 throw Refusal(description: "\(distinct) sessions written, \(written) read back")
             }
-            try connection.prepare("INSERT OR REPLACE INTO notes (key, value) VALUES (?, ?)") { statement in
-                for (key, value) in notes.sorted(by: { $0.key < $1.key }) {
-                    try statement.bind(key, value)
-                    try statement.run()
+            try Self.note(notes, in: connection)
+        }
+    }
+
+    /// These sessions pinned (those of them here and not archived), and
+    /// `notes` noted, in one transaction: how many were pinned.
+    @discardableResult
+    func pin(_ ids: Set<String>, notes: [String: String]) throws -> Int {
+        try db.transaction(.immediate) { connection in
+            var pinned = 0
+            try connection.prepare("UPDATE sessions SET pinned = 1 WHERE id = ? AND archived = 0") { statement in
+                for id in ids.sorted() {
+                    try statement.bind(id)
+                    pinned += try statement.run()
                 }
+            }
+            try Self.note(notes, in: connection)
+            return pinned
+        }
+    }
+
+    private static func note(_ notes: [String: String], in connection: Connection) throws {
+        try connection.prepare("INSERT OR REPLACE INTO notes (key, value) VALUES (?, ?)") { statement in
+            for (key, value) in notes.sorted(by: { $0.key < $1.key }) {
+                try statement.bind(key, value)
+                try statement.run()
             }
         }
     }
@@ -143,10 +165,10 @@ final class SessionStore: Sendable {
     private static func insert(_ rows: [Row], into connection: Connection) throws {
         guard !rows.isEmpty else { return }
         try connection.prepare("""
-            INSERT OR REPLACE INTO sessions (id, position, title, archived, pinned_at, updated, stored) VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT OR REPLACE INTO sessions (id, position, title, archived, pinned, updated, stored) VALUES (?, ?, ?, ?, ?, ?, ?)
             """) { statement in
             for row in rows {
-                try statement.bind(row.id, row.position, row.title, row.archived, row.pinnedAt, row.updated, row.stored)
+                try statement.bind(row.id, row.position, row.title, row.archived, row.pinned, row.updated, row.stored)
                 try statement.run()
             }
         }
@@ -154,16 +176,14 @@ final class SessionStore: Sendable {
 }
 
 extension SessionStore.Row {
-    /// A session's row at a place in the list. Its pin is read from its
-    /// info as the protocol has it, so it's the column whether or not this
-    /// build's SessionInfo has a `pinnedAt` of its own (#560).
-    init(_ session: StoredSession, position: Int) throws {
-        self.init(session, encoded: try Self.encoded(session), position: position)
+    /// A session's row at a place in the list, pinned or not.
+    init(_ session: StoredSession, position: Int, pinned: Bool = false) throws {
+        self.init(session, encoded: try Self.encoded(session), position: position, pinned: pinned)
     }
 
-    init(_ session: StoredSession, encoded: String, position: Int) {
+    init(_ session: StoredSession, encoded: String, position: Int, pinned: Bool) {
         self.init(id: session.info.id, position: position, title: session.info.title, archived: session.info.archived,
-                  pinnedAt: session.info.json["pinnedAt"].double, updated: session.info.updated, stored: encoded)
+                  pinned: pinned, updated: session.info.updated, stored: encoded)
     }
 
     /// A session as its row keeps it: JSON, its keys sorted, so the same

@@ -19,9 +19,15 @@
 // A sessions.json that can't be read is left as it is: nothing is
 // imported, and nothing written (the store isn't readable, as when the
 // file was the store); the next start tries again.
+//
+// The pins builds of 0.73 before the store kept in messages.sqlite, the
+// message cache (its `pins` table, #560), are moved in once too, after
+// sessions.json: each session there and not archived is pinned in its row,
+// and the store notes it. The table is left as it is, and never read again.
 
 import Crypto
 import Foundation
+import MessageCache
 import VisorProtocol
 
 extension VisorServer {
@@ -114,6 +120,23 @@ extension VisorServer {
             }
         }
         return true
+    }
+
+    /// The store's note of when messages.sqlite's pins were moved in.
+    static let pinsMovedNote = "pinsMovedFromCache"
+
+    /// The pins messages.sqlite kept (ServerCache), moved into the store if
+    /// they haven't been: once, whatever there was (none, for a cache that
+    /// never had pins). Not done, it's tried again at the next start.
+    func movePinsFromCache(into store: SessionStore, now: Date = Date()) {
+        do {
+            guard try store.note(Self.pinsMovedNote) == nil else { return }
+            let kept = ServerCache.shared.pinnedSessions()
+            let pinned = try store.pin(kept, notes: [Self.pinsMovedNote: ISO8601DateFormatter().string(from: now) + " (\(kept.count) kept)"])
+            if !kept.isEmpty { Self.log("moved \(pinned) of the \(kept.count) pins messages.sqlite kept into \(Self.storeURL.lastPathComponent)") }
+        } catch {
+            Self.log("the pins messages.sqlite kept weren't moved into \(Self.storeURL.lastPathComponent): \(error)")
+        }
     }
 
     /// The store isn't read or written this launch, and says why.
