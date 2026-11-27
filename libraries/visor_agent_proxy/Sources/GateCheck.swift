@@ -22,8 +22,10 @@ public enum GateCheck: Equatable, Sendable {
     case rerun(repository: String, run: Int, failedOnly: Bool)
     /// `POST …/actions/runs/{id}/cancel` ([C1], [C2]).
     case cancel(repository: String, run: Int)
-    /// `POST …/actions/workflows/{id}/dispatches` ([D5], [D6]).
-    case dispatch(repository: String, workflow: Int, branch: String)
+    /// `POST …/actions/workflows/{id}/dispatches` ([D5], [D6]), with its
+    /// inputs: on the default branch, they are the workflow's in gate.json's
+    /// `mainDispatch`.
+    case dispatch(repository: String, workflow: Int, branch: String, inputs: [String: String] = [:])
     /// `PATCH …/releases/{id}` ([RL6], [RL7]): a draft, its tag sent again.
     case releaseEdit(repository: String, release: Int)
     /// A GraphQL mutation's nodes, each resolved to its repository, which
