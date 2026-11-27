@@ -286,9 +286,14 @@ rule (no passed-on servers in a container) for Nimbus only.
   its container runner runs now (not let go), and that agent's session,
   live. Anything else (expired, forged, another server's, another session's,
   a native session's, an ended agent's) is refused with 401, before
-  anything goes on. The agent's harness gets such a token from its own
-  wrapper's stream, for MCP alone, an hour's, and asks again as it needs one
-  (`visor-agent-host mcp-headers`, its Claude's headersHelper).
+  anything goes on, and said in the log once for each agent and reason
+  (never with the token). The agent's harness gets such a token from its
+  own wrapper's stream, for MCP alone, a week's (Claude keeps the headers
+  for the connection: an hour's ended under a running agent), and asks
+  again on a 401 (`visor-agent-host mcp-headers`, its Claude's
+  headersHelper, which gives it as `Authorization: Bearer` too for that;
+  the pass-through sends a container agent's `Authorization` on to no
+  upstream).
 - **Nimbus's alone.** A call let in by an agent's token reaches only the
   servers containers are given (`NativeMCPProxy.containerServers`:
   `nimbus`). On any other path (`/mcp/gh`, `/mcp/oss`, `/mcp/shireworks`)
