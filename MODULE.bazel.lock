@@ -1124,7 +1124,7 @@
           "REPO_MAPPING:rules_swift_package_manager+,bazel_skylib bazel_skylib+",
           "REPO_MAPPING:rules_swift_package_manager+,bazel_tools bazel_tools",
           "REPO_MAPPING:rules_swift_package_manager+,cgrindel_bazel_starlib cgrindel_bazel_starlib+",
-          "FILE:@@//third_party/swift_packages/Package.resolved 1a9b79ca245b63df9952584cfae853a2e216150a0bdde0f394681f3af2c401fc"
+          "FILE:@@//third_party/swift_packages/Package.resolved fd8df2560ea3b4d63cc8dab436b6ef1c1e17c383d50dc160289fe693935993f5"
         ],
         "generatedRepoSpecs": {
           "swift_package": {
@@ -1442,9 +1442,9 @@
             "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
             "attributes": {
               "bazel_package_name": "swiftpkg_shireworks_kit",
-              "commit": "0e524abc3737870fbdddba159c23d1c986c8eb79",
+              "commit": "ad0a314212859541e9d1c2bb5ff1424309bccc42",
               "remote": "https://github.com/AttilaTheFun/shireworks_kit.git",
-              "version": "0.2.1",
+              "version": "0.3.0",
               "env": {},
               "env_inherit": [],
               "cached_json_directory": "",

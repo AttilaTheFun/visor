@@ -66,7 +66,7 @@ let package = Package(
         // Report a Bug's sheet opening at once.
         .package(
             url: "https://github.com/AttilaTheFun/shireworks_kit.git",
-            exact: "0.2.1"
+            exact: "0.3.0"
         ),
         // Apple's Containerization (docs/containers.md): the Sessions
         // container's image store, ext4 unpacking and init filesystem, and,
