@@ -1119,12 +1119,12 @@
     "@@rules_swift_package_manager+//:extensions.bzl%swift_deps": {
       "general": {
         "bzlTransitiveDigest": "B2aTY3dA0RubUZkTqFdg+fxS3ocQQeeog6AzCPaqDXY=",
-        "usagesDigest": "rpcV0a8zKOYXQW8mOEul3bIIeTI8fEvi7K/vVYpVpTA=",
+        "usagesDigest": "bAEDsgvL7svvYDtZd1pahXDGVezRlTI1Z7KLnKDW518=",
         "recordedInputs": [
           "REPO_MAPPING:rules_swift_package_manager+,bazel_skylib bazel_skylib+",
           "REPO_MAPPING:rules_swift_package_manager+,bazel_tools bazel_tools",
           "REPO_MAPPING:rules_swift_package_manager+,cgrindel_bazel_starlib cgrindel_bazel_starlib+",
-          "FILE:@@//third_party/swift_packages/Package.resolved c208d982f393fb50dc4867fd2d43df9c522374272cab04ac16f860708d037913"
+          "FILE:@@//third_party/swift_packages/Package.resolved 1a9b79ca245b63df9952584cfae853a2e216150a0bdde0f394681f3af2c401fc"
         ],
         "generatedRepoSpecs": {
           "swift_package": {
@@ -1146,7 +1146,8 @@
                 "swiftpkg_grpc_swift_nio_transport",
                 "swiftpkg_grpc_swift_protobuf",
                 "swiftpkg_isomer",
-                "swiftpkg_shake_kit",
+                "swiftpkg_kscrash",
+                "swiftpkg_shireworks_kit",
                 "swiftpkg_swift_algorithms",
                 "swiftpkg_swift_argument_parser",
                 "swiftpkg_swift_asn1",
@@ -1173,7 +1174,6 @@
                 "swiftpkg_swift_sql",
                 "swiftpkg_swift_syntax",
                 "swiftpkg_swift_system",
-                "swiftpkg_update_kit",
                 "swiftpkg_zstd"
               ]
             }
@@ -1438,32 +1438,13 @@
               "package_repos": "@@rules_swift_package_manager++swift_deps+swift_deps_package_repos//:package_repos.json"
             }
           },
-          "swiftpkg_update_kit": {
+          "swiftpkg_shireworks_kit": {
             "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
             "attributes": {
-              "bazel_package_name": "swiftpkg_update_kit",
-              "commit": "2acaad86637246bc7297a3a999ea153a52dd9d40",
-              "remote": "https://github.com/AttilaTheFun/update_kit.git",
-              "version": "0.18.0",
-              "env": {},
-              "env_inherit": [],
-              "cached_json_directory": "",
-              "make_files_read_only": false,
-              "replace_scm_with_registry": false,
-              "target_deps": {},
-              "module_aliases": {},
-              "dep_module_aliases": "",
-              "bazel_target_mods": "",
-              "package_repos": "@@rules_swift_package_manager++swift_deps+swift_deps_package_repos//:package_repos.json"
-            }
-          },
-          "swiftpkg_shake_kit": {
-            "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
-            "attributes": {
-              "bazel_package_name": "swiftpkg_shake_kit",
-              "commit": "8815b7dd86acd88d44a946bf2da31116208156e3",
-              "remote": "https://github.com/AttilaTheFun/shake_kit.git",
-              "version": "0.3.0",
+              "bazel_package_name": "swiftpkg_shireworks_kit",
+              "commit": "0e524abc3737870fbdddba159c23d1c986c8eb79",
+              "remote": "https://github.com/AttilaTheFun/shireworks_kit.git",
+              "version": "0.2.1",
               "env": {},
               "env_inherit": [],
               "cached_json_directory": "",
@@ -1502,6 +1483,25 @@
               "commit": "d2dfb39bcb0fafd1834ec6e6334c1755360f856e",
               "remote": "https://github.com/swift-server/async-http-client.git",
               "version": "1.37.0",
+              "env": {},
+              "env_inherit": [],
+              "cached_json_directory": "",
+              "make_files_read_only": false,
+              "replace_scm_with_registry": false,
+              "target_deps": {},
+              "module_aliases": {},
+              "dep_module_aliases": "",
+              "bazel_target_mods": "",
+              "package_repos": "@@rules_swift_package_manager++swift_deps+swift_deps_package_repos//:package_repos.json"
+            }
+          },
+          "swiftpkg_kscrash": {
+            "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
+            "attributes": {
+              "bazel_package_name": "swiftpkg_kscrash",
+              "commit": "c3882b4db5e810a8ed4148b79cab29a173d4c5c5",
+              "remote": "https://github.com/kstenerud/KSCrash.git",
+              "version": "2.6.1",
               "env": {},
               "env_inherit": [],
               "cached_json_directory": "",
@@ -1982,8 +1982,7 @@
             "swiftpkg_swift_certificates",
             "swiftpkg_swift_nio_ssl",
             "swiftpkg_swift_sql",
-            "swiftpkg_update_kit",
-            "swiftpkg_shake_kit",
+            "swiftpkg_shireworks_kit",
             "swiftpkg_containerization",
             "swift_package"
           ],
