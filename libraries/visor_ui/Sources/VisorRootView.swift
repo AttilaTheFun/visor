@@ -21,6 +21,13 @@ public struct VisorRootView: View {
     /// The app has been in the background since it was last in front.
     @State private var wasInBackground = false
     @State private var columns: NavigationSplitViewVisibility = .all
+    /// The Mac's window and detail column, as wide as they were laid out
+    /// (0 until then): what NarrowWindow fits the columns and the pane to.
+    @State private var windowWidth: CGFloat = 0
+    @State private var detailWidth: CGFloat = 0
+    /// The sidebar hidden because the window narrowed, not by the person:
+    /// shown again as it widens.
+    @State private var sidebarHiddenForWidth = false
     /// What the open session's screen calls when its session is ended.
     @State private var endSession = ViewAction()
     /// What a session's page or row opens: its fork, its branch, its side
@@ -115,7 +122,7 @@ public struct VisorRootView: View {
     /// Whether Settings is up as a sheet: on a phone's width, and wherever
     /// the onboarding opens it (it has no pane).
     private var settingsIsSheet: Bool {
-        pane == .settings && (compact || onboarding)
+        pane == .settings && (paneIsSheet || onboarding)
     }
 
     /// Whether Add Computer is open from Settings' sheet (`fromSettings`)
@@ -142,14 +149,14 @@ public struct VisorRootView: View {
     @ViewBuilder private var paneContent: some View {
         switch pane {
         case .settings:
-            if compact {
+            if paneIsSheet {
                 settingsSheet
             } else {
                 VisorSettingsView(computer: $settingsComputer)
             }
         case .session(let which):
             if let host = store.server(for: which.serverID), let info = host.transcript(for: which.sessionID).info {
-                SessionInspector(host: host, session: info, compact: compact,
+                SessionInspector(host: host, session: info, compact: paneIsSheet,
                                  close: { pane = nil },
                                  archive: { pane = nil; host.archive(which.sessionID) },
                                  end: {
@@ -170,7 +177,7 @@ public struct VisorRootView: View {
         if Compat.paneOnDetailColumn {
             split
         } else {
-            split.adaptiveInspector(isPresented: paneOpen, compact: compact) { paneContent }
+            split.adaptiveInspector(isPresented: paneOpen, compact: paneIsSheet) { paneContent }
         }
     }
 
@@ -181,6 +188,30 @@ public struct VisorRootView: View {
     }
 
     private var compact: Bool { sizeClass == .compact }
+
+    /// Whether the pane is a sheet: on a phone's width, and on the Mac
+    /// where the detail column hasn't room for the content's least beside
+    /// the pane (NarrowWindow).
+    private var paneIsSheet: Bool {
+        compact || (NarrowWindow.applies && detailWidth > 0 && detailWidth < NarrowWindow.besidePane)
+    }
+
+    /// The Mac window's columns fitted to its width: the sidebar hidden as
+    /// the window narrows past the room for it beside the content's least,
+    /// and shown again as it widens, if it was hidden for the width. The
+    /// person's own hiding or showing is theirs.
+    private func fitColumns(to width: CGFloat) {
+        guard NarrowWindow.applies, width > 0 else { return }
+        let before = windowWidth
+        windowWidth = width
+        if width < NarrowWindow.besideSidebar, before == 0 || before >= NarrowWindow.besideSidebar, columns != .detailOnly {
+            columns = .detailOnly
+            sidebarHiddenForWidth = true
+        } else if width >= NarrowWindow.besideSidebar, sidebarHiddenForWidth {
+            columns = .all
+            sidebarHiddenForWidth = false
+        }
+    }
     private var searching: Bool { !search.trimmed.isEmpty }
 
     /// The onboarding while it is needed (the default one: while there
@@ -243,16 +274,21 @@ public struct VisorRootView: View {
         // an iPad the detail column's took its navigation title). Attached
         // once: a second inspector beside it, even closed, looped AppKit's
         // layout (TrailingPane).
+        // On the Mac, the columns and the pane fitted to the window's width
+        // (NarrowWindow): down to 320, the sidebar hidden and the pane a
+        // sheet rather than squeezing the content.
         paneOnSplitView(NavigationSplitView(columnVisibility: $columns) {
             sidebar
         } detail: {
             if Compat.paneOnDetailColumn {
-                detailView.adaptiveInspector(isPresented: paneOpen, compact: compact) { paneContent }
+                detailView.adaptiveInspector(isPresented: paneOpen, compact: paneIsSheet) { paneContent.paneSheetOnMac(paneIsSheet) }
+                    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { detailWidth = $0 }
             } else {
                 detailView
             }
         }
-        .navigationSplitViewStyle(.balanced))
+        .navigationSplitViewStyle(.balanced)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { fitColumns(to: $0) })
         .environment(\.trailingPane, $pane)
         .sheet(isPresented: $composing, onDismiss: {
             composeRestores = false
@@ -751,8 +787,8 @@ public struct VisorRootView: View {
                 // (Applications, 9 Nov 2026). Its least is 320, the
                 // narrowest an iPad app gets in Stage Manager (Logan, 27 Nov
                 // 2026): the chat, the composer and the rest lay out in it.
-                // A window narrower than the sidebar beside it collapses the
-                // sidebar instead of squeezing this (VisorMacApp).
+                // A window too narrow for the sidebar beside it hides the
+                // sidebar instead of squeezing this (NarrowWindow).
                 .navigationSplitViewColumnWidth(min: 320, ideal: 720)
                 .navigationDestination(for: SubSessionRoute.self) { route in
                     if let which = selection?.session, let host = store.server(for: which.serverID) { subPage(route, host: host) }

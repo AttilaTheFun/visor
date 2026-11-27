@@ -102,9 +102,9 @@ struct VisorMacApp: App {
                 // As narrow as the content goes (320, the narrowest an iPad
                 // app gets in Stage Manager: Logan, 27 Nov 2026), not as wide
                 // as the sidebar, the detail and the pane together: narrower
-                // than those, AppKit collapses the sidebar (and the pane)
-                // rather than squeeze the detail below its least
-                // (VisorRootView). It opens at its default size, below.
+                // than those, the sidebar is hidden and the pane is a sheet
+                // rather than the content squeezed (VisorRootView,
+                // NarrowWindow). It opens at its default size, below.
                 .frame(minWidth: 320, minHeight: 480)
                 // visor://connect?code=… — a connection code from a QR code
                 // or a link adds that computer; visor://sign-in shows a

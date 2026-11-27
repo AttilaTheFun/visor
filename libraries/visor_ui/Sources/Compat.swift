@@ -180,6 +180,21 @@ extension View {
         #endif
     }
 
+    /// The pane (Settings, a session's details) as a sheet on the Mac, in
+    /// a window too narrow for it beside the content (NarrowWindow): a
+    /// sheet's size, as the pane's column gave it one. Elsewhere as it is.
+    @ViewBuilder func paneSheetOnMac(_ sheet: Bool) -> some View {
+        #if os(macOS)
+        if sheet {
+            frame(minWidth: 320, idealWidth: 440, minHeight: 480, idealHeight: 640)
+        } else {
+            self
+        }
+        #else
+        self
+        #endif
+    }
+
     @ViewBuilder func presentationDetentsMediumLarge() -> some View {
         #if os(macOS)
         frame(minWidth: 320, idealWidth: 440, minHeight: 380)
