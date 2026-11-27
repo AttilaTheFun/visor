@@ -149,7 +149,7 @@ public final class VisorAgentServer: AgentServer {
             var identity: ServerIdentity?
             if let id = hello.id, !id.isEmpty {
                 identity = ServerIdentity(id: id, addresses: hello.addresses ?? [], standalone: hello.standalone ?? false,
-                                          keepMessages: hello.keepMessages ?? true, version: hello.version)
+                                          keepMessages: hello.keepMessages ?? true, version: hello.version, pins: hello.pins ?? false)
             }
             return SignIn(record: record, session: session, tunnel: session == nil ? nil : address, headers: headers, token: hello.token,
                           identity: identity, name: hello.host.flatMap { $0.isEmpty ? nil : $0 })

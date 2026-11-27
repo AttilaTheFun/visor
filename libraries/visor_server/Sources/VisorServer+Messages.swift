@@ -82,6 +82,8 @@ extension VisorServer {
         case "signIn": performSignIn(envelope)
         case "permissions": performPermissions(envelope)
         case "notifications": performNotifications(envelope)
+        case "pin": performPin(envelope, pinned: true)
+        case "unpin": performPin(envelope, pinned: false)
         case "approve": performApprove(envelope)
         case "settings": performSettings(envelope)
         case "rename": performRename(envelope)
@@ -379,6 +381,7 @@ extension VisorServer {
         record.process.stop()
         record.markEnded()
         sessions.removeAll { $0 === record }
+        if record.info.pinned { setPinned(false, record) }
         forgetAgentToken(of: record.info.id)
         // Its agent's shims waiting on approvals go with it.
         for waiter in (approvalWaiters.removeValue(forKey: record.info.id) ?? [:]).values { waiter.close() }
