@@ -53,6 +53,9 @@ for line in open(sys.argv[1]):
     if line.startswith("SCREENS = "): print(" ".join(ast.literal_eval(line.split("=", 1)[1].strip())))' "$ROOT/tools/isomer/snapshots/snapshots.py")"
 PACKAGE="com.loganshire.visor"
 BAZEL="${PROOF_BAZEL:-bazel}"
+# Its Swift packages' git fetches with the job's token (GH_TOKEN): GitHub
+# limits anonymous git by address, which its runners share.
+"$ROOT/tools/ci/git_auth.sh"
 TEST=//tests/feature_map_tests:feature_map_proof_android
 # 24dp at 2.625x, as snapshots.py's ANDROID_STATUS_BAR.
 STATUS_BAR=80

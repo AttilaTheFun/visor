@@ -26,14 +26,20 @@ extension SessionCatalog {
             let root = ClaudeSessionFiles.projectsRoot()
             let named = root.appendingPathComponent(ClaudeSessionFiles.projectDirectoryName(for: cwd), isDirectory: true)
             let folders = [named] + ((try? files.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? [])
-            guard let folder = folders.first(where: { files.fileExists(atPath: $0.appendingPathComponent(id + ".jsonl", isDirectory: false).path) })
-            else { return [] }
+            // Each as it is, never a link followed: the transcript a plain
+            // file, the folder beside it a folder, in a project whose real
+            // path is inside Claude's projects folder. (A link would be read
+            // as the user, wherever it led.)
+            let kind = { (url: URL) in (try? files.attributesOfItem(atPath: url.path))?[.type] as? FileAttributeType }
+            guard let folder = folders.first(where: {
+                kind($0.appendingPathComponent(id + ".jsonl", isDirectory: false)) == .typeRegular
+                    && ClaudeSessionFiles.isInsideProjects($0.path)
+            }) else { return [] }
             var found = [ConversationFile(url: folder.appendingPathComponent(id + ".jsonl", isDirectory: false),
                                           place: "projects/{project}/\(id).jsonl", folder: false)]
             // What its subagents and long tool results were kept in.
             let beside = folder.appendingPathComponent(id, isDirectory: true)
-            var isFolder: ObjCBool = false
-            if files.fileExists(atPath: beside.path, isDirectory: &isFolder), isFolder.boolValue {
+            if kind(beside) == .typeDirectory {
                 found.append(ConversationFile(url: beside, place: "projects/{project}/\(id)", folder: true))
             }
             return found

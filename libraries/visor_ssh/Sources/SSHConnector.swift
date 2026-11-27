@@ -73,7 +73,8 @@ public final class SSHConnector {
                 handler = try await Self.handler(on: next)
                 try await Self.probe(handler, on: next)
             }
-            return SSHConnection(root: root, handler: handler, hostKeys: outcomes.map { $0.hostKey ?? "" }, group: group)
+            let gate = try await SSHConnection.gate(on: root)
+            return SSHConnection(root: root, handler: handler, gate: gate, hostKeys: outcomes.map { $0.hostKey ?? "" }, group: group)
         } catch {
             try? await root.close().get()
             if let refusal = outcomes.compactMap(\.failure).first { throw refusal }

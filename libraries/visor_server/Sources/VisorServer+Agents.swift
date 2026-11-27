@@ -364,6 +364,9 @@ extension VisorServer {
             // client) waits for this turn rather than landing inside it.
             if turn, !record.info.busy { broadcast(record.apply(.busy(true)), session: record) }
         } catch {
+            // Said where the person sees it, and in the log: the message is
+            // on the record, and its agent never had it.
+            Self.log("a message to \(record.info.title) (\(record.info.id)) could not be handed to its agent: \(error.localizedDescription)")
             broadcast(record.apply(.failure(error.localizedDescription)), session: record)
             broadcast(record.apply(.busy(false)), session: record)
             // Not where the tools usually are: the login shell is asked,

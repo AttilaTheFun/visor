@@ -20,8 +20,13 @@
 // (`visor/passThroughHeaders`, which `visor-agent-host mcp-headers`, the
 // container Claude's headersHelper, sends through the wrapper's MCP socket):
 // answered with the headers to show (`X-Visor-Proxy`, a fresh token for MCP
-// alone), never by the bridge. An agent that isn't the container runner's
-// is answered that it has none.
+// alone, and the same token as `Authorization: Bearer`), never by the
+// bridge. The `Authorization` is what makes Claude Code take the helper as
+// the server's authentication: on a 401 it runs the helper again and
+// retries, where with no `Authorization` it tried OAuth instead (Dynamic
+// Client Registration, refused 401 too: Mini, 0.72.3). agent-proxy takes
+// the token from `X-Visor-Proxy` and sends neither on. An agent that isn't
+// the container runner's is answered that it has none.
 
 import AgentProtocol
 import Foundation
@@ -46,6 +51,9 @@ actor DrivenMCP {
     /// The header agent-proxy's pass-through takes a token in (its
     /// NativeMCPProxy.tokenHeader).
     static let passThroughTokenHeader = "X-Visor-Proxy"
+    /// The same token as a bearer's, so Claude Code takes its headersHelper
+    /// as the server's authentication: run again on a 401, never OAuth.
+    static let authorizationHeader = "Authorization"
 
     /// For the driven session `session`; what it answers goes to `send`
     /// (down the wrapper's connection). `passThroughToken`: a fresh token
@@ -95,7 +103,8 @@ actor DrivenMCP {
             ])])
         }
         return .object(["jsonrpc": .string("2.0"), "id": id,
-                        "result": .object(["headers": .object([Self.passThroughTokenHeader: .string(token)])])])
+                        "result": .object(["headers": .object([Self.passThroughTokenHeader: .string(token),
+                                                               Self.authorizationHeader: .string("Bearer " + token)])])])
     }
 
     /// The wrapper's connection ended: each bridge's own work stopped.

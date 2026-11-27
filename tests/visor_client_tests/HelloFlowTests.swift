@@ -135,7 +135,19 @@ final class ScriptedServer: AgentServer {
     /// What a send is answered with: the sessions as the server has them
     /// after it.
     var sendAnswer: [SessionInfo] = []
-    func sendMessage(_ session: String, text: String, images: [String]) async throws -> [SessionInfo] { sent.append((session, text)); return sendAnswer }
+    /// What a send fails with, while it is set: the server never took it.
+    var sendFailure: Error?
+    func sendMessage(_ session: String, text: String, images: [String]) async throws -> [SessionInfo] {
+        sent.append((session, text))
+        if let sendFailure { throw sendFailure }
+        return sendAnswer
+    }
+    /// The ids the sends came under, in order.
+    var sentIDs: [String] = []
+    func sendMessage(_ session: String, text: String, images: [String], id: String) async throws -> [SessionInfo] {
+        sentIDs.append(id)
+        return try await sendMessage(session, text: text, images: images)
+    }
 
     /// How it sets up new sessions, its choices, and whether it keeps
     /// titles and an archive of its own.
@@ -159,9 +171,19 @@ final class ScriptedServer: AgentServer {
         info.placement = .container
         return info
     }
+    /// What each sync of a transcript asked for, and the answers the test
+    /// has for it, given in order; `answersTranscripts`, whether it gives
+    /// any (looked for every few milliseconds, rather than once a minute).
+    private(set) var transcriptAsks: [(since: Int, generation: Int, after: String?)] = []
+    var transcriptAnswers: [Envelope] = []
+    var answersTranscripts = false
     func transcript(of session: String, since revision: Int, generation: Int, after: String?) async throws -> Envelope {
-        // Nothing moves: held, as a server holds it.
-        while !Task.isCancelled { try await Task.sleep(nanoseconds: 60_000_000_000) }
+        transcriptAsks.append((revision, generation, after))
+        // Nothing moves: held, as a server holds it, until the test answers.
+        while !Task.isCancelled {
+            if !transcriptAnswers.isEmpty { return transcriptAnswers.removeFirst() }
+            try await Task.sleep(nanoseconds: answersTranscripts ? 5_000_000 : 60_000_000_000)
+        }
         throw CancellationError()
     }
     func commands(for session: String) async throws -> [SlashCommand] { [] }

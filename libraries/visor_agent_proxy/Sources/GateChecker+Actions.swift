@@ -3,8 +3,11 @@ import Foundation
 // The Actions checks (docs/github-gate-rules.md, §2.8): a re-run only of a
 // finished push, pull_request or workflow_dispatch run at its branch's head
 // ([RR1]-[RR8]); a cancel only of a run still going, never a release's
-// ([C1], [C2]); a dispatch only of an active workflow on a branch that is
-// there ([D5], [D6]).
+// ([C1], [C2]), and only on a branch of the agent's own, never the default
+// (NCH's review of #557); a dispatch only of
+// an active workflow on a branch that is there ([D5], [D6]), or on the
+// default branch as gate.json's mainDispatch says (NCH's conditions for
+// agents' release proposals, 26 Nov 2026).
 
 extension GateChecker {
     /// A run, and its name as messages give it.
@@ -62,6 +65,12 @@ extension GateChecker {
         return .pass(nil)
     }
 
+    /// A cancel (NCH's review of #557): of a run still going, never a
+    /// published release's, and only on a branch of the agent's own, as a
+    /// push's own branch is told (GateRules' `isOwn`: not protected, not
+    /// the default, of `ownBranchPrefixes` when it lists any), in this
+    /// repository: never a run on the default branch or main, whatever its
+    /// event (a release's proposal, main's verify, a push's populate).
     func cancel(_ repository: String, _ id: Int) async -> CheckOutcome {
         switch await run(repository, id) {
         case .failure(let outcome):
@@ -71,43 +80,116 @@ extension GateChecker {
                 return .refuse("\(name) is already completed (\(answer["conclusion"]?.string ?? "")): nothing to cancel")
             }
             if answer["event"]?.string == "release" { return .refuse("\(name) is a release's run: its publishing must finish") }
+            let repo = await github.get("/repos/\(repository)")
+            guard repo.ok, let defaultBranch = repo["default_branch"]?.string else {
+                return .fail("GitHub gave \(repository) no default branch (\(repo.status))")
+            }
+            guard let branch = answer["head_branch"]?.string, GitRefName.isBranch(branch) else {
+                return .refuse("\(name) is on no branch: an agent cancels a run on a branch of its own alone")
+            }
+            if branch.lowercased() == "main" || branch.lowercased() == defaultBranch.lowercased() {
+                return .refuse("\(name) is on \(branch), \(repository)'s default branch or main: an agent never cancels a run there, whatever its event")
+            }
+            guard let headRepository = answer["head_repository", "full_name"]?.string, headRepository.lowercased() == repository.lowercased() else {
+                return .refuse("\(name)'s commit is in another repository, not a branch of \(repository)'s: an agent cancels a run on a branch of its own alone")
+            }
+            guard rules.isOwn(branch, defaultBranch: defaultBranch) else {
+                return .refuse("\(name) is on \(branch), not one of the agent's own branches (protected, or of none of ownBranchPrefixes): it isn't cancelled")
+            }
             return .pass(nil)
         }
     }
 
-    func dispatch(_ repository: String, _ workflow: Int, branch: String) async -> CheckOutcome {
-        let answer = await github.get("/repos/\(repository)/actions/workflows/\(workflow)")
-        guard answer.ok else { return .fail("GitHub didn't give workflow \(workflow) of \(repository) (\(answer.status))") }
-        let title = answer["name"]?.string ?? "workflow \(workflow)"
-        // Its file, which gate.json's dispatchableWorkflows must list (NCH's review of #417).
-        let path = answer["path"]?.string ?? ""
-        guard !path.isEmpty, rules.dispatches(workflowPath: path) else {
-            return .refuse("\(title) (\(path.isEmpty ? "no file" : path)) isn't among the workflows an agent dispatches (gate.json's dispatchableWorkflows)")
-        }
-        let state = answer["state"]?.string ?? "unknown"
-        guard state == "active" else { return .refuse("\(title) is \(state): it isn't dispatched") }
-        // Never on the repository's default branch, whatever it's called.
-        let repo = await github.get("/repos/\(repository)")
-        guard repo.ok, let defaultBranch = repo["default_branch"]?.string else {
-            return .fail("GitHub gave \(repository) no default branch (\(repo.status))")
-        }
+    /// What a dispatch's check found: its outcome, and, as far as it read,
+    /// the workflow's file and whether the branch is the default (for the
+    /// audit's line: GitHubInterceptor+Dispatch).
+    struct DispatchFinding: Equatable, Sendable {
+        var outcome: CheckOutcome
+        var workflowPath: String?
+        var onDefaultBranch: Bool?
+    }
+
+    /// A dispatch on a branch of the agent's own: a workflow
+    /// dispatchableWorkflows lists, active, on a branch that is there and
+    /// is neither protected nor the default. On the default branch (NCH's
+    /// conditions, 26 Nov 2026): a workflow mainDispatch names by its
+    /// repository and exact path, active, with each of its inputs one of
+    /// its values and no other, and fewer than `perHour` of the
+    /// repository's let through in the last hour.
+    func dispatch(_ repository: String, _ workflow: Int, branch: String, inputs: [String: String]) async -> DispatchFinding {
         // The branch by its name alone (`refs/heads/x`, `heads/x`: x), as GitHub would take it (NCH's follow-up to #417);
         // a tag never.
         let lowered = branch.lowercased()
         guard !lowered.hasPrefix("tags/"), !lowered.hasPrefix("refs/tags/"), !lowered.hasPrefix("refs/remotes/") else {
-            return .refuse("a workflow is dispatched on a branch, never \(branch)")
+            return DispatchFinding(outcome: .refuse("a workflow is dispatched on a branch, never \(branch)"))
         }
         let name = Self.branchName(branch)
-        guard name.lowercased() != Self.branchName(defaultBranch).lowercased() else {
-            return .refuse("a workflow is never dispatched on \(branch), \(repository)'s default branch: dispatch it on a branch of your own")
+        // The repository's default branch, whatever it's called.
+        let repo = await github.get("/repos/\(repository)")
+        guard repo.ok, let defaultBranch = repo["default_branch"]?.string else {
+            return DispatchFinding(outcome: .fail("GitHub gave \(repository) no default branch (\(repo.status))"))
         }
-        switch await branchHead(repository, name) {
-        case .failure(let outcome):
-            if case .refuse = outcome { return .refuse("\(branch) is not a branch of \(repository)") }
-            return outcome
-        case .success:
-            return .pass(nil)
+        let onDefault = name.lowercased() == Self.branchName(defaultBranch).lowercased()
+        let answer = await github.get("/repos/\(repository)/actions/workflows/\(workflow)")
+        guard answer.ok else {
+            return DispatchFinding(outcome: .fail("GitHub didn't give workflow \(workflow) of \(repository) (\(answer.status))"), onDefaultBranch: onDefault)
         }
+        let title = answer["name"]?.string ?? "workflow \(workflow)"
+        let path = answer["path"]?.string ?? ""
+        let found = { (outcome: CheckOutcome) in DispatchFinding(outcome: outcome, workflowPath: path.isEmpty ? nil : path, onDefaultBranch: onDefault) }
+        let state = answer["state"]?.string ?? "unknown"
+        guard onDefault else {
+            if rules.protects(name, defaultBranch: defaultBranch) {
+                return found(.refuse("a workflow is never dispatched on \(branch), a protected branch of \(repository): dispatch it on a branch of your own"))
+            }
+            // Its file, which gate.json's branchDispatch lists with its inputs (NCH's review of #557), or else
+            // dispatchableWorkflows with any (NCH's review of #417).
+            let listed = path.isEmpty ? nil : rules.branchDispatch.inputs(repository: repository, path: path)
+            guard listed != nil || (!path.isEmpty && rules.dispatches(workflowPath: path, repository: repository)) else {
+                return found(.refuse("\(title) (\(path.isEmpty ? "no file" : path)) isn't among the workflows an agent dispatches "
+                    + "(gate.json's dispatchableWorkflows, or branchDispatch)"))
+            }
+            guard state == "active" else { return found(.refuse("\(title) is \(state): it isn't dispatched")) }
+            if let listed, let refusal = Self.inputsRefusal(title, on: name, allowed: listed, given: inputs) { return found(.refuse(refusal)) }
+            switch await branchHead(repository, name) {
+            case .failure(let outcome):
+                if case .refuse = outcome { return found(.refuse("\(branch) is not a branch of \(repository)")) }
+                return found(outcome)
+            case .success:
+                return found(.pass(nil))
+            }
+        }
+        // On the default branch: named exactly, as this repository's (no file's name alone).
+        guard !path.isEmpty, let allowed = rules.mainDispatch.inputs(repository: repository, path: path) else {
+            return found(.refuse("\(title) (\(path.isEmpty ? "no file" : path)) isn't among the workflows dispatched on \(defaultBranch), "
+                + "\(repository)'s default branch (gate.json's mainDispatch, each as owner/name:path): dispatch it on a branch of your own"))
+        }
+        guard state == "active" else { return found(.refuse("\(title) is \(state): it isn't dispatched")) }
+        if let refusal = Self.inputsRefusal(title, on: defaultBranch, allowed: allowed, given: inputs) { return found(.refuse(refusal)) }
+        // At most perHour of the repository's an hour, the gate's count.
+        if let wait = throttle.take(repository, limit: rules.mainDispatch.perHour) {
+            let minutes = max(1, Int((wait / 60).rounded(.up)))
+            return found(.refuse("\(repository) has had \(rules.mainDispatch.perHour) dispatches on \(defaultBranch) in the last hour, "
+                + "the most gate.json's mainDispatch.perHour lets through: the next in \(minutes) minute\(minutes == 1 ? "" : "s")"))
+        }
+        return found(.pass(nil))
+    }
+
+    /// Why a dispatch's inputs aren't its listed ones (nil: they are): each
+    /// listed input given, one of its values, and no other. What the
+    /// workflow does is the list's, not the agent's. The value refused is
+    /// never repeated.
+    static func inputsRefusal(_ title: String, on branch: String, allowed: [String: [String]], given inputs: [String: String]) -> String? {
+        let wanted = allowed.keys.sorted().map { "\($0) (\(allowed[$0, default: []].joined(separator: ", ")))" }.joined(separator: "; ")
+        if let other = inputs.keys.sorted().first(where: { allowed[$0] == nil }) {
+            return "\(title) on \(branch) takes no input \(other): only \(wanted.isEmpty ? "none" : wanted)"
+        }
+        for input in allowed.keys.sorted() {
+            let values = allowed[input, default: []]
+            guard let given = inputs[input] else { return "\(title) on \(branch) is dispatched with \(input) given: one of \(values.joined(separator: ", "))" }
+            guard values.contains(given) else { return "\(title)'s \(input) on \(branch) is one of \(values.joined(separator: ", ")), never another value" }
+        }
+        return nil
     }
 
     /// A branch's name as GitHub resolves a short ref to one: `refs/heads/x`

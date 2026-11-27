@@ -60,6 +60,9 @@ fail() { echo "ci_bazel: $*" >&2; exit 1; }
 
 case "${1:-}" in
 setup)
+    # github.com's git fetches with the job's own token where the job asks
+    # (VISOR_GIT_AUTH: the read-only jobs alone; never a signing job's).
+    "$ROOT/tools/ci/git_auth.sh"
     cache="${2:-${VISOR_BAZEL_CACHE:-}}"
     mkdir -p "$ROOT/.ci"
     {

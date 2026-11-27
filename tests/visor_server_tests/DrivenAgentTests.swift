@@ -334,8 +334,16 @@ extension ServerTests {
 
     /// A connected wrapper is sent a fresh token a sixth of its token's
     /// life before it ends (ten minutes of an hour), again and again.
+    ///
+    /// Two seconds, a whole number of them: a token's `iat` and `exp` are
+    /// whole seconds (AgentTokens.mint), `iat` the second it was minted in
+    /// and `exp` that and its lifetime, so it lasts between a second less
+    /// than its lifetime and its lifetime. Each of these lasts more than a
+    /// second, so it is still live when its wrapper dials in with it or
+    /// the test shows it, and is refreshed a third of a second before it
+    /// ends.
     @Test func aWrapperIsSentAFreshTokenBeforeItsOwnEnds() async throws {
-        server.agentTokens.runnerAgentLifetime = 1.2
+        server.agentTokens.runnerAgentLifetime = 2
         let (job, wrapper, record) = try await driven("Refreshed")
         let first = try #require(await eventually { self.freshTokens(wrapper).first })
         #expect(first != job.token)

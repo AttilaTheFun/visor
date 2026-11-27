@@ -114,6 +114,8 @@ jobs:
       volumes: ["/mnt:/mnt"]
     timeout-minutes: 120
     env:
+      # Bazel's and SwiftPM's github.com fetches with this job's read-only token (tools/ci/git_auth.sh).
+      VISOR_GIT_AUTH: "1"
       VISOR_BAZEL_ROOT: /mnt/bazel
     steps:
       - uses: actions/checkout@v5
@@ -179,6 +181,9 @@ jobs:
   container-apple:
     if: github.event_name == 'workflow_dispatch' && inputs.run == 'container-apple'
     runs-on: xcode-27
+    # Bazel's and SwiftPM's github.com fetches with this job's read-only token (tools/ci/git_auth.sh).
+    env:
+      VISOR_GIT_AUTH: "1"
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v5
@@ -204,6 +209,8 @@ jobs:
       volumes: ["/mnt:/mnt"]
     timeout-minutes: 120
     env:
+      # Bazel's and SwiftPM's github.com fetches with this job's read-only token (tools/ci/git_auth.sh).
+      VISOR_GIT_AUTH: "1"
       VISOR_BAZEL_ROOT: /mnt/bazel
     steps:
       - uses: actions/checkout@v5
@@ -280,6 +287,9 @@ jobs:
   test:
     if: github.event_name == 'workflow_dispatch' && (inputs.run == 'verify' || inputs.run == 'release')
     runs-on: xcode-27
+    # Bazel's and SwiftPM's github.com fetches with this job's read-only token (tools/ci/git_auth.sh).
+    env:
+      VISOR_GIT_AUTH: "1"
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v5
@@ -295,6 +305,7 @@ jobs:
         with:
           name: test-logs
           path: ${{ runner.temp }}/test-logs
+          retention-days: 1
 
   # The proof's apps: the iPhone app for Apple silicon's simulator, and
   # Visor.app (signed ad hoc), with Isomer's driver in them (--config=drive:
@@ -302,6 +313,9 @@ jobs:
   build-apple:
     if: github.event_name == 'workflow_dispatch' && (inputs.run == 'verify' || inputs.run == 'release')
     runs-on: xcode-27
+    # Bazel's and SwiftPM's github.com fetches with this job's read-only token (tools/ci/git_auth.sh).
+    env:
+      VISOR_GIT_AUTH: "1"
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5
@@ -335,6 +349,8 @@ jobs:
       volumes: ["/mnt:/mnt"]
     timeout-minutes: 60
     env:
+      # Bazel's and SwiftPM's github.com fetches with this job's read-only token (tools/ci/git_auth.sh).
+      VISOR_GIT_AUTH: "1"
       VISOR_BAZEL_ROOT: /mnt/bazel
     steps:
       - uses: actions/checkout@v5
@@ -373,6 +389,9 @@ jobs:
   proof-ios:
     if: github.event_name == 'workflow_dispatch' && (inputs.run == 'verify' || inputs.run == 'release')
     runs-on: xcode-27
+    # Bazel's and SwiftPM's github.com fetches with this job's read-only token (tools/ci/git_auth.sh).
+    env:
+      VISOR_GIT_AUTH: "1"
     # A cold build of the driver's test (Isomer and its Swift packages) on a
     # 3-core runner takes longer than 45 minutes; a warm one about 10.
     timeout-minutes: 120
@@ -443,6 +462,9 @@ jobs:
     # builds while the APK builds.
     if: github.event_name == 'workflow_dispatch' && (inputs.run == 'verify' || inputs.run == 'release')
     runs-on: ubuntu-24.04
+    # Bazel's and SwiftPM's github.com fetches with this job's read-only token (tools/ci/git_auth.sh).
+    env:
+      VISOR_GIT_AUTH: "1"
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -482,6 +504,8 @@ jobs:
       volumes: ["/mnt:/mnt"]
     timeout-minutes: 90
     env:
+      # Bazel's and SwiftPM's github.com fetches with this job's read-only token (tools/ci/git_auth.sh).
+      VISOR_GIT_AUTH: "1"
       VISOR_BAZEL_ROOT: /mnt/bazel
     steps:
       - uses: actions/checkout@v5
@@ -513,6 +537,8 @@ jobs:
       volumes: ["/mnt:/mnt"]
     timeout-minutes: 60
     env:
+      # Bazel's and SwiftPM's github.com fetches with this job's read-only token (tools/ci/git_auth.sh).
+      VISOR_GIT_AUTH: "1"
       VISOR_BAZEL_ROOT: /mnt/bazel
     steps:
       - uses: actions/checkout@v5
@@ -528,6 +554,7 @@ jobs:
           name: blue-web-review
           path: review
           if-no-files-found: ignore
+          retention-days: 1
 
   # The proof, from what the platforms pictured: each screen an item under
   # a stable id, in proof.zip (tools/ci/proof_make.sh; AttilaTheFun/reviews'
@@ -819,6 +846,9 @@ jobs:
     needs: alpha
     if: ${{ !cancelled() && needs.alpha.result == 'success' }}
     runs-on: xcode-27
+    # Bazel's and SwiftPM's github.com fetches with this job's read-only token (tools/ci/git_auth.sh).
+    env:
+      VISOR_GIT_AUTH: "1"
     timeout-minutes: 30
     permissions:
       contents: read
@@ -1178,6 +1208,9 @@ jobs:
     needs: release
     if: ${{ !cancelled() && needs.release.result == 'success' }}
     runs-on: xcode-27
+    # Bazel's and SwiftPM's github.com fetches with this job's read-only token (tools/ci/git_auth.sh).
+    env:
+      VISOR_GIT_AUTH: "1"
     timeout-minutes: 30
     permissions:
       contents: read

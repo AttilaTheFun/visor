@@ -17,9 +17,11 @@ public struct ContainerEngineConfiguration: Equatable, Sendable {
     /// agent-proxy's MCP pass-through's servers, for its Claude (written at
     /// each boot); nil: its Claude's file isn't touched.
     public var claudeMCP: ContainerClaudeMCP?
+    /// Its Claude's CLAUDE.md, made at a boot when there's none; nil: never.
+    public var claudeInstructions: ContainerClaudeInstructions?
 
     public init(enabled: Bool, cpus: Int, memoryGiB: Int, idleMinutes: Int, image: ImageDigest?, relayPort: Int?, checkouts: String? = nil,
-                claudeMCP: ContainerClaudeMCP? = nil) {
+                claudeMCP: ContainerClaudeMCP? = nil, claudeInstructions: ContainerClaudeInstructions? = nil) {
         self.enabled = enabled
         self.cpus = cpus
         self.memoryGiB = memoryGiB
@@ -28,5 +30,6 @@ public struct ContainerEngineConfiguration: Equatable, Sendable {
         self.relayPort = relayPort
         self.checkouts = checkouts
         self.claudeMCP = claudeMCP
+        self.claudeInstructions = claudeInstructions
     }
 }

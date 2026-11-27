@@ -110,7 +110,13 @@ public final class SessionTranscript {
     var shownIDs: [String] { _entries.map(displayID(of:)) + _sending.filter(\.shown).map(\.id) }
 
     /// A rebuilt set of rows: a row that is new here and has the same role
-    /// and words as one that went takes that one's display id.
+    /// and words as one that went takes that one's display id. `new` is
+    /// every row held after, not only the answer's: a row kept before the
+    /// row the answer follows has not gone, and a new row shown under its
+    /// id as well is one id shown twice. Rows of calls and no words, and
+    /// mail's notices, are alike by the dozen; a thread with an id shown
+    /// twice is laid out wrong by the list (a row out of place, one shown
+    /// twice) and is not redrawn as it changes.
     private func carryDisplayIDs(from old: [TranscriptEntry], to new: [TranscriptEntry]) {
         let kept = Set(new.map(\.id))
         var gone: [String: [String]] = [:]
@@ -122,6 +128,20 @@ public final class SessionTranscript {
             guard var ids = gone[key], !ids.isEmpty else { continue }
             displayIDs[row.id] = ids.removeFirst()
             gone[key] = ids
+        }
+    }
+
+    /// Each row shown under an id no other row is shown under: a display
+    /// id that is a row's own id, or one an earlier row is shown under
+    /// already, goes, and its row is shown under its own. (A row that went,
+    /// and whose id a new row took, can come back: a page of earlier rows
+    /// read again.)
+    private func keepDisplayIDsUnique() {
+        guard !displayIDs.isEmpty else { return }
+        var taken = Set(_entries.map(\.id))
+        for row in _entries {
+            guard let shown = displayIDs[row.id] else { continue }
+            if !taken.insert(shown).inserted { displayIDs[row.id] = nil }
         }
     }
 
@@ -272,6 +292,13 @@ public final class SessionTranscript {
         /// of them is this message, whatever its words (the same thing
         /// said twice is two messages).
         public var had: Set<String> = []
+        /// Why the computer never took it, once a send has failed: kept in
+        /// the thread, its words not lost, until it is sent again or let
+        /// go of (26 Nov 2026: messages dropped from the thread with
+        /// nothing said, and the agent never had them).
+        public var failure: String?
+        /// In the thread and on its way: sent, and not yet on the record.
+        var onItsWay: Bool { shown && failure == nil }
     }
     @ObservationIgnored private var _sending: [Outgoing] = []
     public var sending: [Outgoing] {
@@ -280,12 +307,24 @@ public final class SessionTranscript {
             // One more in the thread, for an idle agent: sending until the
             // server says the turn has moved on (one put there once its
             // turn is under way has got there).
-            let shown = Set(_sending.filter(\.shown).map(\.id))
-            if newValue.contains(where: { $0.shown && !shown.contains($0.id) }), !_busy, _toldTurn?.isIdle ?? true { awaitingTurn = true }
+            // One that was not sent is on its way nowhere.
+            let shown = Set(_sending.filter(\.onItsWay).map(\.id))
+            if newValue.contains(where: { $0.onItsWay && !shown.contains($0.id) }), !_busy, _toldTurn?.isIdle ?? true { awaitingTurn = true }
             _sending = newValue
-            if !_sending.contains(where: \.shown) { awaitingTurn = false }
+            if !_sending.contains(where: \.onItsWay) { awaitingTurn = false }
             changed()
         }
+    }
+
+    /// The messages the computer never took, oldest first.
+    public var unsent: [Outgoing] { sending.filter { $0.failure != nil } }
+
+    /// What the thread says of them while there are any: that they were
+    /// not sent, and why.
+    public var unsentWords: String? {
+        guard let last = unsent.last, let failure = last.failure else { return nil }
+        let count = unsent.count
+        return (count == 1 ? "A message was not sent" : "\(count) messages were not sent") + ": \(failure). Send them again from Not sent."
     }
 
     /// Where the turn stands, for the line under the thread: the server's
@@ -434,22 +473,22 @@ public final class SessionTranscript {
             entries = next
         } else {
             replaced = true
-            carryDisplayIDs(from: entries, to: rows)
+            let old = entries
+            var next = rows
             // The whole carries on the history held when its first row
             // follows a row held (`follows`): the rows before it stay, here
             // and in the cache. Otherwise it is the history.
             if let follows = envelope.follows, !follows.isEmpty, !rows.isEmpty {
-                if let index = entries.firstIndex(where: { $0.id == follows }) {
-                    entries = Array(entries[...index]) + rows
+                if let index = old.firstIndex(where: { $0.id == follows }) {
+                    next = Array(old[...index]) + rows
                     replaced = false
-                } else {
-                    entries = rows
                 }
                 write = .follow(after: follows, rows)
             } else {
-                entries = rows
                 write = .replace(rows)
             }
+            carryDisplayIDs(from: old, to: next)
+            entries = next
             generation = envelope.generation ?? generation
             // Earlier pages start over from these rows.
             loadingEarlier = false
@@ -477,6 +516,7 @@ public final class SessionTranscript {
         loaded = true
         keep?(write, SyncState(revision: revision, generation: generation))
         settleSending()
+        keepDisplayIDsUnique()
         if first { flush() } else if wasCatchingUp && !catchingUp { endCatchUp() }
     }
 
@@ -525,7 +565,10 @@ public final class SessionTranscript {
     func putEarlier(_ rows: [TranscriptEntry], more: Bool) -> Int {
         let held = Set(entries.map(\.id))
         let older = rows.filter { !held.contains($0.id) }
-        if !older.isEmpty { entries = older + entries }
+        if !older.isEmpty {
+            entries = older + entries
+            keepDisplayIDsUnique()
+        }
         hasEarlier = more
         loadingEarlier = false
         return older.count
@@ -668,8 +711,9 @@ public final class SessionTranscript {
             if !busy { pendingApproval = nil }
         case "failure":
             error = envelope.message
-            // What was on its way did not arrive.
-            sending.removeAll()
+            // What was on its way did not arrive. One that was never sent
+            // stays, to be sent again.
+            sending.removeAll { $0.failure == nil }
         case "notice":
             take(notice: envelope.notice)
         case "approval":

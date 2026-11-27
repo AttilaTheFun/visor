@@ -19,20 +19,23 @@ let package = Package(
         .package(url: "https://github.com/AttilaTheFun/isomer.git", revision: "v0.58.1"),
         .package(
             url: "https://github.com/AttilaTheFun/agent_ui.git",
-            // MarkdownPreview (agent_ui's markdown-preview branch), for the
+            // MarkdownPreview (agent_ui#102, on its main with #101 and #103), for the
             // sidebar's previews (visor#560): by version once AgentUI
             // releases it, before Visor's next release (CI's pins job).
-            revision: "1ba86cb5deafe7ccbbdb9c628819153c935619ec"
+            revision: "4a478350b3695a75225dfb37c4da47b9fecfb8bb"
         ),
         // agent_protocol: its services' Swift (VisorDriver, the native
         // runner) and agent-wrapper (the Mac app's Helpers), by release:
-        // 0.5.0 has the conversation hand-back (DriverMessage.hand_back,
-        // ReturnConversation, WrapperHello.protocol 2; agent_protocol#15)
-        // and RenewResponse.token (#14), on 0.4.0's Job.token, MCP,
-        // approvals and Job.skip_permissions (#9 to #13).
+        // 0.6.0's wrapper takes its token on a descriptor (AGENT_TOKEN_FD,
+        // the Sessions container's standard input) or in a file it deletes,
+        // and makes itself undumpable on Linux (agent_protocol#17), on
+        // 0.5.0's conversation hand-back (DriverMessage.hand_back,
+        // ReturnConversation, WrapperHello.protocol 2; #15) and
+        // RenewResponse.token (#14), and 0.4.0's Job.token, MCP, approvals
+        // and Job.skip_permissions (#9 to #13).
         .package(
             url: "https://github.com/AttilaTheFun/agent_protocol.git",
-            exact: "0.5.0"
+            exact: "0.6.0"
         ),
         // Its gRPC: the versions Isomer resolves already, and its protobuf.
         .package(url: "https://github.com/grpc/grpc-swift-2.git", from: "2.4.4"),
@@ -66,7 +69,7 @@ let package = Package(
         // Report a Bug's sheet opening at once.
         .package(
             url: "https://github.com/AttilaTheFun/shireworks_kit.git",
-            exact: "0.2.1"
+            exact: "0.3.0"
         ),
         // Apple's Containerization (docs/containers.md): the Sessions
         // container's image store, ext4 unpacking and init filesystem, and,
@@ -76,5 +79,12 @@ let package = Package(
         // (ContainerPins). It asks for swift-collections 1.2 or later, and
         // brings async-http-client and zstd.
         .package(url: "https://github.com/apple/containerization.git", exact: "0.57.0"),
+        // build_tools (AttilaTheFun/build_tools): its `sign`, which CI's
+        // signing job (tools/ci/sign_builds.sh, //tools/ci:sign) signs the
+        // Apple apps with, stamping the build settings they were built
+        // without (`sign apple --add-infoplist`, `--add-groups`: 0.7.0,
+        // build_tools#18 and #20; 0.8.0 fills `$(AppIdentifierPrefix)` in them from
+        // each app's profile, build_tools#22). It brings swift-subprocess.
+        .package(url: "https://github.com/AttilaTheFun/build_tools.git", exact: "0.8.0"),
     ]
 )

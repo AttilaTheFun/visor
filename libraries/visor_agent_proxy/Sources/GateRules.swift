@@ -12,12 +12,21 @@ import Foundation
 ///                "passingConclusions": ["success", "skipped", "neutral"], "codeOwners": true},
 ///      "rerunEvents": ["push", "pull_request", "workflow_dispatch"],
 ///      "dispatch": {"maxInputs": 10, "maxValueLength": 200}, "forcePushToOwnBranches": true,
-///      "ownBranchPrefixes": [], "dispatchableWorkflows": []}
+///      "ownBranchPrefixes": [], "dispatchableWorkflows": [],
+///      "mainDispatch": {"perHour": 4, "workflows": {
+///          "AttilaTheFun/visor:.github/workflows/ci.yml": {"run": ["verify", "prerelease", "release"]}}},
+///      "branchDispatch": {"workflows": {
+///          "AttilaTheFun/visor:.github/workflows/ci.yml": {"run": ["verify"]}}}}
 ///
-/// The last two are agent-proxy's (NCH's review of #417), and may be left
-/// out: none. Merging, publishing a release and deleting a ref are refused
-/// whatever it says (GitHubGate+Owner): `merge` is read by the checks a
-/// re-run and a branch's update make, never to let a merge through.
+/// The last four are agent-proxy's (NCH's review of #417; mainDispatch,
+/// NCH's conditions for agents' release proposals, 26 Nov 2026;
+/// branchDispatch, his review of #557), and may be left out: none. The
+/// standard rules have Visor's proposals on main and its verify on a
+/// branch. Merging, publishing a release, cancelling a run on the default
+/// branch or a branch not the agent's own, and deleting a ref or a release
+/// are refused whatever it says (GitHubGate+Owner, GateChecker+Actions):
+/// `merge` is read by the checks a re-run and a branch's update make,
+/// never to let a merge through.
 public struct GateRules: Codable, Equatable, Sendable {
     /// The repositories agents reach, `owner/name` with `*` for any name of an
     /// owner (`AttilaTheFun/*`), compared case-insensitively ([R2]).
@@ -43,10 +52,20 @@ public struct GateRules: Codable, Equatable, Sendable {
     /// `agentx`); a gate.json with one that doesn't isn't read, and one set
     /// otherwise matches nothing.
     public var ownBranchPrefixes: [String] = []
-    /// The workflows an agent may dispatch, by their file (`ci.yml`, or
-    /// `.github/workflows/ci.yml`); none by default (NCH's review of #417).
-    /// Never on the default branch or main, whatever this lists.
+    /// The workflows an agent may dispatch on a branch of its own, by their
+    /// file (`ci.yml`, or `.github/workflows/ci.yml`), or by one
+    /// repository's (`AttilaTheFun/visor:.github/workflows/ci.yml`), with
+    /// any inputs within `dispatch`'s limits, unless branchDispatch lists it
+    /// with its inputs; none by default (NCH's review of #417). Never on the
+    /// default branch or main: that is `mainDispatch`'s.
     public var dispatchableWorkflows: [String] = []
+    /// The workflows an agent may dispatch on a repository's default branch
+    /// (main): release proposals (Logan, 23 Nov 2026: agents propose
+    /// releases freely, he alone publishes; NCH's five conditions).
+    public var mainDispatch: MainDispatch = .off
+    /// Dispatches on a branch of the agent's own, their inputs listed
+    /// (NCH's review of #557).
+    public var branchDispatch: BranchDispatch = .off
 
     public struct Merge: Codable, Equatable, Sendable {
         public var methods: [String]
@@ -61,6 +80,127 @@ public struct GateRules: Codable, Equatable, Sendable {
         public var maxValueLength: Int
     }
 
+    /// Dispatches on the default branch (NCH's conditions, 26 Nov 2026):
+    /// each workflow by one repository's exact path, `owner/name:path`
+    /// (`AttilaTheFun/visor:.github/workflows/ci.yml`), never by its file's
+    /// name alone, since what an input means is that repository's workflow's
+    /// (`run: release` proposes a draft in Visor's ci.yml; another's may
+    /// publish). Each has its inputs, each with the values it may take: a
+    /// dispatch gives every one of them, one of its values, and nothing
+    /// else. At most `perHour` of them go on for a repository in any hour,
+    /// counted by the gate (DispatchThrottle).
+    public struct MainDispatch: Codable, Equatable, Sendable {
+        public var perHour: Int
+        /// `owner/name:path` → input → its values.
+        public var workflows: [String: [String: [String]]]
+
+        public init(perHour: Int, workflows: [String: [String: [String]]]) {
+            self.perHour = perHour
+            self.workflows = workflows
+        }
+
+        public static let off = MainDispatch(perHour: 4, workflows: [:])
+
+        /// Visor's ci.yml: `verify` runs the tests, `prerelease` builds and
+        /// signs main's Alphas and proposes a draft pre-release, `release`
+        /// verifies, then does as prerelease and proposes a draft release
+        /// (docs/DEVELOPMENT.md, "CI"). Logan's Release publishes it.
+        public static let visor = MainDispatch(perHour: 4, workflows: [
+            "AttilaTheFun/visor:.github/workflows/ci.yml": ["run": ["verify", "prerelease", "release"]],
+        ])
+
+        /// The inputs of `repository`'s workflow at `path`, named exactly
+        /// (the repository case aside, as GitHub takes it); nil when it isn't
+        /// one.
+        public func inputs(repository: String, path: String) -> [String: [String]]? {
+            GateRules.inputs(of: workflows, repository: repository, path: path)
+        }
+
+        /// Whether any of `repository`'s workflows is one.
+        public func names(repository: String) -> Bool { GateRules.names(workflows, repository: repository) }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            perHour = try c.decodeIfPresent(Int.self, forKey: .perHour) ?? MainDispatch.off.perHour
+            workflows = try c.decodeIfPresent([String: [String: [String]]].self, forKey: .workflows) ?? [:]
+            guard perHour >= 0 else {
+                throw DecodingError.dataCorruptedError(forKey: .perHour, in: c, debugDescription: "mainDispatch's perHour is 0 or more")
+            }
+            try GateRules.validate(workflows, "mainDispatch", in: c, forKey: .workflows)
+        }
+    }
+
+    /// Dispatches on a branch of the agent's own with their inputs listed
+    /// (NCH's review of #557): each workflow as mainDispatch's are, by one
+    /// repository's exact path, with its inputs and the values each may
+    /// take; a dispatch gives every one of them, one of its values, and
+    /// nothing else. Where one is listed here it is held to its list, even
+    /// if dispatchableWorkflows lists its file too (`ci.yml`): Visor's
+    /// `run: agent-image` stays off its branches whatever else gate.json
+    /// says.
+    public struct BranchDispatch: Codable, Equatable, Sendable {
+        /// `owner/name:path` → input → its values.
+        public var workflows: [String: [String: [String]]]
+
+        public init(workflows: [String: [String: [String]]]) {
+            self.workflows = workflows
+        }
+
+        public static let off = BranchDispatch(workflows: [:])
+
+        /// Visor's ci.yml with `run: verify` alone: its tests on the branch.
+        /// Never prerelease or release off main, never agent-image (its
+        /// toolchain image, pushed to ghcr.io).
+        public static let visor = BranchDispatch(workflows: [
+            "AttilaTheFun/visor:.github/workflows/ci.yml": ["run": ["verify"]],
+        ])
+
+        public func inputs(repository: String, path: String) -> [String: [String]]? {
+            GateRules.inputs(of: workflows, repository: repository, path: path)
+        }
+
+        public func names(repository: String) -> Bool { GateRules.names(workflows, repository: repository) }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            workflows = try c.decodeIfPresent([String: [String: [String]]].self, forKey: .workflows) ?? [:]
+            try GateRules.validate(workflows, "branchDispatch", in: c, forKey: .workflows)
+        }
+    }
+
+    /// The inputs of `repository`'s workflow at `path` in `workflows` (keyed
+    /// `owner/name:path`), named exactly (the repository case aside, as
+    /// GitHub takes it); nil when it isn't one.
+    static func inputs(of workflows: [String: [String: [String]]], repository: String, path: String) -> [String: [String]]? {
+        workflows.first { key, _ in
+            guard case let (named, file)? = qualified(key) else { return false }
+            return named.lowercased() == repository.lowercased() && file == path
+        }?.value
+    }
+
+    static func names(_ workflows: [String: [String: [String]]], repository: String) -> Bool {
+        workflows.keys.contains { qualified($0)?.repository.lowercased() == repository.lowercased() }
+    }
+
+    /// mainDispatch's or branchDispatch's workflows as gate.json must give
+    /// them: each `owner/name:.github/workflows/<file>`, each input named as
+    /// GitHub names them, with one or more one-line values.
+    static func validate<C: KeyedDecodingContainerProtocol>(_ workflows: [String: [String: [String]]], _ field: String,
+                                                            in c: C, forKey key: C.Key) throws {
+        for (workflow, inputs) in workflows {
+            guard qualified(workflow) != nil else {
+                throw DecodingError.dataCorruptedError(forKey: key, in: c, debugDescription:
+                    "\(field)'s \(workflow) isn't owner/name:.github/workflows/<file>: a workflow with its inputs listed is named exactly, by its repository")
+            }
+            for (name, values) in inputs {
+                guard isInputName(name), !values.isEmpty, values.allSatisfy({ !$0.isEmpty && !$0.contains(where: \.isNewline) }) else {
+                    throw DecodingError.dataCorruptedError(forKey: key, in: c, debugDescription:
+                        "\(field)'s \(workflow): input \(name) is letters, digits, _ and -, with one or more one-line values")
+                }
+            }
+        }
+    }
+
     /// gh_mcp's, for Logan's repositories.
     public static let standard = GateRules(
         repositories: ["AttilaTheFun/*"],
@@ -69,7 +209,13 @@ public struct GateRules: Codable, Equatable, Sendable {
         merge: Merge(methods: ["squash", "merge", "rebase"], passingConclusions: ["success", "skipped", "neutral"], codeOwners: true),
         rerunEvents: ["push", "pull_request", "workflow_dispatch"],
         dispatch: Dispatch(maxInputs: 10, maxValueLength: 200),
-        forcePushToOwnBranches: true
+        forcePushToOwnBranches: true,
+        // No workflow with any inputs on a branch: Visor's ci.yml with `run:
+        // agent-image` on one built and pushed its toolchain image from that
+        // branch (NCH's review of #557: verify alone, branchDispatch's).
+        dispatchableWorkflows: [],
+        mainDispatch: .visor,
+        branchDispatch: .visor
     )
 
     /// Whether `branch` is one of the agent's own: not protected, and of one
@@ -84,10 +230,35 @@ public struct GateRules: Codable, Equatable, Sendable {
     public static func isPrefix(_ prefix: String) -> Bool { prefix.count > 1 && prefix.hasSuffix("/") && !prefix.hasPrefix("/") }
 
     /// Whether a workflow, by its path (`.github/workflows/ci.yml`), may be
-    /// dispatched: listed by its path or its file's name.
-    public func dispatches(workflowPath path: String) -> Bool {
+    /// dispatched on a branch of the agent's own: listed by its path or its
+    /// file's name, or by `repository`'s path.
+    public func dispatches(workflowPath path: String, repository: String? = nil) -> Bool {
         let name = path.split(separator: "/").last.map(String.init) ?? path
-        return dispatchableWorkflows.contains { $0 == path || $0 == name }
+        return dispatchableWorkflows.contains { entry in
+            if case let (named, file)? = Self.qualified(entry) {
+                return named.lowercased() == repository?.lowercased() && file == path
+            }
+            return entry == path || entry == name
+        }
+    }
+
+    /// `owner/name:path`, split, if it is one: an allowed repository's form
+    /// (`owner/name`), and a workflow's file under `.github/workflows/`.
+    static func qualified(_ entry: String) -> (repository: String, path: String)? {
+        guard let colon = entry.firstIndex(of: ":") else { return nil }
+        let repository = String(entry[..<colon]), path = String(entry[entry.index(after: colon)...])
+        let parts = repository.split(separator: "/", omittingEmptySubsequences: false).map(String.init)
+        guard parts.count == 2, GitHubGate.isOwner(parts[0]), GitHubGate.isName(parts[1]) else { return nil }
+        let prefix = ".github/workflows/"
+        let file = path.dropFirst(prefix.count)
+        guard path.hasPrefix(prefix), !file.isEmpty, !file.contains("/"), file.hasSuffix(".yml") || file.hasSuffix(".yaml") else { return nil }
+        return (repository, path)
+    }
+
+    /// A dispatch's input's name, as GitHub's are: 1-64 letters, digits, `_`
+    /// and `-`.
+    static func isInputName(_ name: String) -> Bool {
+        (1...64).contains(name.count) && name.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "_" || $0 == "-") }
     }
 
     /// The repositories logan-shire-agent's token is minted for, by name
@@ -110,12 +281,14 @@ public struct GateRules: Codable, Equatable, Sendable {
     /// gate's rules let through, no more (NCH's review of #417). Contents
     /// (pushes, drafts), pull requests and issues written; metadata, checks
     /// and statuses read. Actions written only where a rule needs it: a
-    /// re-run (`rerunEvents`) or a dispatch (`dispatchableWorkflows`); a
+    /// re-run (`rerunEvents`) or a dispatch (`dispatchableWorkflows`,
+    /// `mainDispatch`, `branchDispatch`); a
     /// cancel alone doesn't, and GitHub refuses it with actions read. Never
     /// `workflows`: no push changes a workflow's file.
     public var tokenPermissions: [String: String] {
         ["contents": "write", "pull_requests": "write", "issues": "write", "metadata": "read", "checks": "read", "statuses": "read",
-         "actions": rerunEvents.isEmpty && dispatchableWorkflows.isEmpty ? "read" : "write"]
+         "actions": rerunEvents.isEmpty && dispatchableWorkflows.isEmpty && mainDispatch.workflows.isEmpty && branchDispatch.workflows.isEmpty
+            ? "read" : "write"]
     }
 
     /// The rules in the gate.json at `path`.
@@ -153,7 +326,9 @@ public struct GateRules: Codable, Equatable, Sendable {
 }
 
 extension GateRules {
-    /// gate.json as MultiPass wrote it, agent-proxy's own fields optional.
+    /// gate.json as MultiPass wrote it, agent-proxy's own fields optional
+    /// (one from before mainDispatch and branchDispatch is read with
+    /// neither).
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         repositories = try c.decode([String].self, forKey: .repositories)
@@ -169,5 +344,8 @@ extension GateRules {
                                                    debugDescription: "ownBranchPrefixes' \(wrong) doesn't end in /: `agent` would cover `agentx` (say `agent/`)")
         }
         dispatchableWorkflows = try c.decodeIfPresent([String].self, forKey: .dispatchableWorkflows) ?? []
+        // Left out, as in a gate.json from before it: no dispatch on main.
+        mainDispatch = try c.decodeIfPresent(MainDispatch.self, forKey: .mainDispatch) ?? .off
+        branchDispatch = try c.decodeIfPresent(BranchDispatch.self, forKey: .branchDispatch) ?? .off
     }
 }

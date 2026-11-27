@@ -124,7 +124,7 @@ optional:
   and `<data folder>/agent-proxy/egress.log` elsewhere.
 - The authority's certificate is `<data folder>/agent-proxy/ca.pem` unless
   `caCertificate` says otherwise. A `gate.json` put there replaces the
-  standard rules.
+  standard rules, wholesale (below, under Release proposals on main).
 - An `agentProxy` that can't be read leaves the rest of the settings as they
   are. agent-proxy then runs with the last good one it kept
   (`agent-proxy/last-good.json`).
@@ -286,9 +286,14 @@ rule (no passed-on servers in a container) for Nimbus only.
   its container runner runs now (not let go), and that agent's session,
   live. Anything else (expired, forged, another server's, another session's,
   a native session's, an ended agent's) is refused with 401, before
-  anything goes on. The agent's harness gets such a token from its own
-  wrapper's stream, for MCP alone, an hour's, and asks again as it needs one
-  (`visor-agent-host mcp-headers`, its Claude's headersHelper).
+  anything goes on, and said in the log once for each agent and reason
+  (never with the token). The agent's harness gets such a token from its
+  own wrapper's stream, for MCP alone, a week's (Claude keeps the headers
+  for the connection: an hour's ended under a running agent), and asks
+  again on a 401 (`visor-agent-host mcp-headers`, its Claude's
+  headersHelper, which gives it as `Authorization: Bearer` too for that;
+  the pass-through sends a container agent's `Authorization` on to no
+  upstream).
 - **Nimbus's alone.** A call let in by an agent's token reaches only the
   servers containers are given (`NativeMCPProxy.containerServers`:
   `nimbus`). On any other path (`/mcp/gh`, `/mcp/oss`, `/mcp/shireworks`)
@@ -394,7 +399,12 @@ again at the next asking. The server, with agent-proxy inside it, asks the
 GitHub interceptor for it (`gitIdentity`, through `AgentProxyHost.Running`)
 as each container agent starts, and sets `GIT_AUTHOR_NAME`,
 `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_NAME` and `GIT_COMMITTER_EMAIL` from it.
-Without the App, or when it couldn't be found, none is set.
+Without the App, or when it couldn't be found, none is set. On the Mac,
+agent-proxy is folded in just after the server's start, and the Sessions
+container's agents are carried on at it: the server is told before it
+starts that agent-proxy is to come (`containerGitIdentityExpected`), and an
+agent started before it's folded in waits for it, its fold-in and its
+answer within the same ten seconds; past them, it starts without one.
 
 The secrets are read again at most once a minute, like the others, so
 setting or changing them needs no restart. With other secrets, the
@@ -462,6 +472,129 @@ where it runs inside the server; `Visor-agent-proxy.log` as its own job):
   (`agent-proxy has no auth token for GitHub: <why>`).
 
 No line, refusal or egress log entry holds the key, a JWT or a token.
+
+## Release proposals on main (0.73)
+
+Logan's rule (23 Nov 2026): agents propose releases freely, and only he
+publishes. Container agents propose one the way he does, with a dispatch of
+Visor's ci.yml on main (`gh workflow run ci.yml -R AttilaTheFun/visor --ref
+main -f run=release`, or `prerelease`, or `verify`). The gate lets that
+through under NCH's five conditions (26 Nov 2026), and a fresh Mac needs no
+gate.json for it.
+
+**The standard rules** (GateRules' `standard`, with no gate.json):
+- on main, Visor's ci.yml with `run` one of `verify`, `prerelease` and
+  `release`, at most 4 an hour. These only build, sign main's reviewed
+  code, and propose a draft (docs/DEVELOPMENT.md, CI);
+- on an agent's own branch, Visor's ci.yml with `run: verify` alone (NCH's
+  review of #557). Never `prerelease` or `release` off main, and never
+  `agent-image`: on a branch it would build that branch's toolchain image
+  and push it to ghcr.io (#558 makes the job main-only, and the list keeps
+  it off branches regardless). No other workflow is dispatched on a branch
+  unless a gate.json lists it.
+
+**gate.json.** Three fields, all optional, so a gate.json written before
+them is still read. One that leaves `mainDispatch` out has no dispatch on
+main, and one that leaves `branchDispatch` out lists no branch's inputs, as
+before. A gate.json replaces the standard rules wholesale, so to keep
+Visor's proposals it lists them itself:
+
+```json
+"dispatchableWorkflows": [".github/workflows/ci.yml", "AttilaTheFun/shireworks:.github/workflows/ci.yml"],
+"mainDispatch": {
+  "perHour": 4,
+  "workflows": {
+    "AttilaTheFun/visor:.github/workflows/ci.yml": {"run": ["verify", "prerelease", "release"]}
+  }
+},
+"branchDispatch": {
+  "workflows": {
+    "AttilaTheFun/visor:.github/workflows/ci.yml": {"run": ["verify"]}
+  }
+}
+```
+
+- `dispatchableWorkflows`: dispatches on a branch of the agent's own, with
+  any inputs within `dispatch`'s limits (`maxInputs`, `maxValueLength`), as
+  before. An entry is a file's name (`ci.yml`) or path
+  (`.github/workflows/ci.yml`) in any allowed repository, or one
+  repository's path (`owner/name:path`).
+- `branchDispatch.workflows`: dispatches on a branch of the agent's own with
+  their inputs listed, named and checked as `mainDispatch`'s are (below):
+  every listed input given, one of its values, and no other. A workflow
+  listed here is held to its list even where `dispatchableWorkflows` names
+  its file too, so `ci.yml` there doesn't let Visor's `agent-image` onto a
+  branch.
+- `mainDispatch.workflows`: dispatches on a repository's default branch.
+  Each workflow is `owner/name:.github/workflows/<file>`, exactly. The
+  repository is compared case aside, as GitHub compares it, and the path
+  exactly. A file's name or a path alone is never matched here, and a
+  gate.json with one isn't read. The repository is part of the name
+  because an input means what that repository's workflow does with it:
+  `run: release` proposes a draft in Visor's ci.yml, and another
+  repository's `run: release` may publish. Each workflow lists its inputs,
+  each with the values it may take.
+- `mainDispatch.perHour`: how many of a repository's go through in any hour
+  (4 if left out; 0 for none).
+
+**How a dispatch on main is decided.** A dispatch (`POST
+/repos/{o}/{r}/actions/workflows/{id}/dispatches`) names its branch alone,
+never `heads/…`, `refs/…` or `tags/…`. When it names main (or another
+protected branch), the repository must have a `mainDispatch` workflow. The
+check then reads the repository's default branch and the workflow (its file,
+its state) with the token the dispatch goes on with. On the default branch,
+the dispatch goes through only if:
+1. the workflow is the repository's listed one, by its exact path, and
+   active;
+2. it gives every listed input, each one of its values, and no other input;
+3. fewer than `perHour` of the repository's went through in the last hour.
+
+Otherwise it is refused, saying which: `CI's run on main is one of verify,
+prerelease, release, never another value`, `CI on main takes no input
+note: only run (verify, prerelease, release)`, `CI on main is dispatched
+with run given: …`, `… isn't among the workflows dispatched on main,
+<repo>'s default branch (gate.json's mainDispatch, each as
+owner/name:path)`, or `<repo> has had 4 dispatches on main in the last
+hour, the most gate.json's mainDispatch.perHour lets through: the next in
+<n> minutes`. A refusal never repeats the value it refused. The count is the
+gate's, in memory, shared by every container. **It resets when agent-proxy
+restarts** (with the server, where it runs inside it): it is a soft rate
+limit, not a ledger, and the audit's lines below are the record of what
+was dispatched. A dispatch is counted once its checks pass, whether or not
+GitHub then runs it. A protected branch that isn't the default (master,
+say) is never dispatched on. A dispatch on any other branch is checked as
+before: a listed workflow, active, on a branch that is there, with its
+inputs as `branchDispatch` lists them where it lists the workflow.
+
+**The audit.** Each dispatch on main is one line of agent-proxy's log,
+whether it went through or was refused, by the gate or by its check:
+
+```
+agent-proxy: github: dispatch on main: container:<lease> agent <id>, AttilaTheFun/visor .github/workflows/ci.yml on main, inputs run=release: allowed
+agent-proxy: github: dispatch on main: container:<lease> agent <id>, AttilaTheFun/visor .github/workflows/ci.yml on main, inputs run=(15 characters, not written): refused: CI's run on main is one of verify, prerelease, release, never another value
+```
+
+`<lease>` is the container's (the relay's), and `<id>` is the agent it
+claims to be (`unnamed` without one). The workflow is `workflow <id>` when
+the check didn't get as far as its file. An input's value is written only
+when the lists have it; otherwise only its length is. The line never holds
+a header, a token or the request's body. The egress log has its usual line
+for the request too (method, path class, decision), as it does for a
+dispatch on a branch.
+
+**Still Logan's alone**, whatever gate.json says: publishing a release
+(REST's release made without `draft: true`, or edited with `draft: false`;
+any release mutation by GraphQL), cancelling a run on the default branch or
+main, whatever its event (a proposal, main's verify, a push's populate), or
+a published release's `release` run, and deleting a ref or a release (`DELETE …/git/refs/…`,
+`DELETE …/releases/…` and its assets, `deleteRef`, `deleteRelease`, a push
+to the zero commit). An agent cancels a run only on a branch of its own,
+told as a push's own branch is (not protected, not the default, of
+`ownBranchPrefixes` when gate.json lists any) and in the repository itself
+(not a fork's): the cancel reads the run and the repository's default
+branch first. Anything else is refused: `… is on main, <repo>'s default
+branch or main: an agent never cancels a run there, whatever its event`. The draft itself is CI's, with the run's token, and
+Logan's Release in Reviews publishes it.
 
 ## How it runs
 

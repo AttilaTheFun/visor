@@ -83,6 +83,35 @@ extension VisorAgentServer {
         try await call("POST", "/sessions/\(session)/send", .send(session: session, text: text, images: images)).sessions ?? []
     }
 
+    /// Sent under its row's id, and sent once more when the connection
+    /// failed before an answer came: whether it arrived is then not known,
+    /// and the server takes it once either way. URLSession asks a GET
+    /// again on a fresh connection, never a POST (26 Nov 2026: every send
+    /// from the MacBook for ten minutes failed with "the network
+    /// connection was lost", the GETs beside them going through).
+    public func sendMessage(_ session: String, text: String, images: [String], id: String) async throws -> [SessionInfo] {
+        var send = Envelope.send(session: session, text: text, images: images)
+        send.id = id
+        do {
+            return try await call("POST", "/sessions/\(session)/send", send).sessions ?? []
+        } catch let error where Self.unanswered(error) {
+            try? await Task.sleep(nanoseconds: Self.sendAgainAfter)
+            return try await call("POST", "/sessions/\(session)/send", send).sessions ?? []
+        }
+    }
+
+    /// How long a send waits before it goes once more.
+    static let sendAgainAfter: UInt64 = 300_000_000
+
+    /// Whether a request failed on the way, with no answer from the
+    /// server: not an HTTP status, nor something said before it went.
+    static func unanswered(_ error: Error) -> Bool {
+        if error is AgentServerError || error is CancellationError { return false }
+        guard let http = VisorHost.http else { return false }
+        let status = http.status(of: error)
+        return status == nil || status == 0
+    }
+
     public func transcript(of session: String, since revision: Int, generation: Int, after: String?) async throws -> Envelope {
         let page = after.map { "&after=" + Self.escape($0) } ?? ""
         let text = try await callText("GET", "/sessions/\(session)/transcript?since=\(revision)&generation=\(generation)" + page, body: "")

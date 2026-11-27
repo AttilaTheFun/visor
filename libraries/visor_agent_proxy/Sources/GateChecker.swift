@@ -10,6 +10,8 @@ struct GateChecker: Sendable {
     /// The GitHub App's bot, whose issues and pull requests an agent may
     /// close (GateChecker+Close); nil when the token isn't the App's.
     var bot: GitHubAppIdentity? = nil
+    /// The gate's count of dispatches on main (GitHubGate's `throttle`).
+    var throttle = DispatchThrottle()
 
     func run(_ check: GateCheck) async -> CheckOutcome {
         switch check {
@@ -28,8 +30,8 @@ struct GateChecker: Sendable {
             return await rerun(repository, run, failedOnly: failedOnly)
         case .cancel(let repository, let run):
             return await cancel(repository, run)
-        case .dispatch(let repository, let workflow, let branch):
-            return await dispatch(repository, workflow, branch: branch)
+        case .dispatch(let repository, let workflow, let branch, let inputs):
+            return await dispatch(repository, workflow, branch: branch, inputs: inputs).outcome
         case .releaseEdit(let repository, let release):
             return await releaseEdit(repository, release)
         case .graphQLNodes(let nodes):

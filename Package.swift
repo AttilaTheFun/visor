@@ -169,7 +169,7 @@ let agentHost: [Product] = [.executable(name: "visor-agent-host", targets: ["Vis
 /// gRPC; and the protobuf runtimes of the client link's protos.
 let runnerPackages: [Package.Dependency] = [
     // As third_party/swift_packages pins it.
-    .package(url: "https://github.com/AttilaTheFun/agent_protocol.git", exact: "0.5.0"),
+    .package(url: "https://github.com/AttilaTheFun/agent_protocol.git", exact: "0.6.0"),
     .package(url: "https://github.com/grpc/grpc-swift-2.git", from: "2.4.4"),
     .package(url: "https://github.com/grpc/grpc-swift-nio-transport.git", from: "2.12.0"),
     // The client link's protos: the runtimes of the plugins that make

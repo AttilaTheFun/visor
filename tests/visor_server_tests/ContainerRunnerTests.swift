@@ -22,6 +22,8 @@
 // And its lifecycle: an agent that ends is started again, three quick ends
 // stop it, a container held stopped stops it, Stop Agent and Start Agent,
 // and a move refused, or one whose agent can't start coming straight back.
+// A session from a folder the container doesn't share works in a folder of
+// its own there, nothing cloned into it, whatever its conversation named.
 
 import AgentProtocol
 import ClaudeTranscript
@@ -334,7 +336,8 @@ extension ServerTests {
         #expect(record.move?.runsOn == ContainerRunner.runsOn && record.move?.agent == agent.agent)
         #expect(agent.session == "m1" && agent.resumeSessionID == conversation)
         #expect(agent.workingDirectory == record.move?.cwd, "a folder on Sessions is kept: the container shares it at the same path")
-        #expect(agent.sources.isEmpty && agent.sourcesDirectory == nil, "nothing to clone")
+        #expect(record.move?.sources.isEmpty == true, "nothing to clone")
+        #expect(record.notice == nil, "its own folder: nothing to tell")
         #expect(agent.skipPermissions && record.info.skipPermissions, "the container is its sandbox")
         #expect(agent.environment["CLAUDE_CONFIG_DIR"] == sessions.path + "/.claude", "its Claude folder on Sessions")
         // Its credential agent-proxy's: a placeholder here, never a token,
@@ -470,6 +473,9 @@ extension ServerTests {
         let parsed = try #require(parseJSON(answer.json))
         #expect(parsed["id"].string == "h", "answered under the helper's own id")
         let token = try #require(parsed["result"]["headers"]["X-Visor-Proxy"].string)
+        // The same as a bearer's: Claude Code takes the helper as the server's authentication, run again on a 401.
+        #expect(parsed["result"]["headers"]["Authorization"].string == "Bearer " + token)
+        #expect(parsed["result"]["headers"].object?.count == 2)
         #expect(server.passThroughSession(for: token) == "pass")
         guard case .success(let claims) = server.agentTokens.verify(token, as: .runnerAgent, agent: agent, scope: .mcp) else {
             Issue.record("its token isn't its agent's")
@@ -520,6 +526,54 @@ extension ServerTests {
         let again = try #require(await eventually { wrapper.down.first { $0.mcp.id == "w-again" }?.mcp })
         #expect(parseJSON(again.json)?["error"]["code"].int == -32601, "\(again.json)")
         wrapper.finish()
+    }
+
+    /// Its pass-through token lasts as long as its agent may run (a week), not an hour: Claude Code runs the
+    /// headersHelper as it connects and keeps the headers (on the Mini, 0.72.3: an hour on, every Nimbus call was
+    /// refused 401). Past an hour, and past a day, it's still taken, by the server and by agent-proxy's fast check,
+    /// while its agent runs; past its week, or once its agent is let go or has ended, it's no one's.
+    @Test func itsPassThroughTokenIsTakenPastAnHourWhileItsAgentRuns() async throws {
+        let week: TimeInterval = 7 * 24 * 3600
+        #expect(server.agentTokens.passThroughLifetime == week)
+        #expect(server.agentTokens.runnerAgentLifetime == 3600, "its wrapper's own still an hour's, refreshed")
+        let check = server.passThroughTokenCheck
+        let runner = server.containerRunner
+
+        // Let go.
+        let (first, firstWrapper, _) = try await placed("long-pass")
+        let agent = first.agent.agent
+        let now = Date()
+        let fresh = try #require(runner.passThroughToken(for: agent))
+        #expect(server.agentTokens.expiry(of: fresh).map { abs($0.timeIntervalSince(now) - week) < 60 } == true, "a week's")
+        let anHourOld = try #require(runner.passThroughToken(for: agent, now: now.addingTimeInterval(-2 * 3600)))
+        let aDayOld = try #require(runner.passThroughToken(for: agent, now: now.addingTimeInterval(-(24 + 2) * 3600)))
+        let pastItsWeek = try #require(runner.passThroughToken(for: agent, now: now.addingTimeInterval(-week - 60)))
+        for taken in [fresh, anHourOld, aDayOld] {
+            #expect(server.passThroughSession(for: taken) == "long-pass")
+            #expect(await Task.detached { check(taken) }.value, "agent-proxy's fast check takes it too")
+        }
+        #expect(server.passThroughSession(for: pastItsWeek) == nil)
+        #expect(await Task.detached { check(pastItsWeek) }.value == false)
+        // The wrapper's own job token is still an hour's: two hours old, it's refused.
+        let oldJobToken = server.agentTokens.mint(.runnerAgent, session: "long-pass", agent: agent, now: now.addingTimeInterval(-2 * 3600))
+        #expect(server.passThroughSession(for: oldJobToken) == nil)
+        runner.release(agent)
+        for refused in [fresh, anHourOld, aDayOld] {
+            #expect(server.passThroughSession(for: refused) == nil, "its agent let go: no one's")
+        }
+        #expect(runner.passThroughToken(for: agent) == nil, "and it's given none")
+        firstWrapper.finish()
+        first.run.end(0)
+
+        // Ended.
+        let (second, secondWrapper, _) = try await placed("long-pass-ends")
+        let ending = second.agent.agent
+        let old = try #require(runner.passThroughToken(for: ending, now: now.addingTimeInterval(-3 * 3600)))
+        #expect(server.passThroughSession(for: old) == "long-pass-ends")
+        secondWrapper.finish()
+        second.run.end(0)
+        #expect(await eventually { runner.holds(ending) ? nil : true } == true, "its agent gone")
+        #expect(server.passThroughSession(for: old) == nil, "its agent ended: no one's")
     }
 
     /// Check 2: mail both ways.
@@ -607,6 +661,69 @@ extension ServerTests {
         #expect(restarted.agent.workingDirectory == started.agent.workingDirectory)
         #expect(back.info.queued.first?.contains("The Visor server restarted while you were working") == true, "its cut-short turn picked up")
         #expect(again.placedInContainer == 1, "keeping the container up")
+    }
+
+    /// `id` placed, and the server stopped and started again (`again`,
+    /// set up by `before` as its start would be), its sessions taken up
+    /// and the engine given: the agent it carries on is started then.
+    private func carriedOnAtAStart(_ id: String, before: (VisorServer) -> Void) async throws -> (VisorServer, FakeContainer) {
+        let (_, wrapper, _) = try await placed(id)
+        server.saveArchiveNow()
+        wrapper.finish()
+        listening.stop()
+        server.stop()
+        let again = VisorServer(port: UInt16(ServerTestCase.freePort()))
+        before(again)
+        again.drivenProcess = { _ in DrivenProcess() }
+        again.takeUpDrivenSessions()
+        let engine = FakeContainer(shared: [sessions.path])
+        again.sessionsContainer = engine
+        return (again, engine)
+    }
+
+    /// Its git identity at the server's start (0.72.3, Container Test: the
+    /// agents carried on then had none, agent-proxy being folded in after
+    /// the start): expected before the start, its agent waits for it, and
+    /// has it once agent-proxy gives it within the wait.
+    @Test func anAgentCarriedOnAtAServersStartWaitsForItsGitIdentity() async throws {
+        let bot = ContainerGitIdentity(name: "logan-shire-agent[bot]", email: "987+logan-shire-agent[bot]@users.noreply.github.com")
+        let (again, engine) = try await carriedOnAtAStart("git-start") { $0.containerGitIdentityExpected = true }
+        defer { again.stop() }
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(engine.all.isEmpty, "waiting for agent-proxy")
+        // agent-proxy folded in.
+        let asked = Asked()
+        again.containerGitIdentity = {
+            asked.add()
+            return bot
+        }
+        let restarted = try #require(await eventually { engine.all.first })
+        #expect(restarted.agent.environment["GIT_AUTHOR_NAME"] == bot.name)
+        #expect(restarted.agent.environment["GIT_AUTHOR_EMAIL"] == bot.email)
+        #expect(restarted.agent.environment["GIT_COMMITTER_NAME"] == bot.name)
+        #expect(restarted.agent.environment["GIT_COMMITTER_EMAIL"] == bot.email)
+        #expect(asked.times == 1)
+        #expect(again.containerGitIdentityWaiters.isEmpty)
+    }
+
+    /// Expected and never given (no agent-proxy): its agent starts once
+    /// the wait is over, without one.
+    @Test func anAgentCarriedOnAtAServersStartStartsWithoutAGitIdentityPastTheWait() async throws {
+        let clock = ContinuousClock()
+        var began = clock.now
+        let (again, engine) = try await carriedOnAtAStart("git-never") { server in
+            server.containerGitIdentityExpected = true
+            server.containerGitIdentityWait = .milliseconds(500)
+            began = clock.now
+        }
+        defer { again.stop() }
+        let restarted = try #require(await eventually { engine.all.first })
+        #expect(clock.now - began >= .milliseconds(500), "not before the wait is over")
+        for name in ["GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL"] {
+            #expect(restarted.agent.environment[name] == nil, "\(name)")
+        }
+        #expect(restarted.agent.environment["GH_TOKEN"] == "visor-agent-proxy", "started all the same")
+        #expect(again.containerGitIdentityWaiters.isEmpty)
     }
 
     /// Check 7: Move Back hands its conversation back, into this
@@ -769,8 +886,60 @@ extension ServerTests {
         server.sessions.append(record)
         _ = await server.moveToContainer("outside")
         let started = try #require(container.all.first)
-        #expect(started.agent.workingDirectory == sessions.path + "/Claude/" + started.agent.agent)
+        #expect(started.agent.workingDirectory == sessions.path + "/Claude/outside", "the session's own folder there, by its id")
         #expect(record.move?.cwd == outside.path, "where its conversation is here")
+        #expect(record.move?.sources.isEmpty == true)
+        #expect(record.notice?.contains("nothing was cloned into it") == true, Comment(rawValue: record.notice ?? "no notice"))
+    }
+
+    /// A git repository of this home folder's, with a commit and no remote:
+    /// work that isn't pushed.
+    private func unpushedRepository(_ path: String) async throws -> URL {
+        let folder = ClaudeSessionFiles.home.appendingPathComponent(path, isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try Data("let a = 1\n".utf8).write(to: folder.appendingPathComponent("main.swift"))
+        _ = await ProjectSurvey.git(["init", "-q", "-b", "main"], in: folder.path)
+        _ = await ProjectSurvey.git(["add", "."], in: folder.path)
+        _ = await ProjectSurvey.git(["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-q", "-m", "First"], in: folder.path)
+        return folder
+    }
+
+    /// Overcast's move (26 Nov 2026): its transcript, from another Mac, ran
+    /// git in and edited a checkout this Mac has too (isomer), which was
+    /// cloned for it. Nothing is cloned now, whatever its conversation
+    /// named; and work not pushed there isn't the move's to refuse.
+    @Test func aRepositoryItsConversationWorkedInIsNeverClonedForIt() async throws {
+        let isomer = try await unpushedRepository("Developer/isomer")
+        let outside = root.appendingPathComponent("elsewhere", isDirectory: true)
+        try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+        let project = ClaudeSessionFiles.projectsRoot().appendingPathComponent(ClaudeSessionFiles.projectDirectoryName(for: outside.path))
+        try FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
+        let uses = [
+            #"{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"git -C \#(isomer.path) log --oneline -3"}}"#,
+            #"{"type":"tool_use","id":"t2","name":"Edit","input":{"file_path":"\#(isomer.path)/main.swift","old_string":"1","new_string":"2"}}"#,
+        ]
+        let lines = uses.map { #"{"type":"assistant","message":{"role":"assistant","content":[\#($0)]}}"# + "\n" }
+        try Data(lines.joined().utf8).write(to: project.appendingPathComponent("\(conversation).jsonl"))
+        let record = SessionRecord(info: SessionInfo(id: "overcast", agent: .claude, cwd: outside.path, title: "Overcast", created: 0),
+                                   process: HostAgent(conversation: conversation))
+        server.sessions.append(record)
+        let result = await server.moveToContainer("overcast")
+        #expect(refusal(result) == nil, "a repository its conversation named is no reason to refuse it")
+        let started = try #require(container.all.first { $0.agent.session == "overcast" })
+        #expect(started.agent.workingDirectory == sessions.path + "/Claude/overcast")
+        #expect(record.move?.sources.isEmpty == true, "isomer isn't cloned for it")
+    }
+
+    /// Its own folder's repository stays on this computer: work in it that
+    /// isn't pushed would be out of its agent's reach there.
+    @Test func aMoveFromAFolderWithWorkNotPushedIsRefused() async throws {
+        let own = try await unpushedRepository("Developer/app")
+        let record = SessionRecord(info: SessionInfo(id: "unpushed", agent: .claude, cwd: own.path, title: "Unpushed", created: 0),
+                                   process: HostAgent(conversation: conversation))
+        server.sessions.append(record)
+        let result = await server.moveToContainer("unpushed")
+        #expect(refusal(result)?.contains("isn't pushed") == true, Comment(rawValue: refusal(result) ?? "not refused"))
+        #expect(container.all.isEmpty && !record.driven)
     }
 
     /// `/login` in a session placed in the container signs in nothing here:
