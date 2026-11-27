@@ -215,7 +215,9 @@ extension View {
     @ViewBuilder func paneSheetOnMac(_ sheet: Bool) -> some View {
         #if os(macOS)
         if sheet {
-            frame(minWidth: NarrowWindow.content, minHeight: 480, idealHeight: 640)
+            // Grouped, as the pane's column draws it (Settings' form in a
+            // sheet is otherwise the Mac's columns form).
+            formStyle(.grouped).frame(minWidth: NarrowWindow.content, minHeight: 480, idealHeight: 640)
         } else {
             self
         }
