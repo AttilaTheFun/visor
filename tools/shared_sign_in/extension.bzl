@@ -12,8 +12,9 @@ app group the renewal lock is kept in), a build says it has the shared
 sign-in (defs.bzl); without any of them it says nothing of it. CI's builds
 to publish are made without them (a Nimbus macOS VM, which no secret
 reaches): CI's signing stamps the same keys and keychain group into the
-signed apps, from the repository's VISOR_GITHUB_SHARED_CLIENT_ID secret and
-its VISOR_TEAM_ID variable (tools/ci/sign_builds.sh). A builder's own:
+signed apps, from the repository's VISOR_GITHUB_SHARED_CLIENT_ID secret,
+the keychain group's team filled from each app's profile by build_tools
+(`$(AppIdentifierPrefix)`, 0.8.0; tools/ci/sign_builds.sh). A builder's own:
 
     common --repo_env=VISOR_GITHUB_SHARED_CLIENT_ID=<client id>
 
