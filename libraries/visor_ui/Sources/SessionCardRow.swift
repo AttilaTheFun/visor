@@ -10,11 +10,12 @@ import VisorProtocol
 /// loosely can run away with it) and what is happening — a raised hand
 /// while it waits to be allowed something, a question while it waits for
 /// an answer, a spinner while the agent works, a clock while it waits on
-/// anything else; then the full path
-/// of its folder and the first lines of the latest message. What it waits
-/// on, its subagents and its sub-sessions are its chat's (Logan, 26 Nov
-/// 2026: in the list they were noise). Whether the computer answers is its
-/// section's.
+/// anything else; then the first lines of the latest message. What it
+/// waits on, its subagents and its sub-sessions are its chat's, and its
+/// folder is its details' (Logan, 26 Nov 2026: in the list they were
+/// noise, and a session moved onto a computer is in a folder of its own
+/// there, `<Sessions>/Claude/‹id›`, which says nothing). Whether the
+/// computer answers is its section's.
 @MainActor
 struct SessionCardRow: View {
     let session: SessionInfo
@@ -58,11 +59,6 @@ struct SessionCardRow: View {
                 // the line's spacing on Isomer).
                 if Self.activity(of: session) != .none { activity }
             }
-            Text(session.cwd)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
             Text(session.preview ?? "No messages yet")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)

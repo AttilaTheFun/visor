@@ -23,7 +23,11 @@ extension FeatureMapTests {
         func details() throws {
             let app = try chat()
             defer { app.quit() }
-            FeatureMapNode.details.expectShown(on: try app.tap("session-title"))
+            let details = try app.tap("session-title")
+            FeatureMapNode.details.expectShown(on: details)
+            // Its folder is here, not in its row in Sessions.
+            #expect(details.shows("/Users/visor/Developer/weather") || details.elements.contains { ($0.value ?? "").contains("/Users/visor/Developer/weather") },
+                    "the folder: \(details.summary)")
             FeatureMapNode.chat.expectShown(on: try app.tap("details-done"))
         }
 

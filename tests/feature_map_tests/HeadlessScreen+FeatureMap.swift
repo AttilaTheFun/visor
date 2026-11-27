@@ -9,14 +9,30 @@ extension HeadlessScreen {
 
     /// Whether a session's row in Sessions, by its title, shows a mark
     /// labelled `label`: its element (`‹prefix›-‹id›`) where the driver
-    /// lists a picture as one, else among the row's texts, from its title
-    /// to its folder (Isomer's lists a labelled picture as a text).
+    /// lists a picture as one, else among the marks that follow its title
+    /// in its texts, up to its preview (Isomer's lists a labelled picture
+    /// as a text).
     func row(_ title: String, marked id: String, _ label: String) -> Bool {
         if element(id)?.label == label { return true }
         guard let start = texts.firstIndex(of: title) else { return false }
-        let rest = texts[texts.index(after: start)...]
-        let end = rest.firstIndex { $0.hasPrefix("/") } ?? rest.endIndex
-        return rest[..<end].contains(label)
+        let marks = texts[texts.index(after: start)...].prefix { Self.isMark($0) }
+        return marks.contains(label)
+    }
+
+    /// The labels of a row's marks (SessionCardRow): its pin, its loop,
+    /// its goal, and what is happening.
+    static func isMark(_ text: String) -> Bool {
+        ["Pinned", "Looping", "Working", "Waiting", "Waiting for your approval", "Asking you a question"].contains(text)
+            || text.hasPrefix("Goal: ")
+    }
+
+    /// The texts of a session's row in Sessions, by its title, from its
+    /// title to its preview.
+    func rowTexts(_ title: String) -> [String] {
+        guard let start = texts.firstIndex(of: title) else { return [] }
+        let rest = texts[start...]
+        let marks = rest.dropFirst().prefix { Self.isMark($0) }
+        return Array(rest.prefix(marks.count + 2))
     }
 
     /// Whether `title` is the page's title: its first text on Isomer's

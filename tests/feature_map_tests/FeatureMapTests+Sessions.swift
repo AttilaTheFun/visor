@@ -106,6 +106,10 @@ extension FeatureMapTests {
             #expect(Self.order(first) == ["fixture-docs", "fixture-chat", "fixture-busy", "fixture-api"], "\(first.summary)")
             #expect(first.row("Release notes", marked: "pinned-fixture-docs", "Pinned"), "\(first.summary)")
             #expect(!first.row("Offline sync", marked: "pinned-fixture-chat", "Pinned"), "\(first.summary)")
+            // A row is its title, its marks and its preview: no folder
+            // (its details have it).
+            #expect(first.rowTexts("Rate limits") == ["Rate limits", "The limiter now allows bursts of 20 per minute."], "\(first.summary)")
+            #expect(!first.texts.contains("/Users/visor/Developer/api"), "no folder in the list: \(first.summary)")
 
             let menu = try app.longPress("session-fixture-api")
             #expect(menu.has(label: "Pin") && !menu.has(label: "Unpin"), "no Pin in the menu: \(menu.summary)")
