@@ -19,7 +19,7 @@ public struct ContainerSettings: Codable, Equatable, Sendable {
     public var memoryGiB: Int?
     /// Minutes with no session in it before it's stopped (its memory given
     /// back: what the guest frees isn't, while it runs).
-    public var idleMinutes = 30
+    public var idleMinutes = ContainerSettings.defaultIdleMinutes
     /// An image digest (`sha256:…`) in place of the one the release pins
     /// in container.json, of the same repository
     /// (ghcr.io/attilathefun/visor-agent): never a tag. Nil for the
@@ -35,17 +35,55 @@ public struct ContainerSettings: Codable, Equatable, Sendable {
 
     public init() {}
 
-    /// The most the default gives it: on the Mini (32 GB), Nimbus's VMs and
-    /// containers need room too.
+    /// The most the default gives it, whatever's free; a setting may give
+    /// more (24 GiB of the Mini's 32, which runs agents and Visor alone).
     public static let defaultMemoryCapGiB = 24
-    /// The least it's given.
+    /// The least it's given, and the least a setting may give it.
     public static let minimumMemoryGiB = 4
+    /// The least CPUs a setting may give it.
+    public static let minimumCPUs = 1
+    /// The idle minutes' default, and what a setting may be: a minute to a
+    /// day.
+    public static let defaultIdleMinutes = 30
+    public static let idleMinutesRange = 1...1440
 
     /// The default CPUs: eight, leaving two of this Mac's for itself.
     public static func defaultCPUs(cores: Int) -> Int { min(8, max(1, cores - 2)) }
 
+    /// The most CPUs a setting may give it: all of this Mac's cores.
+    public static func maximumCPUs(cores: Int) -> Int { max(cores, 1) }
+
+    /// The most memory a setting may give it, in GiB: all of this Mac's
+    /// less 4 (under the minimum on a Mac of less than 8 GiB, where no
+    /// setting fits).
+    public static func maximumMemoryGiB(physicalBytes: UInt64) -> Int { Int(physicalBytes >> 30) - 4 }
+
+    /// Why `cpus` can't be set on a Mac of `cores`; nil when it can.
+    public static func refusal(cpus: Int, cores: Int) -> String? {
+        if cpus < minimumCPUs { return "The Sessions container needs at least \(minimumCPUs) CPU." }
+        let most = maximumCPUs(cores: cores)
+        if cpus > most { return "The Sessions container can have at most \(most) CPUs, this computer's cores." }
+        return nil
+    }
+
+    /// Why `memoryGiB` can't be set on a Mac of `physicalBytes`; nil when it can.
+    public static func refusal(memoryGiB: Int, physicalBytes: UInt64) -> String? {
+        if memoryGiB < minimumMemoryGiB { return "The Sessions container needs at least \(minimumMemoryGiB) GiB of memory." }
+        let most = maximumMemoryGiB(physicalBytes: physicalBytes)
+        if memoryGiB > most {
+            return "The Sessions container can have at most \(max(most, 0)) GiB of memory, this computer's \(physicalBytes >> 30) GiB less 4."
+        }
+        return nil
+    }
+
+    /// Why `idleMinutes` can't be set; nil when it can.
+    public static func refusal(idleMinutes: Int) -> String? {
+        guard !idleMinutesRange.contains(idleMinutes) else { return nil }
+        return "The Sessions container's idle minutes are \(idleMinutesRange.lowerBound) to \(idleMinutesRange.upperBound)."
+    }
+
     /// The default memory: half of what's free (and reclaimable) now, so
-    /// Nimbus and this Mac's own apps keep the rest, at least
+    /// this Mac's own apps keep the rest, at least
     /// `minimumMemoryGiB` and at most `defaultMemoryCapGiB`; half of all of
     /// it when what's free isn't known. Never more than all of it less 4 GiB.
     public static func defaultMemoryGiB(availableBytes: UInt64?, physicalBytes: UInt64) -> Int {
@@ -88,7 +126,7 @@ public struct ContainerSettings: Codable, Equatable, Sendable {
         enabled = ((try? c.decodeIfPresent(Bool.self, forKey: .enabled)) ?? nil) ?? false
         cpus = ((try? c.decodeIfPresent(Int.self, forKey: .cpus)) ?? nil).flatMap { $0 > 0 ? $0 : nil }
         memoryGiB = ((try? c.decodeIfPresent(Int.self, forKey: .memoryGiB)) ?? nil).flatMap { $0 > 0 ? $0 : nil }
-        idleMinutes = ((try? c.decodeIfPresent(Int.self, forKey: .idleMinutes)) ?? nil).flatMap { $0 > 0 ? $0 : nil } ?? 30
+        idleMinutes = ((try? c.decodeIfPresent(Int.self, forKey: .idleMinutes)) ?? nil).flatMap { $0 > 0 ? $0 : nil } ?? Self.defaultIdleMinutes
         let digest = ((try? c.decodeIfPresent(String.self, forKey: .imageDigest)) ?? nil)?.trimmingCharacters(in: .whitespaces)
         imageDigest = digest.flatMap { Self.isImageDigest($0) ? $0 : nil }
         let folder = ((try? c.decodeIfPresent(String.self, forKey: .checkouts)) ?? nil)?.trimmingCharacters(in: .whitespaces)

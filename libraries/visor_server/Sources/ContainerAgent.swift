@@ -24,7 +24,8 @@ public struct ContainerAgent: Equatable, Sendable {
     public var resumeSessionID: String
     /// Whether it acts without asking (Job.skip_permissions).
     public var skipPermissions: Bool
-    /// The agent's token (a JWT for `visor.runner-agent`): AGENT_TOKEN alone.
+    /// The agent's token (a JWT for `visor.runner-agent`): the wrapper's
+    /// standard input alone (AGENT_TOKEN_FD=0).
     public var token: String
     /// More for its harness's environment (CLAUDE_CONFIG_DIR).
     public var environment: [String: String]

@@ -18,10 +18,28 @@ public struct ServerControlsChange: Equatable, Sendable {
     public var clientsKeepMessages: Bool?
     /// The Sessions container on or off (ContainerSettings.enabled).
     public var containerEnabled: Bool?
+    /// Its CPUs and memory cap in GiB (ContainerSettings.cpus, .memoryGiB):
+    /// taken at its next start, never by restarting it. Within this
+    /// computer's (docs/containers.md, Settings), or refused.
+    public var containerCPUs: Amount?
+    public var containerMemoryGiB: Amount?
+    /// Minutes with nothing in it before it's stopped
+    /// (ContainerSettings.idleMinutes): taken at once.
+    public var containerIdleMinutes: Amount?
+
+    /// A number of the container's, changed: set, or back to its default
+    /// (`null` or `"default"` in JSON). Anything else (a word, a fraction)
+    /// is kept as it came, for the server to refuse.
+    public enum Amount: Equatable, Sendable {
+        case to(Int)
+        case byDefault
+        case unreadable(JSONValue)
+    }
 
     public init(password: String? = nil, authentication: String? = nil, lan: Bool? = nil, vpn: Bool? = nil, sshEnabled: Bool? = nil,
                 proxyEnabled: Bool? = nil, publicAddress: String? = nil, tlsIdentityPath: String? = nil, tlsPassword: String? = nil,
-                detachAgents: Bool? = nil, clientsKeepMessages: Bool? = nil, containerEnabled: Bool? = nil) {
+                detachAgents: Bool? = nil, clientsKeepMessages: Bool? = nil, containerEnabled: Bool? = nil, containerCPUs: Amount? = nil,
+                containerMemoryGiB: Amount? = nil, containerIdleMinutes: Amount? = nil) {
         self.password = password
         self.authentication = authentication
         self.lan = lan
@@ -34,5 +52,8 @@ public struct ServerControlsChange: Equatable, Sendable {
         self.detachAgents = detachAgents
         self.clientsKeepMessages = clientsKeepMessages
         self.containerEnabled = containerEnabled
+        self.containerCPUs = containerCPUs
+        self.containerMemoryGiB = containerMemoryGiB
+        self.containerIdleMinutes = containerIdleMinutes
     }
 }

@@ -11,8 +11,8 @@
 # container has it read-only at /opt/visor/bin.
 #
 # And agent-wrapper (agent_protocol's, at the version Package.resolved pins,
-# 0.5.0), each Sessions container session's agent (docs/containers.md), a
-# static program of its own (about 70 MB stripped): agent_protocol 0.5.0
+# 0.6.0), each Sessions container session's agent (docs/containers.md), a
+# static program of its own (about 70 MB stripped): agent_protocol 0.6.0
 # makes it only an executable (its AgentWrapper module is no library
 # product, and its main is top-level code), so visor-server can't run it
 # by a name. It's built as a product of Visor's package, sharing the
@@ -106,7 +106,7 @@ case "$answer" in *'"result":{}'*) ;; *) echo "$me: visor-agent-host mcp answere
 usage="$("$OUT/relay-client" help)" || { echo "$me: relay-client does not run" >&2; exit 1; }
 grep -q "^Usage: relay-client run" <<< "$usage" || { echo "$me: relay-client answered: $usage" >&2; exit 1; }
 grep -q -- "--forward <port>=<socket>" <<< "$usage" || { echo "$me: relay-client has no --forward: $usage" >&2; exit 1; }
-# agent-wrapper's usage: 0.5.0 has no --help or --version, so --help is an
+# agent-wrapper's usage: 0.6.0 has no --help or --version, so --help is an
 # unknown flag, answered with the usage and status 2, and nothing started.
 status=0
 wrapper="$("$OUT/agent-wrapper" --help 2>&1)" || status=$?

@@ -612,6 +612,69 @@ extension ServerTests {
         #expect(again.placedInContainer == 1, "keeping the container up")
     }
 
+    /// `id` placed, and the server stopped and started again (`again`,
+    /// set up by `before` as its start would be), its sessions taken up
+    /// and the engine given: the agent it carries on is started then.
+    private func carriedOnAtAStart(_ id: String, before: (VisorServer) -> Void) async throws -> (VisorServer, FakeContainer) {
+        let (_, wrapper, _) = try await placed(id)
+        server.saveArchiveNow()
+        wrapper.finish()
+        listening.stop()
+        server.stop()
+        let again = VisorServer(port: UInt16(ServerTestCase.freePort()))
+        before(again)
+        again.drivenProcess = { _ in DrivenProcess() }
+        again.takeUpDrivenSessions()
+        let engine = FakeContainer(shared: [sessions.path])
+        again.sessionsContainer = engine
+        return (again, engine)
+    }
+
+    /// Its git identity at the server's start (0.72.3, Container Test: the
+    /// agents carried on then had none, agent-proxy being folded in after
+    /// the start): expected before the start, its agent waits for it, and
+    /// has it once agent-proxy gives it within the wait.
+    @Test func anAgentCarriedOnAtAServersStartWaitsForItsGitIdentity() async throws {
+        let bot = ContainerGitIdentity(name: "logan-shire-agent[bot]", email: "987+logan-shire-agent[bot]@users.noreply.github.com")
+        let (again, engine) = try await carriedOnAtAStart("git-start") { $0.containerGitIdentityExpected = true }
+        defer { again.stop() }
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(engine.all.isEmpty, "waiting for agent-proxy")
+        // agent-proxy folded in.
+        let asked = Asked()
+        again.containerGitIdentity = {
+            asked.add()
+            return bot
+        }
+        let restarted = try #require(await eventually { engine.all.first })
+        #expect(restarted.agent.environment["GIT_AUTHOR_NAME"] == bot.name)
+        #expect(restarted.agent.environment["GIT_AUTHOR_EMAIL"] == bot.email)
+        #expect(restarted.agent.environment["GIT_COMMITTER_NAME"] == bot.name)
+        #expect(restarted.agent.environment["GIT_COMMITTER_EMAIL"] == bot.email)
+        #expect(asked.times == 1)
+        #expect(again.containerGitIdentityWaiters.isEmpty)
+    }
+
+    /// Expected and never given (no agent-proxy): its agent starts once
+    /// the wait is over, without one.
+    @Test func anAgentCarriedOnAtAServersStartStartsWithoutAGitIdentityPastTheWait() async throws {
+        let clock = ContinuousClock()
+        var began = clock.now
+        let (again, engine) = try await carriedOnAtAStart("git-never") { server in
+            server.containerGitIdentityExpected = true
+            server.containerGitIdentityWait = .milliseconds(500)
+            began = clock.now
+        }
+        defer { again.stop() }
+        let restarted = try #require(await eventually { engine.all.first })
+        #expect(clock.now - began >= .milliseconds(500), "not before the wait is over")
+        for name in ["GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL"] {
+            #expect(restarted.agent.environment[name] == nil, "\(name)")
+        }
+        #expect(restarted.agent.environment["GH_TOKEN"] == "visor-agent-proxy", "started all the same")
+        #expect(again.containerGitIdentityWaiters.isEmpty)
+    }
+
     /// Check 7: Move Back hands its conversation back, into this
     /// computer's Claude folder for the folder it moves back to, and it
     /// carries on from it here.

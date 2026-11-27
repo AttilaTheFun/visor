@@ -2,8 +2,8 @@
 // the fake backend: the driver's socket carried in beside the relay's and
 // joined on the host to the driver's port with nothing before the guest's
 // bytes (no PROXY header), whether or not agent-proxy is there; and
-// startWrapper's argv, environment (the runner's AGENT_* contract), working
-// folder and log.
+// startWrapper's argv, environment (the runner's AGENT_* contract), token
+// (its standard input, never a variable), working folder and log.
 
 import CAgentProxyPOSIX
 import Foundation
@@ -107,7 +107,8 @@ extension EngineTests {
         let session = ContainerSession(
             id: id, dispatcherURL: "http://127.0.0.1:7434", title: "A task", prompt: "Start here", model: "opus", workingDirectory: folder,
             labels: ["container"], token: "eyJ.agent.jwt",
-            environment: ["CLAUDE_CODE_OAUTH_TOKEN": "oauth", "AGENT_TOKEN": "not this one", "AGENT_DRIVER_URL": "http://elsewhere:1"])
+            environment: ["CLAUDE_CODE_OAUTH_TOKEN": "oauth", "AGENT_TOKEN": "not this one", "AGENT_TOKEN_FILE": "/tmp/not-this",
+                          "AGENT_DRIVER_URL": "http://elsewhere:1"])
         let execution = try await engine.startWrapper(session: session)
         #expect(execution.id == id)
         #expect(execution.log == rig.layout.log(process: id), "logs/<session>.log")
@@ -124,7 +125,7 @@ extension EngineTests {
             "AGENT_DRIVER_URL": "http://127.0.0.1:7434",
             "AGENT_RUNNER": "visor-sessions",
             "AGENT_SESSIONS_DIR": sessions.path,
-            "AGENT_TOKEN": "eyJ.agent.jwt",
+            "AGENT_TOKEN_FD": "0",
             "CLAUDE_CODE_OAUTH_TOKEN": "oauth",
             "HOME": "/root",
             "TMPDIR": "/tmp",
@@ -138,7 +139,9 @@ extension EngineTests {
         #expect(object["labels"] as? [String] == ["container"])
         #expect(object["skipPermissions"] == nil, "the job doesn't say")
         #expect(object["harness"] == nil && object["resumeSessionID"] == nil)
-        #expect(!job.contains("eyJ.agent.jwt"), "the token is in AGENT_TOKEN alone")
+        #expect(exec.input == Data("eyJ.agent.jwt".utf8), "the token is the wrapper's standard input (AGENT_TOKEN_FD=0) alone")
+        #expect(!exec.environment.values.contains { $0.contains("eyJ.agent.jwt") }, "in no variable (agent_protocol#17)")
+        #expect(!job.contains("eyJ.agent.jwt"))
         #expect(await engine.running.contains(id))
         try await execution.signal(15)
         #expect(await execution.wait() == 128 + 15)
@@ -156,10 +159,12 @@ extension EngineTests {
 
         let plain = ContainerEngine.wrapperExec(base, sessions: "/Volumes/Sessions")
         #expect(plain.workingDirectory == nil, "no folder: the wrapper's own, <Sessions>/Claude/<id>")
-        for absent in ["AGENT_DISPATCHER_URL", "AGENT_TOKEN", "AGENT_SOURCES_DIR", "AGENT_WRAPPER_CLAUDE"] {
+        for absent in ["AGENT_DISPATCHER_URL", "AGENT_TOKEN", "AGENT_TOKEN_FD", "AGENT_SOURCES_DIR", "AGENT_WRAPPER_CLAUDE"] {
             #expect(plain.environment[absent] == nil, "\(absent)")
         }
-        #expect(ContainerEngine.wrapperExec(with(base) { $0.token = "" }, sessions: "/Volumes/Sessions").environment["AGENT_TOKEN"] == nil)
+        #expect(plain.input == nil, "no token: nothing on its standard input")
+        let empty = ContainerEngine.wrapperExec(with(base) { $0.token = "" }, sessions: "/Volumes/Sessions")
+        #expect(empty.environment["AGENT_TOKEN_FD"] == nil && empty.input == nil)
 
         let full = ContainerEngine.wrapperExec(with(base) {
             $0.reportsTo = "http://127.0.0.1:7434"
