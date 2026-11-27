@@ -135,9 +135,25 @@ extension ServerTests {
         #expect(welcome.hasPrefix("message "))
         #expect(Envelope.decode(String(welcome.dropFirst(8)))?.type == "welcome")
         sockets.send(id: id, text: Envelope.ping().encoded())
-        #expect(Envelope.decode(String(try await sockets.next(id: id).dropFirst(8)))?.type == "pong")
+        #expect(Envelope.decode(String(try await answer(sockets, id).dropFirst(8)))?.type == "pong")
         sockets.disconnect(id: id)
-        #expect(try await sockets.next(id: id).hasPrefix("close"))
+        #expect(try await answer(sockets, id).hasPrefix("close"))
+    }
+
+    /// What the server tells every signed-in client whenever it changes,
+    /// unasked: the agents on offer once the server has looked for their
+    /// tools (start's ToolPath.locate, which can end after the welcome),
+    /// and the sessions.
+    private static let told: Set<String> = ["catalogs", "sessions"]
+
+    /// The channel's next event but those: the answer to what was sent, or
+    /// its close.
+    private func answer(_ sockets: SocketFileSocketService, _ id: Int32) async throws -> String {
+        while true {
+            let event = try await sockets.next(id: id)
+            guard event.hasPrefix("message "), let type = Envelope.decode(String(event.dropFirst(8)))?.type,
+                  Self.told.contains(type) else { return event }
+        }
     }
 
     @Test func theChannelWithoutTheKeyWantsThePasswordWithSSHClientsOff() async throws {
