@@ -22,7 +22,8 @@
 # token GitHub refuses (401) leaves the fetches anonymous, with a warning,
 # rather than failing every one. The token is never traced nor echoed.
 #
-# Run by tools/ci/job_tools.sh (the Linux jobs) and the proofs' scripts
+# Run by tools/ci/job_tools.sh (the Linux jobs), tools/ci/ci_bazel.sh setup
+# (every Bazel job) and the proofs' scripts
 # (tools/ci/proof_ios.sh, tools/ci/proof_android.sh); again is harmless.
 # tools/ci/linux_tests.sh hands the same file to SwiftPM's git
 # (GIT_CONFIG_GLOBAL), in its unpacked tree, which is no git repository.
@@ -32,6 +33,15 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 me="git_auth"
 if [ "${GITHUB_ACTIONS:-}" != true ]; then
     echo "$me: not a GitHub Actions job: git left as it is"
+    exit 0
+fi
+# Only where the job asks (`VISOR_GIT_AUTH: "1"` in its env): the jobs whose
+# token reads alone, and that hold no signing environment. Never alpha-apple
+# or release-apple (contents: write), alpha or release (the environment
+# `release`), whose Bazel runs third-party Package.swift manifests in
+# repository rules, which could read the file (Manager's review of #573).
+if [ "${VISOR_GIT_AUTH:-}" != 1 ]; then
+    echo "$me: this job doesn't ask for it (VISOR_GIT_AUTH): github.com's git fetches stay anonymous"
     exit 0
 fi
 dir="${RUNNER_TEMP:?$me: no RUNNER_TEMP}/visor-git"
