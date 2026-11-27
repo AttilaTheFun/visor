@@ -98,7 +98,10 @@ import Testing
         try write(at: keys.appendingPathComponent("id_ed25519"), "a secret key\n")
         try FileManager.default.createSymbolicLink(at: project(out).appendingPathComponent("memory"), withDestinationURL: keys)
         let key = ClaudeSessionFiles.projectDirectoryName(for: "/Volumes/Sessions/Claude/s10")
-        #expect(ConversationFiles.of(resume: "c-3", cwd: out, for: "/Volumes/Sessions/Claude/s10").map(\.place) == ["projects/\(key)/c-3.jsonl"])
+        var said: [String] = []
+        let sent = ConversationFiles.of(resume: "c-3", cwd: out, for: "/Volumes/Sessions/Claude/s10", log: { said.append($0) })
+        #expect(sent.map(\.place) == ["projects/\(key)/c-3.jsonl"])
+        #expect(said.count == 1 && said.allSatisfy { $0.contains("leads out of") }, "\(said)")
         let inside = home.appendingPathComponent("Developer/in", isDirectory: true).path
         try write(at: project(inside).appendingPathComponent("c-4.jsonl"), "{}\n")
         try write(at: project(inside).appendingPathComponent("memory/MEMORY.md"), "- [Key](key.md)\n")

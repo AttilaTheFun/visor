@@ -12,7 +12,6 @@ import ClaudeTranscript
 import Foundation
 import VisorAgent
 import VisorProtocol
-import VisorServer
 
 enum ConversationFiles {
     /// How much of a file goes in one piece.
@@ -25,7 +24,9 @@ enum ConversationFiles {
 
     /// The conversation `resume` of a session that worked in `cwd` here,
     /// placed for a session working in `workingDirectory` on the runner.
-    static func of(resume: String, cwd: String, for workingDirectory: String) -> [File] {
+    /// A memory refused (one leading out of Claude's projects folder) is
+    /// said to `log`.
+    static func of(resume: String, cwd: String, for workingDirectory: String, log: (String) -> Void = { _ in }) -> [File] {
         let project = ClaudeSessionFiles.projectDirectoryName(for: workingDirectory)
         var found: [File] = []
         var conversation: URL?
@@ -39,8 +40,8 @@ enum ConversationFiles {
             }
         }
         // The project's memory, where Claude Code keeps it.
-        let refused = { (why: String) in VisorServer.log("driver: a memory refused: \(why)") }
-        if let conversation, let memory = ClaudeSessionFiles.memoryFolder(conversation: conversation, cwd: cwd, refused: refused) {
+        if let conversation,
+           let memory = ClaudeSessionFiles.memoryFolder(conversation: conversation, cwd: cwd, refused: { log("driver: a memory refused: \($0)") }) {
             let there = ClaudeSessionFiles.memoryProjectDirectoryName(for: workingDirectory)
             found += files(in: memory).map { File(place: "projects/\(there)/memory/\($0.relative)", url: $0.url) }
         }
