@@ -4,7 +4,7 @@
 # the hardened runtime, accepted by Gatekeeper (`spctl`) and its
 # notarization stapled (`stapler validate`); then opened as a user opens
 # it (`open`), and still running a few seconds later. CI runs it on
-# Visor Disk Utility's signed .zip on an `xcode-27` Mac (ci.yml's
+# Visor Disk Utility's signed .zip in a Nimbus macOS VM (ci.yml's
 # alpha-launch and release-launch, beside Visor.app's launch_check), before
 # its release assets are proposed or attached. It's then quit.
 #

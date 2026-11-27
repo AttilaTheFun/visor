@@ -1,6 +1,7 @@
 #!/bin/bash
 # The iPhone's part of the proof (ci.yml's verify), in one orientation, on
-# one of GitHub's own Macs (`xcode-27`): the app, built on a Nimbus runner
+# a Mac (in CI a macOS VM that a Nimbus runner leases, tools/ci/mac_vm.sh,
+# both orientations in turn): the app, built on a Nimbus runner
 # by the proof's build job (build-apple) for Apple silicon's simulator with Isomer's driver in it
 # (--config=drive: never a release's), on an iPhone 17 of iOS 27.2 (the
 # runtime the pictures it is compared with were taken on: GitHub rolls a

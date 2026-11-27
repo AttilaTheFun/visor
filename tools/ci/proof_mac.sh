@@ -1,7 +1,6 @@
 #!/bin/bash
-# The Mac's part of the proof (ci.yml's verify), on one of
-# GitHub's own Macs (`xcode-27`, a desktop session whose shell may picture
-# the screen): Visor.app (applications/visor_mac), built on a Nimbus runner
+# The Mac's part of the proof (ci.yml's verify), in the desktop session
+# of a macOS VM that a Nimbus runner leases (tools/ci/mac_vm.sh --desktop): Visor.app (applications/visor_mac), built on a Nimbus runner
 # by the proof's build job (build-apple) and signed ad hoc there, opened on the screenshot
 # fixture in the light look, once for each of the fixture's screens (each
 # failing if the app is still busy once it should have settled), on a

@@ -1,8 +1,7 @@
 #!/bin/bash
 # Visor's tests that need a Mac, built by tools/ci/build_mac_tests.sh (CI's
-# test-bundles job, on a Nimbus runner) and run on one of GitHub's own Macs
-# (`xcode-27`, CI's test job), which a public repository has for free
-# (Logan, 5 Nov 2026), with no Bazel there: each bundle by Xcode's
+# test-bundles job, on a Nimbus runner) and run in a macOS VM that CI's test
+# job leases from Nimbus (tools/ci/mac_vm.sh), with no Bazel there: each bundle by Xcode's
 # `xctest` (`xcrun xctest`, as for any macOS logic test), a bundle at a
 # time, stopped after 15 minutes, with Xcode 27.2 (the SDK they are built
 # with) where the image has it. The tests with nothing of Apple's in them
