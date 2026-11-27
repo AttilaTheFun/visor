@@ -112,6 +112,8 @@ struct VisorMacApp: App {
                 .onOpenURL { url in store.open(url.absoluteString) }
                 .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
                 .background(SceneOpeners())
+                // A picture's narrow window, narrowed once it is up.
+                .task { await FixtureWindow.narrow() }
                 // Shireworks Kit: crashes and Help › Report a Bug… (below)
                 // filed as issues in the Info.plist's ShireworksRepository,
                 // and Shireworks' offers of an update answered as
@@ -130,8 +132,8 @@ struct VisorMacApp: App {
         .restorationBehavior(.disabled)
         // The sidebar, and a thread about as wide as the transcript grows;
         // a picture's own width where the fixture names one (its
-        // fixture.width: the content at its narrowest).
-        .defaultSize(width: VisorFixture.windowWidth ?? 1200, height: 820)
+        // fixture.width: the content at its narrowest, FixtureWindow).
+        .defaultSize(width: FixtureWindow.openingWidth ?? 1200, height: 820)
         .commands {
             // ⌘Q closes the window, back to the menu bar: quitting ends the
             // agents of the server in the app, which only the menu's Quit

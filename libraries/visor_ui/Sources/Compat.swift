@@ -8,6 +8,9 @@ import SwiftUI
 #if canImport(QuickLook)
 import QuickLook
 #endif
+#if os(macOS)
+import AppKit
+#endif
 
 /// What differs by platform outside a view modifier.
 enum Compat {
@@ -18,6 +21,22 @@ enum Compat {
         true
         #else
         false
+        #endif
+    }
+
+    /// The Mac's key window widened to `width` where it is narrower (the
+    /// sidebar shown in a window too narrow for it: NarrowWindow), kept on
+    /// its screen. Elsewhere nothing: a phone's or a tablet's width is the
+    /// system's.
+    @MainActor static func widenWindow(toAtLeast width: CGFloat) {
+        #if os(macOS)
+        guard let window = NSApp.keyWindow ?? NSApp.mainWindow, window.frame.width < width else { return }
+        var frame = window.frame
+        frame.size.width = width
+        if let screen = window.screen?.visibleFrame, frame.maxX > screen.maxX {
+            frame.origin.x = max(screen.minX, screen.maxX - frame.width)
+        }
+        window.setFrame(frame, display: true, animate: true)
         #endif
     }
 

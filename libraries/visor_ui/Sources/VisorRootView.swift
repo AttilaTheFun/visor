@@ -270,7 +270,12 @@ public struct VisorRootView: View {
             }
         }
         .navigationSplitViewStyle(.balanced)
-        .narrowWindowMinimum(sidebarShown: columns != .detailOnly))
+        .narrowWindowMinimum(sidebarShown: columns != .detailOnly)
+        // The sidebar shown in a window too narrow for it beside the content:
+        // the window widened to fit them, as its least is now.
+        .onChange(of: columns) { _, now in
+            if NarrowWindow.applies, now != .detailOnly { Compat.widenWindow(toAtLeast: NarrowWindow.besideSidebar) }
+        })
         .environment(\.trailingPane, $pane)
         .sheet(isPresented: $composing, onDismiss: {
             composeRestores = false

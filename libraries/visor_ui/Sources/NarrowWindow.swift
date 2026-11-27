@@ -6,7 +6,11 @@
 // squeezed spun the app's layout (Nimbus VM pictures, 27 Nov 2026). So the
 // window is no narrower than its columns need: the content's 320 with the
 // sidebar hidden, the sidebar's room beside it while it shows (showing it
-// in a narrow window widens the window). The pane (Settings, a session's
+// in a narrow window widens the window: Compat.widenWindow, as AppKit
+// doesn't). AppKit keeps the sidebar of a window that opens under about
+// 500 points wide, squeezing the chat into a column it spins in, so a
+// picture's narrow window opens wider with the sidebar hidden and is
+// narrowed after (VisorMacApp's FixtureWindow). The pane (Settings, a session's
 // details) is a sheet where the detail column has no room for it beside the
 // content. An iPad's and a phone's are their size class's.
 
