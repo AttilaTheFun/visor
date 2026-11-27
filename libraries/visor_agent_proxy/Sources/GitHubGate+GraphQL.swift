@@ -190,6 +190,7 @@ extension GitHubGate {
         static func refusal(_ name: String) -> String {
             if Owner.mergingMutations.contains(name) { return Owner.merging(name) }
             if name == "deleteRef" { return Owner.deleting(name) }
+            if name == "deleteRelease" { return Owner.deletingRelease(name) }
             switch name {
             case "disablePullRequestAutoMerge", "dequeuePullRequest":
                 return "\(name): a pull request is merged once its checks have passed, never later unchecked (no auto-merge)"

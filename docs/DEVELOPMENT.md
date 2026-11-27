@@ -1407,7 +1407,12 @@ container agents.
     `container-apple` by hand, and verify's Apple jobs, read the last
     night's cache.
   - **By hand on main** (`gh workflow run ci.yml --ref main -f run=…`, or
-    the gh tools' run_dispatch): `verify` runs the tests on Linux
+    the gh tools' run_dispatch; a container agent's goes through
+    agent-proxy's GitHub gate, `run` one of verify, prerelease and release,
+    at most 4 an hour (a soft limit, reset when agent-proxy restarts), each
+    a line of its log; on its own branch, `run: verify` alone:
+    docs/agent-proxy.md, "Release proposals on main"): `verify` runs the
+    tests on Linux
     (`//tests:linux`, and the headless screens), those that need a Mac
     (`test`: their bundles built and run on an `xcode-27` Mac), tries the
     command-line server on Linux (tools/ci/linux_tests.sh), builds blue
