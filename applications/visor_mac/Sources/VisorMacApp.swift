@@ -128,8 +128,10 @@ struct VisorMacApp: App {
         // launch's to say (above), not what was open when Visor last went,
         // so launchd's launch at login keeps to the menu bar.
         .restorationBehavior(.disabled)
-        // The sidebar, and a thread about as wide as the transcript grows.
-        .defaultSize(width: 1200, height: 820)
+        // The sidebar, and a thread about as wide as the transcript grows;
+        // a picture's own width where the fixture names one (its
+        // fixture.width: the content at its narrowest).
+        .defaultSize(width: VisorFixture.windowWidth ?? 1200, height: 820)
         .commands {
             // ⌘Q closes the window, back to the menu bar: quitting ends the
             // agents of the server in the app, which only the menu's Quit
