@@ -701,7 +701,7 @@
   "moduleExtensions": {
     "//tools/shared_sign_in:extension.bzl%shared_sign_in": {
       "general": {
-        "bzlTransitiveDigest": "DS2KpuhqT0QlVSJthx7/aBPPD5nxWgGA0sPGwprtEYk=",
+        "bzlTransitiveDigest": "8AC8+opSCoxGDb7C/mK8i0EgAswlFlkUD1WIJGCZzEU=",
         "usagesDigest": "9DO6ykwk3ygVX60bkpodD5jgl+1zTiMc/O6+UYyGsLM=",
         "recordedInputs": [],
         "generatedRepoSpecs": {
@@ -1124,7 +1124,7 @@
           "REPO_MAPPING:rules_swift_package_manager+,bazel_skylib bazel_skylib+",
           "REPO_MAPPING:rules_swift_package_manager+,bazel_tools bazel_tools",
           "REPO_MAPPING:rules_swift_package_manager+,cgrindel_bazel_starlib cgrindel_bazel_starlib+",
-          "FILE:@@//third_party/swift_packages/Package.resolved 1716216d72fb9c7231cec6a7df75cda7ee24aba88e06a716329e12653f83bb16"
+          "FILE:@@//third_party/swift_packages/Package.resolved 19eca3def9d17240843d4a398e889659545aa125d41fae32bc803beb893b1608"
         ],
         "generatedRepoSpecs": {
           "swift_package": {
@@ -1482,9 +1482,9 @@
             "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
             "attributes": {
               "bazel_package_name": "swiftpkg_build_tools",
-              "commit": "d9d9cca23be4bf501240b86d6769c7d80b1f000e",
+              "commit": "72437d4fd0d4e0bb487b0494d483b9d143f9ec16",
               "remote": "https://github.com/AttilaTheFun/build_tools.git",
-              "version": "0.7.0",
+              "version": "0.8.0",
               "env": {},
               "env_inherit": [],
               "cached_json_directory": "",
