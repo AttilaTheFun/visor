@@ -1,13 +1,17 @@
 // The Mac window at its narrowest: the content goes down to 320 points
 // (Logan, 27 Nov 2026: the narrowest an iPad app gets in Stage Manager,
-// as in Shireworks). AppKit's split view doesn't hide a column for the
-// window's width by itself: a window dragged narrower than the sidebar and
-// the content squeezes both and cuts the chat off. So VisorRootView hides
-// the sidebar below `besideSidebar` and makes the pane (Settings, a
-// session's details) a sheet where the detail column is narrower than
-// `besidePane`. An iPad's and a phone's are their size class's.
+// as in Shireworks). AppKit's split view hides no column for the window's
+// width: a window narrower than the sidebar and the content squeezed both
+// and cut the chat off, and hiding the sidebar from a geometry change while
+// squeezed spun the app's layout (Nimbus VM pictures, 27 Nov 2026). So the
+// window is no narrower than its columns need: the content's 320 with the
+// sidebar hidden, the sidebar's room beside it while it shows (showing it
+// in a narrow window widens the window). The pane (Settings, a session's
+// details) is a sheet where the detail column has no room for it beside the
+// content. An iPad's and a phone's are their size class's.
 
 import SwiftUI
+import VisorClient
 
 enum NarrowWindow {
     /// The content's least (the detail column's: VisorRootView).
@@ -27,5 +31,11 @@ enum NarrowWindow {
         #else
         false
         #endif
+    }
+
+    /// Whether the window opens too narrow for the sidebar (a picture's
+    /// fixture.width), so it opens hidden.
+    @MainActor static var opensNarrow: Bool {
+        applies && CGFloat(VisorFixture.windowWidth ?? .infinity) < besideSidebar
     }
 }

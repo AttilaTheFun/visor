@@ -180,6 +180,16 @@ extension View {
         #endif
     }
 
+    /// The Mac window's least width: the content's, and the sidebar's room
+    /// beside it while it shows (NarrowWindow). Elsewhere as it is.
+    @ViewBuilder func narrowWindowMinimum(sidebarShown: Bool) -> some View {
+        #if os(macOS)
+        frame(minWidth: sidebarShown ? NarrowWindow.besideSidebar : NarrowWindow.content)
+        #else
+        self
+        #endif
+    }
+
     /// The pane (Settings, a session's details) as a sheet on the Mac, in
     /// a window too narrow for it beside the content (NarrowWindow): a
     /// sheet's size, as the pane's column gave it one. Elsewhere as it is.
