@@ -1472,8 +1472,12 @@ container agents.
     Applications tab is drawn from. The agent
     image of that version follows when tools/containers/ changed
     (`agent-image`, built with buildah on GitHub's arm64 Ubuntu, arm64
-    alone). A branch's builds are experiments only (Logan, 12 Nov 2026):
-    nothing publishes them.
+    alone). It's main's alone, twice over: the job runs only on main, and
+    it pushes with the token of the GitHub environment `agent-image`,
+    whose deployment branches are main alone. So a ci.yml changed on a
+    branch has nothing to push `visor-agent:latest` with, the image every
+    Sessions container pulls (NCH, 26 Nov 2026). A branch's builds are
+    experiments only (Logan, 12 Nov 2026): nothing publishes them.
   - **Released**: Logan's Release in Reviews publishes a proposed
     release's draft, which makes its tag. Production comes from the tag:
     `release-apple` (an `xcode-27` Mac, `--config=apple_cross_mac`) and
