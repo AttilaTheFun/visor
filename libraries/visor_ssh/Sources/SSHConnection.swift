@@ -18,7 +18,8 @@ public final class SSHConnection {
     private let group: MultiThreadedEventLoopGroup
     private var listeners: [Channel] = []
     /// The channels open through it at once, held under the computer's
-    /// limit (ChannelGate); on the one event loop of its group.
+    /// limit (ChannelGate); on the one event loop of its group, made there
+    /// (`gate(on:)`).
     private let gate: NIOLoopBound<ChannelGate>
 
     /// How often a channel the computer refused is asked for again, and
@@ -26,12 +27,20 @@ public final class SSHConnection {
     nonisolated static let channelRetries = 4
     nonisolated static let channelRetryAfter: TimeAmount = .milliseconds(200)
 
-    init(root: Channel, handler: NIOLoopBound<NIOSSHHandler>, hostKeys: [String], group: MultiThreadedEventLoopGroup) {
+    init(root: Channel, handler: NIOLoopBound<NIOSSHHandler>, gate: NIOLoopBound<ChannelGate>, hostKeys: [String],
+         group: MultiThreadedEventLoopGroup) {
         self.root = root
         self.handler = handler
+        self.gate = gate
         self.hostKeys = hostKeys
         self.group = group
-        gate = NIOLoopBound(ChannelGate(), eventLoop: root.eventLoop)
+    }
+
+    /// A gate for a connection whose root is `root`, made on its event
+    /// loop: NIOLoopBound traps when it is made anywhere else (0.73.3's
+    /// crash at every connect, visor#577).
+    nonisolated static func gate(on root: Channel) async throws -> NIOLoopBound<ChannelGate> {
+        try await root.eventLoop.submit { NIOLoopBound(ChannelGate(), eventLoop: root.eventLoop) }.get()
     }
 
     /// Reaches `port` on the computer's loopback through a port here, on
@@ -59,7 +68,10 @@ public final class SSHConnection {
     private func listen(_ plan: @escaping @Sendable (Channel) -> Result<(SSHChannelType, String?), Error>) async throws -> Int {
         let handler = self.handler
         let gate = self.gate
-        let listener = try await ServerBootstrap(group: group)
+        // On the root's own loop, it and every connection it takes: the
+        // handler and the gate are bound to that loop, so they're touched
+        // only there, however many threads the group has.
+        let listener = try await ServerBootstrap(group: root.eventLoop)
             .serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
             .childChannelInitializer { local in
                 let ready = local.eventLoop.makePromise(of: Void.self)

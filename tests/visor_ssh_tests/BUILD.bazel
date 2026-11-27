@@ -1,6 +1,18 @@
 load("@rules_apple//apple:macos.bzl", "macos_unit_test")
-load("@rules_swift//swift:swift.bzl", "swift_library")
+load("@rules_swift//swift:swift.bzl", "swift_library", "swift_test")
 load("//tools/swift:defs.bzl", "STRICT_SWIFT")
+
+# visor_ssh's tests: OpenSSH's lines, the channel gate, and connects for
+# real (SSHConnectorTests: an SSH server and an echo server played on
+# 127.0.0.1, a forward through the one to the other). On a Mac as a bundle,
+# and on Linux (visor_ssh_linux_tests, in //tests:linux).
+_DEPS = [
+    "//libraries/visor_ssh",
+    "@swiftpkg_swift_crypto//:Crypto",
+    "@swiftpkg_swift_nio//:NIOCore",
+    "@swiftpkg_swift_nio//:NIOPosix",
+    "@swiftpkg_swift_nio_ssh//:NIOSSH",
+]
 
 swift_library(
     name = "visor_ssh_tests_lib",
@@ -9,10 +21,7 @@ swift_library(
     srcs = glob(["*.swift"]),
     module_name = "VisorSSHTests",
     target_compatible_with = ["@platforms//os:macos"],
-    deps = [
-        "//libraries/visor_ssh",
-        "@swiftpkg_swift_nio_ssh//:NIOSSH",
-    ],
+    deps = _DEPS,
 )
 
 # An .xctest bundle: built anywhere (on Linux too, with rules_applecross),
@@ -21,4 +30,14 @@ macos_unit_test(
     name = "visor_ssh_tests",
     minimum_os_version = "15.0",
     deps = [":visor_ssh_tests_lib"],
+)
+
+# The same tests, on Linux (visor_ssh is Linux's too).
+swift_test(
+    name = "visor_ssh_linux_tests",
+    copts = STRICT_SWIFT,
+    srcs = glob(["*.swift"]),
+    module_name = "VisorSSHTests",
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = ["//:foundation"] + _DEPS,
 )
