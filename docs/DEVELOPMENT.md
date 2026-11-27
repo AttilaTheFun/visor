@@ -585,11 +585,12 @@ a detached relauncher and resumes named sessions with a nudge
 ("[Visor] The Visor server restarted while you were working…"). The
 relauncher (`AppRelauncher`, its script AppRelaunchWatch's) keeps the
 running bundle aside (`Previous/` in the data directory) and watches the
-new one for two minutes: if it quits, crashes or never answers (on its
-port from its own process, or at its socket file while it has no password
-to listen with), the previous build is put back and started, and
+new one for two minutes: if it quits on its own, crashes or never answers
+(on its port from its own process, or at its socket file while it has no
+password to listen with), the previous build is put back and started, and
 `relaunch-rollback.txt` says why, which the server shows in its menu
-(`updateNotice`) once. Once the new build has stayed up, the one it
+(`updateNotice`) once; Quit Visor meanwhile leaves the new build installed
+and stopped. Once the new build has stayed up, or was quit, the one it
 replaced is removed (no backups left behind).
 
 **The server in the app** (0.72.1; Logan, 25 Nov 2026: "The background
@@ -760,8 +761,15 @@ longer a place it runs, and the `ServerAsAgent` default isn't read.
   `launchctl print`'s "last exit code": that's the job's, not the
   process's (the fallback's opened copy is no job's, and `app-agent
   start` registers the job afresh), and launchctl's manual says its output
-  is no API. An update's new build that goes within its watch is undone,
-  quit or not: it's unproven. The watcher's lines ("starting", "stayed
+  is no API. An update's new build that was quit within its watch is left
+  the same way, installed and stopped, and not rolled back ("installed, not
+  rolled back: a Quit is no failure"; the build it replaced is removed, as
+  once one stays up): through 0.73.1 a Quit there was undone like a crash,
+  the build unproven, and NCH's lease test of 0.73.1 had a Quit within two
+  minutes of an update rolled back, registered afresh and started again.
+  Only the marker naming the process followed is a Quit: a build that
+  quits on its own at launch (an exit of 0, no marker), a crash, or a
+  start that fails is rolled back as ever. The watcher's lines ("starting", "stayed
   up", "rolled back", "was quit", launchctl's word) go to
   `visor-relaunch.log` in Visor's logs (AppLifecycle), not to
   `Visor-server.log`: look there for how an update or a restart ended.
@@ -1409,7 +1417,9 @@ container agents.
     (`test`: their bundles built and run on an `xcode-27` Mac), tries the
     command-line server on Linux (tools/ci/linux_tests.sh), builds blue
     Visor's web client (tools/ci/container_blue_web.sh `--build-only`) and
-    makes the proof below, and keeps the `proof` artifact; `prerelease`
+    makes the proof below, and keeps the `proof` artifact (for a day: every
+    upload of ci.yml keeps its artifact one day, the repository's own
+    default too, as Actions storage is shared and fills); `prerelease`
     builds and signs the commit's Alphas and proposes a draft pre-release;
     `release` verifies first, with the pins (tools/released_pins.sh), then
     does as `prerelease` and proposes a draft release naming its run. A

@@ -69,7 +69,7 @@ struct ServerSettingsPane: View {
             adminTokenSection(controls)
             pathsSection(controls)
             agentsSection(controls)
-            ContainerSettingsSection(settings: controls.settings, client: local.client, send: send)
+            ContainerSettingsSection(settings: controls.settings, limits: controls.containerLimits, client: local.client, send: send)
             devicesSection(controls)
             pushSection(controls)
             whereItRunsSection

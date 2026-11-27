@@ -361,6 +361,33 @@ import VisorProtocol
         #expect(await rig.machines.last?.stopped == true)
     }
 
+    /// New CPUs and memory (`PUT /api/settings`): the running container
+    /// isn't stopped for them and says what it runs with; they're taken at
+    /// its next start, and said while it's stopped.
+    @Test func newCPUsAndMemoryAreTakenAtTheNextStart() async throws {
+        let rig = try await rig()
+        defer { rig.remove() }
+        let engine = rig.engine()
+        _ = await engine.start()
+        rig.change {
+            $0.cpus = 10
+            $0.memoryGiB = 24
+        }
+        await engine.configurationChanged()
+        let running = await engine.status()
+        #expect(running.state == .running && running.cpus == 4 && running.memoryGiB == 8, "not resized")
+        #expect(await rig.machines.boots.count == 1)
+        #expect(await rig.machines.last?.stopped == false, "not restarted")
+        _ = await engine.stop()
+        let stopped = await engine.status()
+        #expect(stopped.cpus == 10 && stopped.memoryGiB == 24, "what it would start with now")
+        let started = await engine.start()
+        #expect(started.state == .running && started.cpus == 10 && started.memoryGiB == 24)
+        let machine = try #require(await rig.machines.last)
+        #expect(machine.spec.cpus == 10 && machine.spec.memoryBytes == 24 << 30)
+        _ = await engine.stop()
+    }
+
     @Test func twoStartsAtOnceBootOnce() async throws {
         let rig = try await rig()
         defer { rig.remove() }

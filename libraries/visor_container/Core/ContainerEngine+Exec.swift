@@ -18,7 +18,7 @@ extension ContainerEngine {
         let log = request.log ?? layout.log(process: request.id)
         try FileManager.default.createDirectory(at: log.deletingLastPathComponent(), withIntermediateDirectories: true)
         let spec = ContainerProcessSpec(id: request.id, arguments: request.arguments, environment: request.environment,
-                                        workingDirectory: request.workingDirectory, log: log)
+                                        workingDirectory: request.workingDirectory, log: log, input: request.input)
         let process = try await machine.exec(spec)
         guard executions[request.id] == nil else {
             try? await process.signal(9)
