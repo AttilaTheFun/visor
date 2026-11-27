@@ -1,28 +1,32 @@
 #!/bin/bash
-# CI's build of the apps, on GitHub's own runners alone (Logan, 15 Nov 2026:
-# a public app repository runs on GitHub's runners and cache), each platform
-# where its tools run:
+# CI's build of the apps, each platform where its tools run:
 # - on Linux (GitHub's x86_64 Ubuntu, in Swift's own image with what
 #   tools/ci/job_tools.sh adds): the Linux client and blue Visor's Android
 #   APK (Google's Android SDK and NDK tools are x86_64);
-# - on a Mac (GitHub's `xcode-27`, a standard runner, free for a public
-#   repository, with its own Xcode): the iPhone and iPad app, Visor.app,
-#   Visor Server and Visor Disk Utility, the Mac's test bundles, then the libraries,
-#   the staging server and the command-line server for the Mac. Apple's SDKs
-#   may not be redistributed, so CI never builds the Apple targets on Linux
-#   (.bazelrc's apple_on_linux, for a builder that has the SDK archive). A
-#   proposal's and a release's apps (alpha-apple, release-apple) are built
-#   here with --config=apple_cross_mac: rules_applecross's Swift, not
-#   Xcode's, since 0.62.1 aborted at launch (docs/DEVELOPMENT.md, "Release
-#   builds").
+# - the Apple targets (VISOR_CI_PLATFORM=apple): the iPhone and iPad app,
+#   Visor.app, Visor Server and Visor Disk Utility, the Mac's test bundles,
+#   then the libraries, the staging server and the command-line server for
+#   the Mac. In CI on a Nimbus runner (a Linux container, `visor-ci`: Logan,
+#   26 Nov 2026, GitHub's Mac queue the bottleneck), with rules_applecross
+#   (.bazelrc's apple_on_linux), Xcode 27.2's SDK archive and the ported
+#   tools coming from Nimbus' files (`nimbus job bazel-config`,
+#   .github/actions/nimbus_bazel), never on GitHub's own runners: Apple's
+#   SDKs may not be redistributed. On a Mac, with its own Xcode, as before:
+#   a builder's own, and the default there.
+# A proposal's and a release's apps (alpha-apple, release-apple) are built
+# with rules_applecross's Swift, not Xcode's, since 0.62.1 aborted at launch
+# (docs/DEVELOPMENT.md, "Release builds"): on Linux that is apple_on_linux's
+# own; on a Mac, --config=apple_cross_mac.
 # Bazel's settings (its caches, the downloads, BuildBuddy's remote cache
-# where the job has its key) are tools/ci/ci_bazel.sh's, written before
-# this runs (.github/actions/bazel_cache). Run with
+# where the job has its key; on a Nimbus runner, Nimbus' cache and files)
+# are written before this runs (.github/actions/bazel_cache,
+# tools/ci/ci_bazel.sh; .github/actions/nimbus_bazel). Run with
 # `bazel run //tools/ci:container_build` too.
 #
-#   tools/ci/container_build.sh [<bazel build args>…]
+#   [VISOR_CI_PLATFORM=apple|linux] tools/ci/container_build.sh [<bazel build args>…]
 #
-# With no arguments, the platform's every app (above). With arguments,
+# With no arguments, the platform's every app (above): VISOR_CI_PLATFORM's,
+# else the machine's (a Mac's apple, Linux's linux). With arguments,
 # those, and with VISOR_CI_PACKAGE (a folder in this checkout, emptied
 # first) the targets' files copied there, found by cquery with the build's
 # own options, for CI to sign and publish: an .ipa, a Mac app's .zip, an
@@ -36,6 +40,17 @@ case "$(uname -s)" in
     Darwin) platform=apple ;;
     Linux) platform=linux ;;
     *) echo "$me: builds on Linux or a Mac, not $(uname -s)" >&2; exit 2 ;;
+esac
+# The Apple targets on Linux: rules_applecross's, which only a builder with
+# Apple's SDK archive has (a Nimbus runner: apple_on_linux, from Nimbus'
+# bazelrc). Not on a Mac's own Linux targets: a Mac builds Apple's.
+case "${VISOR_CI_PLATFORM:-}" in
+    "") ;;
+    apple) platform=apple ;;
+    linux)
+        [ "$platform" = linux ] || { echo "$me: VISOR_CI_PLATFORM=linux on a Mac: the Linux apps build on Linux" >&2; exit 2; }
+        ;;
+    *) echo "$me: VISOR_CI_PLATFORM is apple or linux, not $VISOR_CI_PLATFORM" >&2; exit 2 ;;
 esac
 
 full=0
