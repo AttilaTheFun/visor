@@ -28,11 +28,16 @@ struct VisorLaunch {
         case compact
         /// An iPad's or a Mac's window: the list and the chat side by side.
         case regular
+        /// The narrowest the content goes (320 points: an iPad app's
+        /// narrowest in Stage Manager, a Mac window at its least), one
+        /// column at a time as on a phone.
+        case narrowest
 
         var size: (width: Int, height: Int) {
             switch self {
             case .compact: (390, 844)
             case .regular: (1180, 820)
+            case .narrowest: (320, 700)
             }
         }
     }

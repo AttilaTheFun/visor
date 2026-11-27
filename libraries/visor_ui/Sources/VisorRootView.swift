@@ -748,10 +748,12 @@ public struct VisorRootView: View {
                 // width, on the stack's root content, never on the stack too:
                 // two minimums for one column left AppKit's update-constraints
                 // pass taking a new minimum each round until it threw
-                // (Applications, 9 Nov 2026). The least it lays out in beside
-                // Settings; the Mac window's minimum fits the sidebar, this
-                // and Settings (VisorMacApp).
-                .navigationSplitViewColumnWidth(min: 440, ideal: 720)
+                // (Applications, 9 Nov 2026). Its least is 320, the
+                // narrowest an iPad app gets in Stage Manager (Logan, 27 Nov
+                // 2026): the chat, the composer and the rest lay out in it.
+                // A window narrower than the sidebar beside it collapses the
+                // sidebar instead of squeezing this (VisorMacApp).
+                .navigationSplitViewColumnWidth(min: 320, ideal: 720)
                 .navigationDestination(for: SubSessionRoute.self) { route in
                     if let which = selection?.session, let host = store.server(for: which.serverID) { subPage(route, host: host) }
                 }

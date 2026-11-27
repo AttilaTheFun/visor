@@ -104,16 +104,17 @@ extension View {
     /// A short list of choices in a sheet: on the Mac a sheet gives a list
     /// no height of its own, and it draws at none; a floor of a row each
     /// (plus the chrome) shows it. A phone's sheet fills the screen anyway.
+    /// No wider than a window of the content's least (320), opened at 360.
     @ViewBuilder func choiceListInSheet(rows: Int) -> some View {
         #if os(macOS)
-        frame(minWidth: 360, minHeight: CGFloat(rows) * 32 + 24)
+        frame(minWidth: 320, idealWidth: 360, minHeight: CGFloat(rows) * 32 + 24)
         #else
         self
         #endif
     }
 
     /// The chat's column on the Mac: no minimum width of its own, so its
-    /// column's is the split view's (320) and the rows and the composer fit
+    /// column's is the split view's (320, VisorRootView) and the rows and the composer fit
     /// what they get. With the chat's own minimum (its composer's buttons
     /// and command, the rows' fixed pieces), opening the inspector on a
     /// screen too narrow for the three columns set the split view raising
@@ -168,10 +169,12 @@ extension View {
 
 extension View {
     /// A sheet's heights on a phone (and on the portable SwiftUI, whose
-    /// sheets are a phone's); a window's size on the Mac.
+    /// sheets are a phone's); a window's size on the Mac: opened at its
+    /// ideal, and no wider at its least than a window of the content's
+    /// least (320, VisorRootView).
     @ViewBuilder func presentationDetentsLarge() -> some View {
         #if os(macOS)
-        frame(minWidth: 520, minHeight: 560)
+        frame(minWidth: 320, idealWidth: 520, minHeight: 560)
         #else
         presentationDetents([.large])
         #endif
@@ -179,7 +182,7 @@ extension View {
 
     @ViewBuilder func presentationDetentsMediumLarge() -> some View {
         #if os(macOS)
-        frame(minWidth: 440, minHeight: 380)
+        frame(minWidth: 320, idealWidth: 440, minHeight: 380)
         #else
         presentationDetents([.medium, .large])
         #endif

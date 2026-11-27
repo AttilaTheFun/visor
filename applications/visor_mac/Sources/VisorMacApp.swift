@@ -99,11 +99,13 @@ struct VisorMacApp: App {
         Window("Visor", id: Self.mainWindow) {
             VisorRootView()
                 .environment(store)
-                // The sidebar at its ideal (300: AppKit lays the columns out
-                // at their ideal widths), the detail's least (440) and
-                // Settings' inspector at its ideal (320), with room: at 980
-                // the detail got 360 and the chat ran under its composer.
-                .frame(minWidth: 1_100, minHeight: 480)
+                // As narrow as the content goes (320, the narrowest an iPad
+                // app gets in Stage Manager: Logan, 27 Nov 2026), not as wide
+                // as the sidebar, the detail and the pane together: narrower
+                // than those, AppKit collapses the sidebar (and the pane)
+                // rather than squeeze the detail below its least
+                // (VisorRootView). It opens at its default size, below.
+                .frame(minWidth: 320, minHeight: 480)
                 // visor://connect?code=… — a connection code from a QR code
                 // or a link adds that computer; visor://sign-in shows a
                 // computer's settings.
