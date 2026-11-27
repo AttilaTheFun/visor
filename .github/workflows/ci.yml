@@ -1,9 +1,15 @@
 name: CI
 # Visor's CI, as Reviews' policy for Logan's protected repositories has it
 # (AttilaTheFun/reviews, docs/CI_POLICY.md; Logan, 7 Nov 2026), on GitHub's
-# own standard runners and cache alone, as every public app repository's
-# (Logan, 15 Nov 2026): nothing of Shireworks' at run time, no runner of
-# its, no lease, no cache, no files, no signing service.
+# own standard runners and cache (Logan, 15 Nov 2026), but for the Apple
+# builds: those run on Nimbus' self-hosted runners (Logan, 26 Nov 2026:
+# GitHub's Mac queue held every Apple job for hours), single-use Linux
+# containers (`[self-hosted, visor-ci]`, Nimbus' ci-github controller) that
+# never take a pull request's job, get no secret and no token that writes,
+# and reach only the hosts Nimbus lists for Visor (its `ci.egress`): the
+# proof's builds, the Mac's test bundles, populate-apple and
+# container-apple. A proposal's and a release's Apple apps stay on
+# `xcode-27` Macs (Logan, 27 Nov 2026: Xcode's own rendering of the icon).
 #
 # Automated CI only builds (Logan, 7 Nov 2026), but for the client's
 # screens: walked headless through Isomer's driver (FEATURE_MAP.md,
@@ -12,18 +18,26 @@ name: CI
 #
 # Each platform builds where its tools run (tools/ci/container_build.sh):
 # Linux and Android on x86_64 `ubuntu-24.04` in Swift's image
-# (tools/ci/job_tools.sh), the Apple targets on `xcode-27` Macs: a
-# proposal's and a release's Apple apps with rules_applecross's Swift
-# toolchain there (swift.org's Swift 6.4.2, the Mac's Xcode 27.2 for the
-# SDKs and bundling: .bazelrc's apple_cross_mac), never Xcode's own Swift,
-# whose build of 0.62.1 aborted at launch on macOS 27.0
-# (docs/DEVELOPMENT.md, "Release builds"); each is opened for real on an
-# `xcode-27` Mac, signed, before it is proposed or attached
-# (tools/ci/launch_check). Bazel's
-# caches: GitHub's (.github/actions/bazel_cache), written by main's builds
-# alone, and BuildBuddy's, its key (BUILDBUDDY_API_KEY) handed only to
-# main's builds and the alpha and release jobs (tools/ci/ci_bazel.sh).
-# docs/DEVELOPMENT.md, "CI", has the whole.
+# (tools/ci/job_tools.sh); the Apple targets' builds for the proof, the
+# tests and the cache on a Nimbus runner with rules_applecross (.bazelrc's
+# apple_on_linux: swift.org's Swift 6.4.2, its clean-room tools and Xcode
+# 27.2's SDKs, from Nimbus' files and never on GitHub's runners, as Apple's
+# SDKs may not be redistributed; .github/actions/nimbus_bazel); a
+# proposal's and a release's Apple apps on `xcode-27` Macs with
+# rules_applecross's Swift there (swift.org's Swift 6.4.2, the Mac's Xcode
+# 27.2 for the SDKs and bundling: .bazelrc's apple_cross_mac), never
+# Xcode's own Swift, whose build of 0.62.1 aborted at launch on macOS 27.0
+# (docs/DEVELOPMENT.md, "Release builds"). What needs macOS itself stays
+# on `xcode-27` too until Nimbus' macOS VMs have the containers' egress
+# rule: the Mac's tests run (their bundles built on Nimbus), the proofs of
+# the iPhone and the Mac, and each signed Mac app opened for real before
+# it is proposed or attached (tools/ci/launch_check). Bazel's caches: on GitHub's runners,
+# GitHub's (.github/actions/bazel_cache), written by main's builds alone,
+# and BuildBuddy's, its key (BUILDBUDDY_API_KEY) handed only to main's
+# builds and the alpha and release jobs (tools/ci/ci_bazel.sh); on Nimbus'
+# runners, Nimbus' own, read by every job and written by populate-apple
+# alone, at a push to main (`nimbus job cache-write`: its OIDC token
+# checked). docs/DEVELOPMENT.md, "CI", has the whole.
 #
 # - A pull request runs `container`, the required check (Linux: the rules,
 #   the Linux client and blue Visor's Android APK built, the client's
@@ -38,11 +52,11 @@ name: CI
 #   (`run=container-apple`), and verify builds and tests them all.
 # - Each commit on main runs `populate`: the merged tree built as the
 #   pull request's Linux jobs build it, and its screens walked headless
-#   (nothing published), into GitHub's cache and BuildBuddy's.
-#   `populate-apple`, the same for the Apple apps, runs nightly (06:00Z,
-#   on main) and by hand (`run=populate`), not at each push: GitHub gives
-#   a public repository's account 5 macOS runners in all, and a populate
-#   on every merge held one while a prerelease waited (25 Nov 2026).
+#   (nothing published), into GitHub's cache and BuildBuddy's; and
+#   `populate-apple`, the same for the Apple apps on a Nimbus runner, into
+#   Nimbus' cache (which grants the write only at a push to main), one at a
+#   time with the newest waiting. A failure is flagged in an issue
+#   (populate-apple-failed).
 # - By hand (workflow_dispatch on main, `run`): `verify` (the tests and
 #   the proof, its last job `verify` keeping the `proof` artifact),
 #   `prerelease` (Alphas built, signed in alpha with the environment
@@ -57,30 +71,29 @@ name: CI
 #   them. Android never holds Apple's back.
 #
 # The signing keys (the environment `release`: main and v* tags) reach the
-# Sign steps of alpha and release alone; no other job names the
-# environment. The screenshot proof never runs on a push or a pull request:
-# only in a run by hand (verify, release).
+# Sign steps of alpha and release alone, on GitHub's own Ubuntu; no other
+# job names the environment, and no job on a Nimbus runner has a secret. The
+# screenshot proof never runs on a push or a pull request: only in a run by
+# hand (verify, release).
 on:
   pull_request:
   push:
     branches: [main]
-  # populate-apple, nightly on main.
-  schedule:
-    - cron: "0 6 * * *"
   workflow_dispatch:
     inputs:
       run:
-        description: "verify: the tests and the proof. prerelease: Alphas and a draft pre-release. release: verify, then Alphas and a draft release. agent-image: Visor's toolchain image, built and pushed. populate: the Apple apps built into the caches (populate-apple), as the nightly run does. container-apple: the Apple apps built on this branch, as a pull request's check once did."
+        description: "verify: the tests and the proof. prerelease: Alphas and a draft pre-release. release: verify, then Alphas and a draft release. agent-image: Visor's toolchain image, built and pushed. container-apple: the Apple apps built on this branch, as a pull request's check once did."
         type: choice
-        options: [verify, prerelease, release, agent-image, populate, container-apple]
+        options: [verify, prerelease, release, agent-image, container-apple]
         default: verify
   # Logan's Release in Reviews publishes the draft, which makes its v* tag.
   release:
     types: [published]
 concurrency:
   # A pull request's newer push cancels its older run. Every other run (main's
-  # populate, the nightly one, a run by hand, a release) is a group of its own and never
-  # cancelled, so a publish is never cut off halfway.
+  # populate, a run by hand, a release) is a group of its own and never
+  # cancelled, so a publish is never cut off halfway (populate-apple's job
+  # waits in a group of its own: below).
   group: >-
     ${{ github.event_name == 'pull_request'
         && format('ci-pr-{0}', github.head_ref)
@@ -174,20 +187,22 @@ jobs:
           swift build --target VisorClientGRPCServer
           swift build --target VisorClientGRPCClient
 
-  # The Apple targets, on an xcode-27 Mac with its own Xcode: by hand on a
-  # branch (`run=container-apple`), never at a pull request (above).
+  # The Apple targets, on a Nimbus runner (rules_applecross on Linux, Nimbus'
+  # cache read): by hand on a branch (`run=container-apple`), never at a
+  # pull request (above), so a fork's code never reaches a self-hosted
+  # runner.
   container-apple:
     if: github.event_name == 'workflow_dispatch' && inputs.run == 'container-apple'
-    runs-on: xcode-27
+    runs-on: [self-hosted, visor-ci]
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v5
-      - uses: ./.github/actions/bazel_cache
-        with:
-          group: apple
+      - uses: ./.github/actions/nimbus_bazel
       # The iPhone and iPad app, Visor.app, the Mac client and Visor Server,
       # the Mac's test bundles, then the libraries and servers for the Mac.
       - name: The Apple apps
+        env:
+          VISOR_CI_PLATFORM: apple
         run: tools/ci/container_build.sh
 
   # ---- main ----------------------------------------------------------------
@@ -225,44 +240,51 @@ jobs:
           gigabytes: 5
           repository-hit: ${{ steps.cache.outputs.repository-hit }}
 
-  # The Apple apps' share, nightly and by hand on main rather than at each
-  # push: a Mac is the scarce runner (above).
+  # The Apple apps' share, on a Nimbus runner, into Nimbus' cache: each push
+  # to main (the one event Nimbus grants the write for, by the job's OIDC
+  # token and its name, `ci.populate`), one at a time, the newest push's
+  # waiting and the older waiting ones dropped. The verify builds and a
+  # branch's container-apple read it. Its token reads alone: the issue of a
+  # failure is populate-apple-failed's, on GitHub's Ubuntu.
   populate-apple:
-    if: >-
-      github.ref == 'refs/heads/main' &&
-      (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.run == 'populate'))
-    runs-on: xcode-27
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, visor-ci]
+    concurrency:
+      group: populate-apple
+      cancel-in-progress: false
     permissions:
       contents: read
-      # The nightly failure's issue (its last step).
-      issues: write
+      # The OIDC token Nimbus' cache write is granted by.
+      id-token: write
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v5
-      - id: cache
-        uses: ./.github/actions/bazel_cache
+      - uses: ./.github/actions/nimbus_bazel
         with:
-          group: apple
-          buildbuddy-api-key: ${{ secrets.BUILDBUDDY_API_KEY }}
+          cache-write: true
       - name: The Apple apps
+        env:
+          VISOR_CI_PLATFORM: apple
         run: tools/ci/container_build.sh
-      - uses: ./.github/actions/bazel_cache_save
-        if: ${{ !cancelled() }}
-        with:
-          group: apple
-          gigabytes: 3
-          repository-hit: ${{ steps.cache.outputs.repository-hit }}
-      # A broken main, seen at night (no pull request builds the Apple
-      # apps): an issue opened, or the open one commented on, with the
-      # run's link. This job's token alone may write issues.
+
+  # A broken main (no pull request builds the Apple apps): an issue opened,
+  # or the open one commented on, with the run's link. This job's token
+  # alone may write issues, on GitHub's own runner.
+  populate-apple-failed:
+    needs: populate-apple
+    if: ${{ failure() && needs.populate-apple.result == 'failure' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
       - name: A broken main, flagged
-        if: failure() && github.event_name == 'schedule'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          title="Nightly Apple build failed on main"
+          title="Apple build failed on main"
           body="populate-apple failed on main at $GITHUB_SHA: $RUN"
           number="$(gh issue list --state open --search "$title in:title" --json number,title --jq ".[] | select(.title == \"$title\") | .number" | head -n 1)"
           if [ -n "$number" ]; then
@@ -274,20 +296,38 @@ jobs:
   # ---- By hand: verify -----------------------------------------------------
 
   # The tests that need a Mac (the server's Apple side, the client, its
-  # views, SSH): their .xctest bundles built (tools/ci/build_mac_tests.sh)
-  # and run (tools/ci/mac_tests_run.sh: `xcrun xctest`, Xcode 27.2) on an
-  # xcode-27 Mac.
-  test:
+  # views, SSH): their .xctest bundles built on a Nimbus runner
+  # (tools/ci/build_mac_tests.sh, rules_applecross) and handed to `test`
+  # as `mac-tests`.
+  test-bundles:
     if: github.event_name == 'workflow_dispatch' && (inputs.run == 'verify' || inputs.run == 'release')
-    runs-on: xcode-27
-    timeout-minutes: 120
+    runs-on: [self-hosted, visor-ci]
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v5
-      - uses: ./.github/actions/bazel_cache
-        with:
-          group: apple
+      - uses: ./.github/actions/nimbus_bazel
       - name: The test bundles
         run: tools/ci/build_mac_tests.sh "$RUNNER_TEMP/mac-tests.tar.gz"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac-tests
+          path: ${{ runner.temp }}/mac-tests.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+
+  # The bundles run (tools/ci/mac_tests_run.sh: `xcrun xctest`, Xcode 27.2)
+  # on an xcode-27 Mac, with no Bazel there: it holds a Mac for the tests
+  # alone.
+  test:
+    needs: test-bundles
+    runs-on: xcode-27
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: mac-tests
+          path: ${{ runner.temp }}
       - name: The tests
         run: tools/ci/mac_tests_run.sh "$RUNNER_TEMP/mac-tests.tar.gz" --logs "$RUNNER_TEMP/test-logs"
       - uses: actions/upload-artifact@v4
@@ -299,16 +339,14 @@ jobs:
 
   # The proof's apps: the iPhone app for Apple silicon's simulator, and
   # Visor.app (signed ad hoc), with Isomer's driver in them (--config=drive:
-  # the proof's builds alone, never a release's), on an xcode-27 Mac.
+  # the proof's builds alone, never a release's), on a Nimbus runner.
   build-apple:
     if: github.event_name == 'workflow_dispatch' && (inputs.run == 'verify' || inputs.run == 'release')
-    runs-on: xcode-27
+    runs-on: [self-hosted, visor-ci]
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5
-      - uses: ./.github/actions/bazel_cache
-        with:
-          group: apple
+      - uses: ./.github/actions/nimbus_bazel
       - run: |
           VISOR_CI_PACKAGE=.ci/proof-apps tools/ci/container_build.sh \
             --config=drive --macos_cpus=arm64 --ios_multi_cpus=sim_arm64 \
@@ -367,8 +405,9 @@ jobs:
   # The iPhone app's fixture screens, in one orientation, on an iPhone 17
   # simulator (tools/ci/proof_ios.sh).
   #
-  # It starts with the run, not after build-apple: the simulator boots (five
-  # minutes of the job) and the driver's test builds while the apps build,
+  # It starts with the run, not after build-apple (a Nimbus runner's): the
+  # simulator boots (five minutes of the job) and the driver's test builds
+  # while the apps build,
   # and the script waits for their artifact once it is up
   # (tools/ci/await_artifact.sh).
   proof-ios:
@@ -417,7 +456,8 @@ jobs:
           path: ~/.cache/visor-proof-bazel
           key: proof-ios-${{ matrix.orientation }}-${{ hashFiles('MODULE.bazel.lock') }}-${{ github.sha }}
 
-  # Visor.app's fixture screens (tools/ci/proof_mac.sh).
+  # Visor.app's fixture screens (tools/ci/proof_mac.sh), on an xcode-27 Mac,
+  # from build-apple's Visor.app.
   proof-mac:
     needs: build-apple
     runs-on: xcode-27
@@ -540,7 +580,7 @@ jobs:
   # verified, which a release's alpha and the release job ask for
   # (tools/ci/verified_run.sh, by this job's name).
   verify:
-    needs: [test, linux, blue-web, build-apple, build-android, proof-ios, proof-mac, proof-android]
+    needs: [test-bundles, test, linux, blue-web, build-apple, build-android, proof-ios, proof-mac, proof-android]
     if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && (inputs.run == 'verify' || inputs.run == 'release') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
