@@ -394,7 +394,12 @@ again at the next asking. The server, with agent-proxy inside it, asks the
 GitHub interceptor for it (`gitIdentity`, through `AgentProxyHost.Running`)
 as each container agent starts, and sets `GIT_AUTHOR_NAME`,
 `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_NAME` and `GIT_COMMITTER_EMAIL` from it.
-Without the App, or when it couldn't be found, none is set.
+Without the App, or when it couldn't be found, none is set. On the Mac,
+agent-proxy is folded in just after the server's start, and the Sessions
+container's agents are carried on at it: the server is told before it
+starts that agent-proxy is to come (`containerGitIdentityExpected`), and an
+agent started before it's folded in waits for it, its fold-in and its
+answer within the same ten seconds; past them, it starts without one.
 
 The secrets are read again at most once a minute, like the others, so
 setting or changing them needs no restart. With other secrets, the

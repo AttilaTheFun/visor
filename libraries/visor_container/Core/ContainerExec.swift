@@ -14,12 +14,18 @@ public struct ContainerExec: Equatable, Sendable {
     /// Where its standard output and error go (appended); nil:
     /// `sessions/logs/<id>.log` on the Visor volume (Containers/).
     public var log: URL?
+    /// What it reads on its standard input, then the input's end (an
+    /// agent's token, which agent-wrapper takes on AGENT_TOKEN_FD=0); nil:
+    /// none. Never logged.
+    public var input: Data?
 
-    public init(id: String, arguments: [String], environment: [String: String] = [:], workingDirectory: String? = nil, log: URL? = nil) {
+    public init(id: String, arguments: [String], environment: [String: String] = [:], workingDirectory: String? = nil, log: URL? = nil,
+                input: Data? = nil) {
         self.id = id
         self.arguments = arguments
         self.environment = environment
         self.workingDirectory = workingDirectory
         self.log = log
+        self.input = input
     }
 }

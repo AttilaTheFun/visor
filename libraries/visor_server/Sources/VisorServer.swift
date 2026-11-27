@@ -102,6 +102,12 @@ public final class VisorServer {
     /// The bytes free on the disk a URL is on, which a move here must fit
     /// (VisorServer+MigrationSize.swift): the system's word, or a test's.
     var freeBytes: (URL) -> Int? = { VisorServer.systemFreeBytes($0) }
+    /// This computer's cores and memory, which the Sessions container's
+    /// CPUs and memory must fit (VisorServer+ContainerResources): the
+    /// system's word, or a test's.
+    var hostResources: () -> (cores: Int, memoryBytes: UInt64) = {
+        (ProcessInfo.processInfo.activeProcessorCount, ProcessInfo.processInfo.physicalMemory)
+    }
     /// The agent shims' connections waiting for an approval's answer: by
     /// session, then by request id. The server's, not the session's: a
     /// connection is a client of this server.
@@ -387,7 +393,23 @@ public final class VisorServer {
     /// Who the Sessions container's agents commit as, asked of the
     /// agent-proxy in this process (VisorServer+ContainerGitIdentity): the
     /// GitHub App's bot. None, or nil from it: no git identity is given.
-    @ObservationIgnored public var containerGitIdentity: (@Sendable () async -> ContainerGitIdentity?)?
+    /// Set once agent-proxy is folded in, after the server's start: an
+    /// agent started before then waits for it, with
+    /// `containerGitIdentityExpected`.
+    @ObservationIgnored public var containerGitIdentity: (@Sendable () async -> ContainerGitIdentity?)? {
+        didSet { if let containerGitIdentity { containerGitIdentityGiven(containerGitIdentity) } }
+    }
+    /// Whether `containerGitIdentity` is to come: said before the server
+    /// starts where agent-proxy is folded into it (MacServer.run), so the
+    /// agents carried on at its start wait for it, within
+    /// `containerGitIdentityWait`.
+    @ObservationIgnored public var containerGitIdentityExpected = false
+    /// How long an agent's start waits for its git identity: agent-proxy's
+    /// fold-in and its answer together. A test's is shorter.
+    @ObservationIgnored package var containerGitIdentityWait: Duration = .seconds(10)
+    /// The agents' starts waiting for `containerGitIdentity` to be set, by
+    /// a key of each's own (VisorServer+ContainerGitIdentity).
+    @ObservationIgnored var containerGitIdentityWaiters: [UUID: ContainerGitIdentityWaiter] = [:]
     /// The agents Visor starts itself in its Sessions container, for the
     /// sessions placed there (VisorServer+ContainerRunner): the driver
     /// asks it of their tokens.

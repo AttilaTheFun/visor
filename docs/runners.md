@@ -210,9 +210,11 @@ agent_protocol#9, #10 and #12.
   signing keys verify them. It is minted when the job is queued (a new
   session's, a moved session's, each later agent of a moved session:
   `resumeDriven` queues a new agent) and again when a runner claims it. A
-  runner hands it to the wrapper in `AGENT_TOKEN` alone, and the wrapper
-  shows it on every call it makes for the agent as `authorization: Bearer
-  <token>`. The driver refuses, with UNAUTHENTICATED, a `Connect` or
+  runner hands it to the wrapper outside its environment (on a
+  descriptor, `AGENT_TOKEN_FD`: the Sessions container's standard input;
+  the native runner's `AGENT_TOKEN` until it does the same:
+  agent_protocol#17), and the wrapper shows it on every call it makes for
+  the agent as `authorization: Bearer <token>`. The driver refuses, with UNAUTHENTICATED, a `Connect` or
   `Conversation` whose token isn't the agent's (none, a wrong one,
   another server's, a session's, or another agent's: the hello's agent
   must be the token's `agent`), whose session is archived, or whose agent's
