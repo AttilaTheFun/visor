@@ -19,7 +19,7 @@ let package = Package(
         .package(url: "https://github.com/AttilaTheFun/isomer.git", revision: "v0.58.1"),
         .package(
             url: "https://github.com/AttilaTheFun/agent_ui.git",
-            exact: "0.51.0"
+            exact: "0.52.0"
         ),
         // agent_protocol: its services' Swift (VisorDriver, the native
         // runner) and agent-wrapper (the Mac app's Helpers), by release:
