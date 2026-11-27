@@ -36,4 +36,12 @@ fi
 tree="${RUNNER_TEMP:-$(mktemp -d)}/visor-tree.tar"
 git -C "$ROOT" archive --format=tar -o "$tree" HEAD
 rm -rf /tmp/visor
+# SwiftPM's clones of github.com with the job's token too, when
+# tools/ci/git_auth.sh (job_tools.sh's) wrote its config: GitHub limits
+# anonymous git by address. /tmp/visor is no git repository, so no
+# checkout's header goes beside it.
+if [ -n "${RUNNER_TEMP:-}" ] && [ -f "$RUNNER_TEMP/visor-git/config" ]; then
+    export GIT_CONFIG_GLOBAL="$RUNNER_TEMP/visor-git/config"
+    echo "linux_tests: SwiftPM's git fetches of github.com with the job's token"
+fi
 exec sh -c "$steps" < "$tree"

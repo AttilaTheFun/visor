@@ -114,12 +114,12 @@ extension VisorServer {
                 files.append(MigrationFile(id: id, place: file.place, size: Self.wholeLines(of: file.url), packed: false))
             }
         }
-        // A Claude conversation's project memory with it (VisorServer+
-        // MigrationMemory).
+        // A Claude conversation's project memory with it, where Claude Code
+        // keeps it (VisorServer+MigrationMemory).
         if record.info.agent == .claude, let conversation = urls["conversation-0"],
-           let memory = await Self.packMemory(beside: conversation, into: folder) {
+           let memory = await Self.packMemory(of: conversation, cwd: record.info.cwd, into: folder) {
             urls[memory.file.id] = memory.url
-            sources[memory.file.id] = conversation.deletingLastPathComponent().appendingPathComponent("memory", isDirectory: true)
+            sources[memory.file.id] = memory.source
             files.append(memory.file)
         }
         guard files.contains(where: { !$0.packed }) else {

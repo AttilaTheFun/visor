@@ -29,6 +29,11 @@ runs:
       if: inputs.cache-write == 'true'
       shell: bash
       run: /opt/nimbus/bin/nimbus job cache-write
+    # github.com's git fetches with the job's read-only token, where the job
+    # asks (VISOR_GIT_AUTH; tools/ci/git_auth.sh): on the runner alone.
+    - name: Git's github.com fetches
+      shell: bash
+      run: tools/ci/git_auth.sh
     - name: Bazel's settings
       shell: bash
       run: |

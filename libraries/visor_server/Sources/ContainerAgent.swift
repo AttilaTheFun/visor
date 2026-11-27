@@ -1,8 +1,8 @@
 // A session's agent for the Sessions container to run (docs/containers.md,
 // "Placing sessions"), as the container runner asks for it: who the agent
 // is, the session it carries on, its job (title, harness, model, effort,
-// folder, the conversation it resumes, the repositories it clones), its
-// token, and what else its harness's environment needs. The binary that has
+// folder, the conversation it resumes: never a repository to clone, which
+// its agent does itself), its token, and what else its harness's environment needs. The binary that has
 // the engine turns it into agent-wrapper's exec (a Mac's
 // MacSessionsContainer: ContainerEngine.startWrapper); nothing here knows
 // agent_protocol's or the engine's types.
@@ -24,10 +24,6 @@ public struct ContainerAgent: Equatable, Sendable {
     public var resumeSessionID: String
     /// Whether it acts without asking (Job.skip_permissions).
     public var skipPermissions: Bool
-    /// The repositories it clones, under `sourcesDirectory`, before it
-    /// resumes.
-    public var sources: [Source]
-    public var sourcesDirectory: String?
     /// The agent's token (a JWT for `visor.runner-agent`): the wrapper's
     /// standard input alone (AGENT_TOKEN_FD=0).
     public var token: String
@@ -35,8 +31,8 @@ public struct ContainerAgent: Equatable, Sendable {
     public var environment: [String: String]
 
     public init(agent: String, session: String, title: String, harness: String? = nil, model: String? = nil, effort: String? = nil,
-                workingDirectory: String, resumeSessionID: String, skipPermissions: Bool, sources: [Source] = [],
-                sourcesDirectory: String? = nil, token: String, environment: [String: String] = [:]) {
+                workingDirectory: String, resumeSessionID: String, skipPermissions: Bool, token: String,
+                environment: [String: String] = [:]) {
         self.agent = agent
         self.session = session
         self.title = title
@@ -46,25 +42,7 @@ public struct ContainerAgent: Equatable, Sendable {
         self.workingDirectory = workingDirectory
         self.resumeSessionID = resumeSessionID
         self.skipPermissions = skipPermissions
-        self.sources = sources
-        self.sourcesDirectory = sourcesDirectory
         self.token = token
         self.environment = environment
-    }
-}
-
-extension ContainerAgent {
-    /// A repository it works in: its clone URL, its branch, and its
-    /// folder's name.
-    public struct Source: Equatable, Sendable {
-        public var repository: String
-        public var ref: String
-        public var name: String
-
-        public init(repository: String, ref: String, name: String) {
-            self.repository = repository
-            self.ref = ref
-            self.name = name
-        }
     }
 }

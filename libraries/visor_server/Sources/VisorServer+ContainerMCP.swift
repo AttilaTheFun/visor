@@ -5,7 +5,7 @@
 // agent at `http://mcp.agent.internal/mcp/nimbus`, the relay's dial-in to the
 // pass-through, and each call shows the agent's own token, never the
 // sessions' token (`mcp/token`), which never goes into the container. Its
-// harness asks its wrapper's stream for that token (DrivenMCP: an hour's,
+// harness asks its wrapper's stream for that token (DrivenMCP: a week's,
 // for MCP alone, as the container runner mints it), and agent-proxy, in this
 // same process, asks here whose it is.
 

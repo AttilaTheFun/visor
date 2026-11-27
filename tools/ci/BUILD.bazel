@@ -13,3 +13,30 @@ sh_binary(
     name = "container_blue_web",
     srcs = ["container_blue_web.sh"],
 )
+
+# CI's signing of the Apple apps (tools/ci/sign_builds.sh, on GitHub's
+# Ubuntu): build_tools' `sign` (third_party/swift_packages, pinned), and
+# what `sign apple` runs (MODULE.bazel's signing tools, Linux's alone):
+# rcodesign, and rules_applecross's dmg for Visor.app's disk image. Built
+# by sign_builds.sh once the keys are out of its environment, then run
+# directly: never `bazel run` with a key set (build_tools' README).
+alias(
+    name = "sign",
+    actual = "@swiftpkg_build_tools//:sign",
+)
+
+alias(
+    name = "rcodesign",
+    actual = select({
+        "@platforms//cpu:aarch64": "@rcodesign_linux_aarch64//:rcodesign",
+        "@platforms//cpu:x86_64": "@rcodesign_linux_x86_64//:rcodesign",
+    }),
+)
+
+alias(
+    name = "dmg",
+    actual = select({
+        "@platforms//cpu:aarch64": "@dmg_linux_aarch64//:bin/dmg",
+        "@platforms//cpu:x86_64": "@dmg_linux_x86_64//:bin/dmg",
+    }),
+)

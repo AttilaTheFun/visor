@@ -14,12 +14,13 @@ final class NativeMCPProxyTests: XCTestCase {
     private func proxy(_ endpoints: [NativeMCPProxy.Endpoint], maxConnections: Int = NativeMCPProxy.defaultMaxConnections,
                        maxVouches: Int = NativeMCPProxy.defaultMaxVouches,
                        agentSession: (@Sendable (String) async -> String?)? = nil,
-                       agentTokenCheck: (@Sendable (String) -> Bool)? = nil) throws -> NativeMCPProxy {
+                       agentTokenCheck: (@Sendable (String) -> Bool)? = nil,
+                       log: (@Sendable (String) -> Void)? = nil) throws -> NativeMCPProxy {
         for _ in 0..<20 {
             if let proxy = NativeMCPProxy(port: UInt16.random(in: 20000...45000), endpoints: { endpoints }, admits: { $0 == "one-token" },
                                           secret: { name, header in header == "API_KEY" ? "\(name)-secret" : nil },
                                           agentSession: agentSession, agentTokenCheck: agentTokenCheck, maxConnections: maxConnections,
-                                          maxVouches: maxVouches) {
+                                          maxVouches: maxVouches, log: log) {
                 proxy.start()
                 return proxy
             }
@@ -97,7 +98,8 @@ final class NativeMCPProxyTests: XCTestCase {
                               })
         defer { proxy.stop() }
         let answered = try ask(proxy.port, "/mcp/nimbus", token: "agent.own.token", body: #"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#,
-                               extra: ["CLIENT_ID: s-other", "client-id: s-other", "X-Title: the-callers-own", "API_KEY: the-callers-own"])
+                               extra: ["CLIENT_ID: s-other", "client-id: s-other", "X-Title: the-callers-own", "API_KEY: the-callers-own",
+                                       "Authorization: Bearer agent.own.token"])
         XCTAssertEqual(answered.status, "200")
         let seen = try XCTUnwrap(endpoint.requests.withLock { $0.first })
         XCTAssertTrue(seen.contains("CLIENT_ID: s-container\r\n"), seen)
@@ -106,6 +108,7 @@ final class NativeMCPProxyTests: XCTestCase {
         XCTAssertFalse(seen.contains("the-callers-own"), "nor its word for a session's header, nor its secret: \(seen)")
         XCTAssertTrue(seen.contains("API_KEY: nimbus-secret\r\n") && seen.contains("X-Fleet: mini\r\n"), seen)
         XCTAssertFalse(seen.contains("agent.own.token"), "the agent's token stops at the proxy")
+        XCTAssertFalse(seen.lowercased().contains("authorization"), "its bearer (the same token, for Claude Code) too: \(seen)")
         for token in ["expired.or.forged", "not-a-jwt", ""] {
             XCTAssertEqual(try ask(proxy.port, "/mcp/nimbus", token: token).status, "401", token)
         }
@@ -129,10 +132,10 @@ final class NativeMCPProxyTests: XCTestCase {
     /// the gh CLI through the GitHub gate, oss is retired, Shireworks' is Nimbus's): any other path is 403, its server
     /// never called. A native session's call reaches each, as before.
     func testAContainerAgentReachesNimbusAlone() throws {
-        XCTAssertEqual(NativeMCPProxy.containerServers, ["nimbus"])
+        XCTAssertEqual(NativeMCPProxy.containerServers, ["nimbus", "nimbus-devices"])
         let endpoint = try XCTUnwrap(FakeEndpoint())
         defer { endpoint.stop() }
-        let names = ["gh", "oss", "shireworks", "nimbus"]
+        let names = ["gh", "oss", "shireworks", "nimbus", "nimbus-devices"]
         let proxy = try proxy(names.map { NativeMCPProxy.Endpoint(name: $0, url: "http://127.0.0.1:\(endpoint.port)/mcp") },
                               agentSession: { $0 == "agent.own.token" ? "s-container" : nil })
         defer { proxy.stop() }
@@ -145,10 +148,11 @@ final class NativeMCPProxyTests: XCTestCase {
         XCTAssertEqual(endpoint.requests.withLock { $0.count }, 0, "nothing refused is passed on")
         XCTAssertEqual(try ask(proxy.port, "/mcp/gh", token: "someone.elses.token").status, "401", "a token that's no one's: 401 first")
         XCTAssertEqual(try ask(proxy.port, "/mcp/nimbus", token: "agent.own.token").status, "200")
+        XCTAssertEqual(try ask(proxy.port, "/mcp/nimbus-devices", token: "agent.own.token").status, "200")
         for name in names {
             XCTAssertEqual(try ask(proxy.port, "/mcp/\(name)", token: "one-token").status, "200", "native: \(name)")
         }
-        XCTAssertEqual(endpoint.requests.withLock { $0.count }, 5)
+        XCTAssertEqual(endpoint.requests.withLock { $0.count }, 7)
     }
 
     /// NCH's check of #536: the server's word on a container agent's token is waited for (up to ten seconds) while the
@@ -177,6 +181,72 @@ final class NativeMCPProxyTests: XCTestCase {
         XCTAssertEqual(endpoint.requests.withLock { $0.count }, 0)
         XCTAssertEqual(try ask(proxy.port, "/mcp/nimbus", token: "agent.own.token").status, "200")
         XCTAssertEqual(asked.all, ["agent.own.token"])
+    }
+
+    /// A JWT's shape, its payload `claims` (unsigned: the proxy reads its claims only to say why it refused it).
+    private static func jwt(_ claims: String) -> String {
+        let payload = Data(claims.utf8).base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: "")
+        return "eyJhbGciOiJIUzI1NiJ9.\(payload).c2lnbmF0dXJlLW9mLWl0cw"
+    }
+
+    /// A refused call (401) is said in the log, why, and whose (the agent its token claims), never its token: once for
+    /// each agent and reason, until a call of that agent is taken again. No header, an expired token, one not this
+    /// server's, one of an agent not running now: each said (on the Mini, 0.72.3, Nimbus's 401s said nothing).
+    func testARefusalIsLoggedOnceForEachAgentAndReasonNeverWithItsToken() throws {
+        let endpoint = try XCTUnwrap(FakeEndpoint())
+        defer { endpoint.stop() }
+        let later = Int(Date().timeIntervalSince1970) + 3600
+        let past = Int(Date().timeIntervalSince1970) - 60
+        let live = Self.jwt(#"{"agent":"agent-a","exp":\#(later)}"#)
+        let expired = Self.jwt(#"{"agent":"agent-a","exp":\#(past)}"#)
+        let gone = Self.jwt(#"{"agent":"agent-b","exp":\#(later)}"#)
+        let forged = Self.jwt(#"{"agent":"agent-c","exp":\#(later)}"#)
+        let lines = Lines()
+        let proxy = try proxy([NativeMCPProxy.Endpoint(name: "nimbus", url: "http://127.0.0.1:\(endpoint.port)/mcp")],
+                              agentSession: { $0 == live ? "s-container" : nil },
+                              agentTokenCheck: { !NativeMCPProxy.hasEnded($0) && $0 != forged },
+                              log: { lines.add($0) })
+        defer { proxy.stop() }
+        for _ in 0..<3 {
+            XCTAssertEqual(try ask(proxy.port, "/mcp/nimbus", token: expired).status, "401")
+        }
+        XCTAssertEqual(try ask(proxy.port, "/mcp/nimbus", token: gone).status, "401")
+        XCTAssertEqual(try ask(proxy.port, "/mcp/nimbus", token: forged).status, "401")
+        XCTAssertEqual(try ask(proxy.port, "/register", token: nil).status, "401")
+        XCTAssertEqual(try ask(proxy.port, "/register", token: nil).status, "401")
+        XCTAssertEqual(try ask(proxy.port, "/mcp/nimbus", token: "not-a-jwt").status, "401")
+        XCTAssertEqual(lines.all.count, 5, "once each: \(lines.all)")
+        func said(_ words: String...) -> Int { lines.all.filter { line in words.allSatisfy(line.contains) }.count }
+        XCTAssertEqual(said("/mcp/nimbus", "agent agent-a", "(401)", "expired"), 1, "\(lines.all)")
+        XCTAssertEqual(said("agent agent-b", "names no agent running"), 1, "\(lines.all)")
+        XCTAssertEqual(said("agent agent-c", "isn't one of this server's"), 1, "\(lines.all)")
+        XCTAssertEqual(said("no X-Visor-Proxy header"), 1, "\(lines.all)")
+        XCTAssertEqual(said("neither the sessions'"), 1, "\(lines.all)")
+        // A call of agent-a's taken: its refusal said again when it comes again; the others not.
+        XCTAssertEqual(try ask(proxy.port, "/mcp/nimbus", token: live).status, "200")
+        XCTAssertEqual(try ask(proxy.port, "/mcp/nimbus", token: expired).status, "401")
+        XCTAssertEqual(try ask(proxy.port, "/mcp/nimbus", token: gone).status, "401")
+        XCTAssertEqual(said("agent agent-a", "expired"), 2, "\(lines.all)")
+        XCTAssertEqual(lines.all.count, 6)
+        // Never a token, nor any part of one.
+        for token in [live, expired, gone, forged, "not-a-jwt"] {
+            for part in token.split(separator: ".") {
+                XCTAssertFalse(lines.all.contains { $0.contains(part) }, "\(part) in \(lines.all)")
+            }
+        }
+        XCTAssertEqual(endpoint.requests.withLock { $0.count }, 1, "nothing refused is passed on")
+    }
+
+    /// The caller's word, as the log shows it: lower-case letters, digits and hyphens, 64 at most.
+    func testARefusalShowsOnlyTheClaimedAgentsPlainCharacters() {
+        XCTAssertEqual(NativeMCPProxy.shown("Agent-1\r\nforged: line"), "agent-1forgedline")
+        XCTAssertEqual(NativeMCPProxy.shown(String(repeating: "a", count: 100)).count, 64)
+        XCTAssertEqual(NativeMCPProxy.claimedAgent(Self.jwt(#"{"agent":"9250DAF8-03ff"}"#)), "9250daf8-03ff")
+        XCTAssertEqual(NativeMCPProxy.claimedAgent("not.a.jwt"), "")
+        XCTAssertTrue(NativeMCPProxy.hasEnded(Self.jwt(#"{"exp":1}"#)))
+        XCTAssertFalse(NativeMCPProxy.hasEnded(Self.jwt(#"{"exp":\#(Int(Date().timeIntervalSince1970) + 60)}"#)))
+        XCTAssertFalse(NativeMCPProxy.hasEnded("a.b.c"))
     }
 
     /// At most `maxVouches` calls wait on the server's word at once (eight); another is refused at once (503), and one

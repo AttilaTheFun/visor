@@ -2,8 +2,11 @@
 // wrapper (AgentDriver.Conversation): the files a move to another computer
 // takes (SessionCatalog.conversationFiles: the conversation, and what its
 // subagents kept beside it), a folder's file by file, and the project's
-// memory (`memory/` beside the conversation), each with its place under
-// Claude's folder for the folder the session will work in there.
+// memory (where Claude Code keeps it here: ClaudeSessionFiles.memoryFolder,
+// beside the conversation or under the project of the folder's repository
+// or of the folder, a link to it followed), each with its place under
+// Claude's folder for the folder the session will work in there: the
+// memory under the project Claude Code keeps that folder's memory under.
 
 import ClaudeTranscript
 import Foundation
@@ -21,7 +24,9 @@ enum ConversationFiles {
 
     /// The conversation `resume` of a session that worked in `cwd` here,
     /// placed for a session working in `workingDirectory` on the runner.
-    static func of(resume: String, cwd: String, for workingDirectory: String) -> [File] {
+    /// A memory refused (one leading out of Claude's projects folder) is
+    /// said to `log`.
+    static func of(resume: String, cwd: String, for workingDirectory: String, log: (String) -> Void = { _ in }) -> [File] {
         let project = ClaudeSessionFiles.projectDirectoryName(for: workingDirectory)
         var found: [File] = []
         var conversation: URL?
@@ -34,21 +39,24 @@ enum ConversationFiles {
                 if conversation == nil { conversation = file.url }
             }
         }
-        // The project's memory, beside the conversation.
-        if let conversation {
-            let memory = conversation.deletingLastPathComponent().appendingPathComponent("memory", isDirectory: true)
-            found += files(in: memory).map { File(place: "projects/\(project)/memory/\($0.relative)", url: $0.url) }
+        // The project's memory, where Claude Code keeps it.
+        if let conversation,
+           let memory = ClaudeSessionFiles.memoryFolder(conversation: conversation, cwd: cwd, refused: { log("driver: a memory refused: \($0)") }) {
+            let there = ClaudeSessionFiles.memoryProjectDirectoryName(for: workingDirectory)
+            found += files(in: memory).map { File(place: "projects/\(there)/memory/\($0.relative)", url: $0.url) }
         }
         return found
     }
 
-    /// The files under `folder`, each with its path relative to it.
+    /// The files under `folder`, each with its path relative to it: plain
+    /// files alone, never a link (looked at as it is, not followed), so one
+    /// inside that leads out of it is never read and sent.
     static func files(in folder: URL) -> [(relative: String, url: URL)] {
         let root = folder.standardizedFileURL.path
         guard let walker = FileManager.default.enumerator(at: folder, includingPropertiesForKeys: [.isRegularFileKey]) else { return [] }
         var found: [(String, URL)] = []
         for case let url as URL in walker {
-            guard (try? url.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true else { continue }
+            guard (try? FileManager.default.attributesOfItem(atPath: url.path))?[.type] as? FileAttributeType == .typeRegular else { continue }
             let path = url.standardizedFileURL.path
             guard path.hasPrefix(root + "/") else { continue }
             found.append((String(path.dropFirst(root.count + 1)), url))

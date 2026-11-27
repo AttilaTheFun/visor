@@ -17,6 +17,18 @@ package final class AgentTokens {
     /// How long a runner's agent's token lasts (refreshed over its driver
     /// stream before it ends: DriverMessage.token).
     package var runnerAgentLifetime: TimeInterval = 3600
+    /// How long a Sessions container agent's token for agent-proxy's MCP
+    /// pass-through lasts (ContainerRunner.passThroughToken): a week, as
+    /// long as its agent may run, not an hour. Claude Code asks its
+    /// headersHelper for one as it connects and keeps it for the
+    /// connection, so an hour's ended under a running agent and every
+    /// Nimbus call was refused (Mini, 0.72.3). It is still no one's once
+    /// its agent ends or is let go, or its session isn't live (each call
+    /// asks: passThroughSession), it can do nothing but MCP, and a
+    /// rotation ends it as it does any token (an emergency one at once,
+    /// an ordinary one a day on, SigningKeys.previousKeyLife), after which
+    /// the helper, run again on the 401, gets a fresh one.
+    package var passThroughLifetime: TimeInterval = 7 * 24 * 3600
 
     /// How long past its end a runner's agent's token is still taken, and
     /// only for its runner's Renew and Release (`withinGrace`): a day, as
@@ -52,14 +64,15 @@ package final class AgentTokens {
     /// A new token for `audience`, acting as `session` (and, for a runner's
     /// agent, as `agent`), signed with the current key. `scope`: less than
     /// the audience may do (a container agent's token for the MCP
-    /// pass-through: `.mcp` alone); never more.
+    /// pass-through: `.mcp` alone); never more. `lifetime`: other than the
+    /// audience's (the pass-through's token: `passThroughLifetime`).
     package func mint(_ audience: AgentTokenAudience, session: String, agent: String? = nil, scope: [AgentTokenScope]? = nil,
-                      now: Date = Date()) -> String {
+                      lifetime: TimeInterval? = nil, now: Date = Date()) -> String {
         let issued = Int(now.timeIntervalSince1970)
         let allowed = scope.map { asked in audience.scope.filter { asked.contains($0) } } ?? audience.scope
         let claims = AgentTokenClaims(iss: issuer, aud: audience.rawValue, sub: session,
                                       agent: audience == .runnerAgent ? agent.map(Self.agentKey) : nil,
-                                      scope: allowed.map(\.rawValue), iat: issued, exp: issued + Int(lifetime(of: audience)),
+                                      scope: allowed.map(\.rawValue), iat: issued, exp: issued + Int(lifetime ?? self.lifetime(of: audience)),
                                       jti: UUID().uuidString.lowercased())
         guard let current = keys.current else {
             VisorServer.log("agent tokens: none minted for \(session): \(keys.problem ?? "no signing key")")

@@ -409,6 +409,19 @@ extension ServerTests {
         await bridge.close()
     }
 
+    /// A look the server answers in time is its answer, every time: the
+    /// limit's timer, cancelled once the answer has come, gives nothing.
+    /// (It gave nil, which now and then came first: a list without the
+    /// passed-on tools the server had sent.)
+    @Test func testAnAnswerInTimeIsNeverTakenForNone() async {
+        var dropped = 0
+        for _ in 0..<2000 {
+            let answer = await MCPDeadline.first(within: .seconds(60)) { 1 }
+            if answer == nil { dropped += 1 }
+        }
+        #expect(dropped == 0, "\(dropped) of 2000 answers in time taken for none")
+    }
+
     @Test func testPingAndAnUnknownMethod() async {
         let (bridge, _, said) = self.bridge()
         await bridge.handle(#"{"jsonrpc":"2.0","id":16,"method":"ping"}"#)

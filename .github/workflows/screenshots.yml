@@ -4,34 +4,39 @@ name: Screenshots
 # copied into site/images. Run by hand only (the release Mac's runner starts
 # it for a version's dossier), never on a push or a pull request, so a
 # change to the Mac's screenshot tool is tried by running this on its
-# branch. On one of GitHub's own Macs (`xcode-27`, a desktop session that
-# may picture its screen), everything Mac there, the build too
-# (tools/ci/hosted_screenshots.sh), in place of the macOS VM Shireworks
-# leased for it (Logan, 15 Nov 2026: a public repository's CI on GitHub's
-# runners alone).
+# branch. Everything Mac (the build too: tools/ci/hosted_screenshots.sh) in
+# the desktop session of a macOS VM that a Nimbus runner leases for the
+# step (tools/ci/mac_vm.sh: xcode_27_2), in place of GitHub's paid
+# `xcode-27` runner (Logan, 27 Nov 2026: no paid runner). On a dispatch
+# alone, never a pull request's or a fork's code: Logan takes the VM's open
+# network for it until Nimbus' VMs have the containers' egress rule.
+# Nothing secret goes in; the pictures come out.
 on:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   pictures:
-    runs-on: xcode-27
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: [self-hosted, visor-ci]
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v5
-      - uses: ./.github/actions/bazel_cache
-        with:
-          group: apple
-      - run: tools/ci/hosted_screenshots.sh shots
+      - name: The pictures, in a macOS VM
+        run: >-
+          tools/ci/mac_vm.sh --tree --desktop --minutes 90 --get shots --out .
+          -- tools/ci/hosted_screenshots.sh shots
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: mac-screenshots
           path: shots/mac-*.png
           if-no-files-found: ignore
+          retention-days: 1
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: iphone-screenshots
           path: shots/site-*.png
           if-no-files-found: ignore
+          retention-days: 1

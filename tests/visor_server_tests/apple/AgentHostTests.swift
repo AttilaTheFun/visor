@@ -81,6 +81,34 @@ final class AgentHostTests: AppleServerTestCase {
         XCTAssertEqual(exit.status, 0)
     }
 
+    /// Two hosts write to the one hosts' log, each from where the file
+    /// ended when it started: every line of both is there whole, the
+    /// second host's start not written over by the first one's end (as it
+    /// was on the Mini, 26 Nov 2026).
+    func testTheHostsLogKeepsEveryHostsLines() async throws {
+        let first = try start("while read line; do echo \"got $line\"; done")
+        var heardFirst = lines(of: first).makeAsyncIterator()
+        first.write(["n": 1])
+        _ = await heardFirst.next()
+        let second = try start("while read line; do echo \"got $line\"; done")
+        var heardSecond = lines(of: second).makeAsyncIterator()
+        second.write(["n": 2])
+        _ = await heardSecond.next()
+        await first.end(grace: .seconds(2))
+        await second.end(grace: .seconds(2))
+        let log = folder.appendingPathComponent("hosts.log", isDirectory: false)
+        var text = ""
+        for _ in 0..<40 {
+            text = (try? String(contentsOf: log, encoding: .utf8)) ?? ""
+            if text.components(separatedBy: "agent ended").count == 3 { break }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        let written = text.split(separator: "\n").map(String.init)
+        XCTAssertEqual(written.filter { $0.contains("] started /bin/sh as ") }.count, 2, text)
+        XCTAssertEqual(written.filter { $0.contains("] agent ended: ") }.count, 2, text)
+        for line in written { XCTAssertTrue(line.hasPrefix("20"), "a whole line, from its date: \(line)") }
+    }
+
     func testNothingAnswersWhereNoHostIs() async {
         let gone = await HostedChild.attach(socket: "/tmp/vh-none-\(UUID().uuidString.prefix(6)).sock", from: 0, hosting: hosting)
         XCTAssertNil(gone)
