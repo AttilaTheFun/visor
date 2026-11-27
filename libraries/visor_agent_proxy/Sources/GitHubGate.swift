@@ -11,9 +11,13 @@ import Foundation
 /// (GitHubGate+Owner).
 public struct GitHubGate: Sendable {
     public var rules: GateRules
+    /// Its dispatches on main, counted (`mainDispatch.perHour`): one count
+    /// for every copy of this gate.
+    public let throttle: DispatchThrottle
 
-    public init(rules: GateRules = .standard) {
+    public init(rules: GateRules = .standard, throttle: DispatchThrottle = DispatchThrottle()) {
         self.rules = rules
+        self.throttle = throttle
     }
 
     /// The hosts the interceptor opens.

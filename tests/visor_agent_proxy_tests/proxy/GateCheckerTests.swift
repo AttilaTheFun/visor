@@ -164,6 +164,7 @@ final class GateCheckerTests: XCTestCase {
     private func runs(_ run: String, extra: [String: (Int, String)] = [:]) -> FakeGitHub {
         var answers: [String: (Int, String)] = [
             "/repos/AttilaTheFun/shireworks/actions/runs/77": (200, run),
+            "/repos/AttilaTheFun/shireworks": (200, #"{"default_branch":"main"}"#),
             "/repos/AttilaTheFun/shireworks/pulls?head=AttilaTheFun:feature&state=open&per_page=10": (200, "[{\"head\":{\"sha\":\"\(head)\"}}]"),
             "/repos/AttilaTheFun/shireworks/git/ref/heads/feature": (200, "{\"object\":{\"sha\":\"\(head)\"}}"),
         ]
@@ -240,6 +241,208 @@ final class GateCheckerTests: XCTestCase {
         XCTAssertEqual(GateChecker.branchName("refs/heads/a/b"), "a/b")
         XCTAssertEqual(GateChecker.branchName("heads/x"), "x")
         XCTAssertEqual(GateChecker.branchName("feature"), "feature")
+    }
+
+    // MARK: Release proposals on main (NCH's conditions, 26 Nov 2026)
+
+    private let visor = "AttilaTheFun/visor"
+
+    /// Visor's and Applications' GitHub: main the default, ci.yml (12) and
+    /// release.yml (14) active, an old ci.yml (13) disabled; branch feature.
+    private func proposals() -> FakeGitHub {
+        var answers: [String: (Int, String)] = [:]
+        for repository in ["AttilaTheFun/visor", "AttilaTheFun/applications"] {
+            answers["/repos/\(repository)"] = (200, #"{"default_branch":"main"}"#)
+            answers["/repos/\(repository)/actions/workflows/12"] = (200, #"{"id":12,"name":"CI","path":".github/workflows/ci.yml","state":"active"}"#)
+            answers["/repos/\(repository)/actions/workflows/13"] = (200, #"{"id":13,"name":"Old","path":".github/workflows/ci.yml","state":"disabled_manually"}"#)
+            answers["/repos/\(repository)/actions/workflows/14"] = (200, #"{"id":14,"name":"Release","path":".github/workflows/release.yml","state":"active"}"#)
+            answers["/repos/\(repository)/git/ref/heads/feature"] = (200, "{\"object\":{\"sha\":\"\(head)\"}}")
+        }
+        return FakeGitHub(answers: answers)
+    }
+
+    private func proposing(_ inputs: [String: String], workflow: Int = 12, branch: String = "main", repository: String? = nil,
+                           rules: GateRules = .standard, throttle: DispatchThrottle = DispatchThrottle()) async -> GateChecker.DispatchFinding {
+        await GateChecker(rules: rules, github: proposals(), throttle: throttle)
+            .dispatch(repository ?? visor, workflow, branch: branch, inputs: inputs)
+    }
+
+    /// The standard rules: Visor's ci.yml on main with run one of verify,
+    /// prerelease and release, and nothing else: no other input, no other
+    /// value, none left out, no other workflow or repository.
+    func testOnMainADispatchIsTheListedWorkflowWithItsListedInputs() async {
+        for run in ["verify", "prerelease", "release"] {
+            let found = await proposing(["run": run])
+            XCTAssertEqual(found, GateChecker.DispatchFinding(outcome: .pass(nil), workflowPath: ".github/workflows/ci.yml", onDefaultBranch: true))
+        }
+        let spelled = await proposing(["run": "release"], branch: "refs/heads/main")
+        XCTAssertEqual(spelled.outcome, .pass(nil))
+        // An input outside its list, left out, or another beside it.
+        refused(await proposing(["run": "agent-image"]).outcome, "CI's run on main is one of verify, prerelease, release, never another value")
+        refused(await proposing(["run": "populate"]).outcome, "never another value")
+        refused(await proposing(["run": "Release"]).outcome, "never another value")
+        refused(await proposing([:]).outcome, "is dispatched with run given: one of verify, prerelease, release")
+        refused(await proposing(["run": "release", "extra": "x"]).outcome, "takes no input extra: only run (verify, prerelease, release)")
+        refused(await proposing(["kind": "quick"]).outcome, "takes no input kind")
+        // Another workflow, a disabled one, another repository's.
+        refused(await proposing(["run": "release"], workflow: 14).outcome, "Release (.github/workflows/release.yml) isn't among the workflows dispatched on main")
+        refused(await proposing(["run": "release"], workflow: 13).outcome, "disabled_manually")
+        refused(await proposing(["run": "release"], repository: "AttilaTheFun/applications").outcome, "isn't among the workflows dispatched on main")
+        // A refusal never echoes the value it refused.
+        guard case .refuse(let reason) = await proposing(["run": "ghp_notatoken"]).outcome else { return XCTFail("not refused") }
+        XCTAssertFalse(reason.contains("ghp_notatoken"), reason)
+    }
+
+    /// Exact match: listed by its file's name or path for branches, a
+    /// workflow is still never dispatched on main; mainDispatch's entry is
+    /// one repository's.
+    func testOnMainAWorkflowIsNamedExactlyByItsRepository() async {
+        var loose = GateRules.standard
+        loose.dispatchableWorkflows = ["ci.yml", ".github/workflows/ci.yml", "AttilaTheFun/visor:.github/workflows/ci.yml"]
+        loose.mainDispatch = .off
+        refused(await proposing(["run": "release"], rules: loose).outcome, "dispatched on main, AttilaTheFun/visor's default branch")
+        refused(await proposing(["run": "release"], rules: loose).outcome, "gate.json's mainDispatch, each as owner/name:path")
+        loose.mainDispatch = GateRules.MainDispatch(perHour: 4, workflows: ["AttilaTheFun/applications:.github/workflows/ci.yml": ["run": ["verify"]]])
+        refused(await proposing(["run": "verify"], rules: loose).outcome, "isn't among the workflows dispatched on main")
+        let theirs = await proposing(["run": "verify"], repository: "AttilaTheFun/applications", rules: loose)
+        XCTAssertEqual(theirs.outcome, .pass(nil))
+        // A protected branch that isn't the default: never.
+        var master = GateRules.standard
+        master.dispatchableWorkflows = ["ci.yml"]
+        let found = await GateChecker(rules: master, github: FakeGitHub(answers: [
+            "/repos/AttilaTheFun/visor": (200, #"{"default_branch":"main"}"#),
+            "/repos/AttilaTheFun/visor/actions/workflows/12": (200, #"{"id":12,"name":"CI","path":".github/workflows/ci.yml","state":"active"}"#),
+            "/repos/AttilaTheFun/visor/git/ref/heads/master": (200, "{\"object\":{\"sha\":\"\(head)\"}}"),
+        ])).dispatch(visor, 12, branch: "master", inputs: ["run": "release"])
+        refused(found.outcome, "never dispatched on master, a protected branch")
+        XCTAssertEqual(found.onDefaultBranch, false)
+    }
+
+    /// On a branch of the agent's own, today's rules: a listed workflow,
+    /// any inputs (within the gate's limits, GitHubGateTests), the lists
+    /// of main's never asked.
+    func testABranchsDispatchIsAsBefore() async {
+        let applications = "AttilaTheFun/applications"
+        var rules = GateRules.standard
+        rules.dispatchableWorkflows = ["ci.yml"]
+        let any = await proposing(["run": "agent-image", "other": "x"], branch: "feature", repository: applications, rules: rules)
+        XCTAssertEqual(any, GateChecker.DispatchFinding(outcome: .pass(nil), workflowPath: ".github/workflows/ci.yml", onDefaultBranch: false))
+        let none = await proposing([:], branch: "feature", repository: applications, rules: rules)
+        XCTAssertEqual(none.outcome, .pass(nil))
+        refused(await proposing(["run": "verify"], branch: "feature", repository: applications).outcome, "isn't among the workflows an agent dispatches")
+        refused(await proposing(["run": "verify"], workflow: 14, branch: "feature", repository: applications, rules: rules).outcome,
+                "isn't among the workflows an agent dispatches")
+        refused(await proposing([:], branch: "gone", repository: applications, rules: rules).outcome, "gone is not a branch")
+        // Never counted against main's.
+        let throttle = DispatchThrottle()
+        rules.mainDispatch.perHour = 1
+        for _ in 0..<3 { _ = await proposing([:], branch: "feature", repository: applications, rules: rules, throttle: throttle) }
+        let main = await proposing(["run": "verify"], rules: rules, throttle: throttle)
+        XCTAssertEqual(main.outcome, .pass(nil))
+    }
+
+    /// NCH's review of #557: on a branch, Visor's ci.yml with run verify
+    /// alone (branchDispatch, the standard rules'): never prerelease or
+    /// release off main, never agent-image, nothing left out or added; held
+    /// to its list even where dispatchableWorkflows lists its file.
+    func testOnAVisorBranchCIIsVerifyAlone() async {
+        let verify = await proposing(["run": "verify"], branch: "feature")
+        XCTAssertEqual(verify, GateChecker.DispatchFinding(outcome: .pass(nil), workflowPath: ".github/workflows/ci.yml", onDefaultBranch: false))
+        for run in ["agent-image", "prerelease", "release", "populate", "container-apple"] {
+            refused(await proposing(["run": run], branch: "feature").outcome, "CI's run on feature is one of verify, never another value")
+        }
+        refused(await proposing([:], branch: "feature").outcome, "CI on feature is dispatched with run given: one of verify")
+        refused(await proposing(["run": "verify", "extra": "x"], branch: "feature").outcome, "CI on feature takes no input extra: only run (verify)")
+        var loose = GateRules.standard
+        loose.dispatchableWorkflows = ["ci.yml", ".github/workflows/ci.yml"]
+        refused(await proposing(["run": "agent-image"], branch: "feature", rules: loose).outcome, "never another value")
+        let stillVerify = await proposing(["run": "verify"], branch: "feature", rules: loose)
+        XCTAssertEqual(stillVerify.outcome, .pass(nil))
+        // Another of its workflows, unlisted: not dispatched; one dispatchableWorkflows lists, with any inputs.
+        refused(await proposing(["run": "verify"], workflow: 14, branch: "feature").outcome, "isn't among the workflows an agent dispatches")
+        loose.dispatchableWorkflows = ["release.yml"]
+        let release = await proposing(["anything": "x"], workflow: 14, branch: "feature", rules: loose)
+        XCTAssertEqual(release.outcome, .pass(nil))
+        // Its list is its repository's alone.
+        refused(await proposing(["run": "verify"], branch: "feature", repository: "AttilaTheFun/applications").outcome, "isn't among the workflows")
+        XCTAssertEqual(GateChecker.inputsRefusal("CI", on: "x", allowed: ["run": ["verify"]], given: ["run": "verify"]), nil)
+    }
+
+    /// At most perHour (four) of a repository's an hour, counted by the
+    /// gate; the next refused saying when; another repository's apart;
+    /// refusals uncounted.
+    func testMainDispatchesAreThrottledPerRepositoryPerHour() async {
+        let clock = Locked(Date(timeIntervalSince1970: 1_800_000_000))
+        let throttle = DispatchThrottle(now: { clock.withLock { $0 } })
+        var rules = GateRules.standard
+        rules.mainDispatch.workflows["AttilaTheFun/applications:.github/workflows/ci.yml"] = ["run": ["verify"]]
+        refused(await proposing(["run": "publish"], rules: rules, throttle: throttle).outcome, "never another value")
+        for _ in 0..<4 {
+            let found = await proposing(["run": "release"], rules: rules, throttle: throttle)
+            XCTAssertEqual(found.outcome, .pass(nil))
+        }
+        refused(await proposing(["run": "verify"], rules: rules, throttle: throttle).outcome,
+                "AttilaTheFun/visor has had 4 dispatches on main in the last hour, the most gate.json's mainDispatch.perHour lets through: the next in 60 minutes")
+        let other = await proposing(["run": "verify"], repository: "AttilaTheFun/applications", rules: rules, throttle: throttle)
+        XCTAssertEqual(other.outcome, .pass(nil), "another repository's are counted apart")
+        clock.withLock { $0 += 59 * 60 + 30 }
+        refused(await proposing(["run": "verify"], rules: rules, throttle: throttle).outcome, "the next in 1 minute")
+        XCTAssertNotNil(throttle.take("attilathefun/VISOR", limit: 4), "the repository by any case, and a refusal isn't counted")
+        clock.withLock { $0 += 30 }
+        let again = await proposing(["run": "verify"], rules: rules, throttle: throttle)
+        XCTAssertEqual(again.outcome, .pass(nil), "an hour on")
+        // perHour 0: none.
+        rules.mainDispatch.perHour = 0
+        refused(await proposing(["run": "verify"], rules: rules).outcome, "has had 0 dispatches")
+    }
+
+    /// A run still going, as a cancel reads it.
+    private func going(event: String = "pull_request", branch: String? = "feature", headRepo: String = "AttilaTheFun/shireworks") -> String {
+        let named = branch.map { "\"\($0)\"" } ?? "null"
+        return """
+        {"id":77,"name":"CI","event":"\(event)","status":"in_progress","head_branch":\(named),
+         "head_sha":"\(head)","head_repository":{"full_name":"\(headRepo)"}}
+        """
+    }
+
+    /// NCH's review of #557: an agent cancels a run only on a branch of its
+    /// own, as a push's own branch is told (GateRules' isOwn): never on the
+    /// default branch or main, whatever its event and whatever gate.json
+    /// says; never a fork's, a protected branch's, or one outside
+    /// ownBranchPrefixes.
+    func testAnAgentCancelsARunOnlyOnABranchOfItsOwn() async {
+        let cancel = GateCheck.cancel(repository: repo, run: 77)
+        var loose = GateRules.standard
+        loose.protectedBranches = []
+        loose.protectDefaultBranch = false
+        loose.mainDispatch = GateRules.MainDispatch(perHour: 100, workflows: ["AttilaTheFun/shireworks:.github/workflows/ci.yml": ["run": ["x"]]])
+        for event in ["push", "workflow_dispatch", "schedule", "pull_request"] {
+            refused(await check(runs(going(event: event, branch: "main")), cancel, rules: loose), "is on main, AttilaTheFun/shireworks's default branch or main: an agent never cancels a run there")
+            refused(await check(runs(going(event: event, branch: "Main")), cancel), "never cancels a run there")
+        }
+        // The default branch by another name, and main that isn't the default.
+        let develop = ["/repos/AttilaTheFun/shireworks": (200, #"{"default_branch":"develop"}"#)]
+        refused(await check(runs(going(event: "push", branch: "develop"), extra: develop), cancel, rules: loose), "is on develop")
+        refused(await check(runs(going(event: "push", branch: "main"), extra: develop), cancel, rules: loose), "never cancels a run there")
+        // A protected branch, a fork's, a tag's run (no branch).
+        refused(await check(runs(going(event: "push", branch: "master")), cancel), "not one of the agent's own branches")
+        refused(await check(runs(going(headRepo: "someone/shireworks")), cancel), "commit is in another repository")
+        refused(await check(runs(going(event: "push", branch: nil)), cancel), "is on no branch")
+        // Its own: any branch not protected, or of ownBranchPrefixes when it lists any.
+        let own = await check(runs(going()), cancel)
+        XCTAssertEqual(own, .pass(nil))
+        let dispatched = await check(runs(going(event: "workflow_dispatch")), cancel)
+        XCTAssertEqual(dispatched, .pass(nil))
+        var prefixed = GateRules.standard
+        prefixed.ownBranchPrefixes = ["agent/"]
+        refused(await check(runs(going()), cancel, rules: prefixed), "not one of the agent's own branches")
+        let agents = await check(runs(going(branch: "agent/fix")), cancel, rules: prefixed)
+        XCTAssertEqual(agents, .pass(nil))
+        // A release's, and its default branch unread: no cancel.
+        refused(await check(runs(going(event: "release", branch: "v1.0")), cancel), "its publishing must finish")
+        guard case .fail = await check(runs(going(), extra: ["/repos/AttilaTheFun/shireworks": (500, "{}")]), cancel) else {
+            return XCTFail("cancelled unread")
+        }
     }
 
     // MARK: Drafts, nodes and pushes

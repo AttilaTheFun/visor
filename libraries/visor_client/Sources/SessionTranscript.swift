@@ -110,7 +110,13 @@ public final class SessionTranscript {
     var shownIDs: [String] { _entries.map(displayID(of:)) + _sending.filter(\.shown).map(\.id) }
 
     /// A rebuilt set of rows: a row that is new here and has the same role
-    /// and words as one that went takes that one's display id.
+    /// and words as one that went takes that one's display id. `new` is
+    /// every row held after, not only the answer's: a row kept before the
+    /// row the answer follows has not gone, and a new row shown under its
+    /// id as well is one id shown twice. Rows of calls and no words, and
+    /// mail's notices, are alike by the dozen; a thread with an id shown
+    /// twice is laid out wrong by the list (a row out of place, one shown
+    /// twice) and is not redrawn as it changes.
     private func carryDisplayIDs(from old: [TranscriptEntry], to new: [TranscriptEntry]) {
         let kept = Set(new.map(\.id))
         var gone: [String: [String]] = [:]
@@ -122,6 +128,20 @@ public final class SessionTranscript {
             guard var ids = gone[key], !ids.isEmpty else { continue }
             displayIDs[row.id] = ids.removeFirst()
             gone[key] = ids
+        }
+    }
+
+    /// Each row shown under an id no other row is shown under: a display
+    /// id that is a row's own id, or one an earlier row is shown under
+    /// already, goes, and its row is shown under its own. (A row that went,
+    /// and whose id a new row took, can come back: a page of earlier rows
+    /// read again.)
+    private func keepDisplayIDsUnique() {
+        guard !displayIDs.isEmpty else { return }
+        var taken = Set(_entries.map(\.id))
+        for row in _entries {
+            guard let shown = displayIDs[row.id] else { continue }
+            if !taken.insert(shown).inserted { displayIDs[row.id] = nil }
         }
     }
 
@@ -453,22 +473,22 @@ public final class SessionTranscript {
             entries = next
         } else {
             replaced = true
-            carryDisplayIDs(from: entries, to: rows)
+            let old = entries
+            var next = rows
             // The whole carries on the history held when its first row
             // follows a row held (`follows`): the rows before it stay, here
             // and in the cache. Otherwise it is the history.
             if let follows = envelope.follows, !follows.isEmpty, !rows.isEmpty {
-                if let index = entries.firstIndex(where: { $0.id == follows }) {
-                    entries = Array(entries[...index]) + rows
+                if let index = old.firstIndex(where: { $0.id == follows }) {
+                    next = Array(old[...index]) + rows
                     replaced = false
-                } else {
-                    entries = rows
                 }
                 write = .follow(after: follows, rows)
             } else {
-                entries = rows
                 write = .replace(rows)
             }
+            carryDisplayIDs(from: old, to: next)
+            entries = next
             generation = envelope.generation ?? generation
             // Earlier pages start over from these rows.
             loadingEarlier = false
@@ -496,6 +516,7 @@ public final class SessionTranscript {
         loaded = true
         keep?(write, SyncState(revision: revision, generation: generation))
         settleSending()
+        keepDisplayIDsUnique()
         if first { flush() } else if wasCatchingUp && !catchingUp { endCatchUp() }
     }
 
@@ -544,7 +565,10 @@ public final class SessionTranscript {
     func putEarlier(_ rows: [TranscriptEntry], more: Bool) -> Int {
         let held = Set(entries.map(\.id))
         let older = rows.filter { !held.contains($0.id) }
-        if !older.isEmpty { entries = older + entries }
+        if !older.isEmpty {
+            entries = older + entries
+            keepDisplayIDsUnique()
+        }
         hasEarlier = more
         loadingEarlier = false
         return older.count

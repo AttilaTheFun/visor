@@ -129,10 +129,10 @@ final class NativeMCPProxyTests: XCTestCase {
     /// the gh CLI through the GitHub gate, oss is retired, Shireworks' is Nimbus's): any other path is 403, its server
     /// never called. A native session's call reaches each, as before.
     func testAContainerAgentReachesNimbusAlone() throws {
-        XCTAssertEqual(NativeMCPProxy.containerServers, ["nimbus"])
+        XCTAssertEqual(NativeMCPProxy.containerServers, ["nimbus", "nimbus-devices"])
         let endpoint = try XCTUnwrap(FakeEndpoint())
         defer { endpoint.stop() }
-        let names = ["gh", "oss", "shireworks", "nimbus"]
+        let names = ["gh", "oss", "shireworks", "nimbus", "nimbus-devices"]
         let proxy = try proxy(names.map { NativeMCPProxy.Endpoint(name: $0, url: "http://127.0.0.1:\(endpoint.port)/mcp") },
                               agentSession: { $0 == "agent.own.token" ? "s-container" : nil })
         defer { proxy.stop() }
@@ -145,10 +145,11 @@ final class NativeMCPProxyTests: XCTestCase {
         XCTAssertEqual(endpoint.requests.withLock { $0.count }, 0, "nothing refused is passed on")
         XCTAssertEqual(try ask(proxy.port, "/mcp/gh", token: "someone.elses.token").status, "401", "a token that's no one's: 401 first")
         XCTAssertEqual(try ask(proxy.port, "/mcp/nimbus", token: "agent.own.token").status, "200")
+        XCTAssertEqual(try ask(proxy.port, "/mcp/nimbus-devices", token: "agent.own.token").status, "200")
         for name in names {
             XCTAssertEqual(try ask(proxy.port, "/mcp/\(name)", token: "one-token").status, "200", "native: \(name)")
         }
-        XCTAssertEqual(endpoint.requests.withLock { $0.count }, 5)
+        XCTAssertEqual(endpoint.requests.withLock { $0.count }, 7)
     }
 
     /// NCH's check of #536: the server's word on a container agent's token is waited for (up to ten seconds) while the

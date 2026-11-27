@@ -171,9 +171,19 @@ final class ScriptedServer: AgentServer {
         info.placement = .container
         return info
     }
+    /// What each sync of a transcript asked for, and the answers the test
+    /// has for it, given in order; `answersTranscripts`, whether it gives
+    /// any (looked for every few milliseconds, rather than once a minute).
+    private(set) var transcriptAsks: [(since: Int, generation: Int, after: String?)] = []
+    var transcriptAnswers: [Envelope] = []
+    var answersTranscripts = false
     func transcript(of session: String, since revision: Int, generation: Int, after: String?) async throws -> Envelope {
-        // Nothing moves: held, as a server holds it.
-        while !Task.isCancelled { try await Task.sleep(nanoseconds: 60_000_000_000) }
+        transcriptAsks.append((revision, generation, after))
+        // Nothing moves: held, as a server holds it, until the test answers.
+        while !Task.isCancelled {
+            if !transcriptAnswers.isEmpty { return transcriptAnswers.removeFirst() }
+            try await Task.sleep(nanoseconds: answersTranscripts ? 5_000_000 : 60_000_000_000)
+        }
         throw CancellationError()
     }
     func commands(for session: String) async throws -> [SlashCommand] { [] }
