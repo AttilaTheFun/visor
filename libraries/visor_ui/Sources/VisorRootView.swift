@@ -26,6 +26,9 @@ public struct VisorRootView: View {
     /// The Mac's detail column, as wide as it was laid out (0 until then):
     /// whether the pane fits beside the content (NarrowWindow).
     @State private var detailWidth: CGFloat = 0
+    /// Whether the Mac's window is too narrow for the sidebar beside the
+    /// content (NarrowWindow): its sheets' least widths are the content's.
+    @State private var narrowWindow = false
     /// What the open session's screen calls when its session is ended.
     @State private var endSession = ViewAction()
     /// What a session's page or row opens: its fork, its branch, its side
@@ -223,6 +226,9 @@ public struct VisorRootView: View {
             // device's.
             .preferredColorScheme(colorScheme)
             .sheet(isPresented: addingServer(fromSettings: false)) { addComputer }
+            // The sheets' least widths in a narrow Mac window (MacSheetWidth).
+            .environment(\.narrowWindow, narrowWindow)
+            .onGeometryChange(for: Bool.self) { NarrowWindow.applies && $0.size.width < NarrowWindow.besideSidebar } action: { narrowWindow = $0 }
     }
 
     /// The onboarding is on screen (the app's, or the fixture's).

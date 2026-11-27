@@ -123,10 +123,11 @@ extension View {
     /// A short list of choices in a sheet: on the Mac a sheet gives a list
     /// no height of its own, and it draws at none; a floor of a row each
     /// (plus the chrome) shows it. A phone's sheet fills the screen anyway.
-    /// No wider than a window of the content's least (320), opened at 360.
+    /// In a narrow window, no wider at its least than the content's 320
+    /// (MacSheetWidth).
     @ViewBuilder func choiceListInSheet(rows: Int) -> some View {
         #if os(macOS)
-        frame(minWidth: 320, idealWidth: 360, minHeight: CGFloat(rows) * 32 + 24)
+        modifier(MacSheetWidth(width: 360, height: CGFloat(rows) * 32 + 24))
         #else
         self
         #endif
@@ -188,12 +189,11 @@ extension View {
 
 extension View {
     /// A sheet's heights on a phone (and on the portable SwiftUI, whose
-    /// sheets are a phone's); a window's size on the Mac: opened at its
-    /// ideal, and no wider at its least than a window of the content's
-    /// least (320, VisorRootView).
+    /// sheets are a phone's); a window's size on the Mac, no wider at its
+    /// least than the content's 320 in a narrow window (MacSheetWidth).
     @ViewBuilder func presentationDetentsLarge() -> some View {
         #if os(macOS)
-        frame(minWidth: 320, idealWidth: 520, minHeight: 560)
+        modifier(MacSheetWidth(width: 520, height: 560))
         #else
         presentationDetents([.large])
         #endif
@@ -215,7 +215,7 @@ extension View {
     @ViewBuilder func paneSheetOnMac(_ sheet: Bool) -> some View {
         #if os(macOS)
         if sheet {
-            frame(minWidth: 320, idealWidth: 440, minHeight: 480, idealHeight: 640)
+            frame(minWidth: NarrowWindow.content, minHeight: 480, idealHeight: 640)
         } else {
             self
         }
@@ -226,7 +226,7 @@ extension View {
 
     @ViewBuilder func presentationDetentsMediumLarge() -> some View {
         #if os(macOS)
-        frame(minWidth: 320, idealWidth: 440, minHeight: 380)
+        modifier(MacSheetWidth(width: 440, height: 380))
         #else
         presentationDetents([.medium, .large])
         #endif
