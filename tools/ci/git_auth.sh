@@ -24,6 +24,8 @@
 #
 # Run by tools/ci/job_tools.sh (the Linux jobs) and the proofs' scripts
 # (tools/ci/proof_ios.sh, tools/ci/proof_android.sh); again is harmless.
+# tools/ci/linux_tests.sh hands the same file to SwiftPM's git
+# (GIT_CONFIG_GLOBAL), in its unpacked tree, which is no git repository.
 set -euo pipefail
 set +x
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
