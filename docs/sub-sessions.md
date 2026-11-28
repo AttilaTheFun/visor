@@ -56,8 +56,9 @@ transcript, live.
 - **The parent's chat.** A sticky row above the composer for each open
   sub-session: its kind, its name, and its state (working, idle, waiting
   for an answer). Tapping a row opens it; its ✕ ends it.
-- **The sessions list.** Under a session's card, a capsule for each open
-  sub-session; tapping one opens it.
+- **The sessions list.** Nothing of them (Logan, 26 Nov 2026: in the
+  list they were noise): a session's row marks only whether its agent
+  works or waits, and its goal. Its sub-sessions are its chat's.
 - **A sub-session's page.** The same chat page, with a way back to its
   parent ("Fork of …"). Its composer sends to the sub-session: on a side
   question's page, another side question.
@@ -114,5 +115,5 @@ transcript, live.
   subagent's records into a session file of Claude Code's beside the
   parent's, no longer marked a sidechain, and resumes that. The new
   session is a child of the parent, titled with the subagent's
-  description; its row and capsule take the subagent's place, and its
+  description; its row takes the subagent's place, and its
   chat takes the subagent page's.

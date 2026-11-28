@@ -166,13 +166,17 @@ package final class ContainerRunner: DrivenAgentDirectory {
     // MARK: - The MCP pass-through
 
     /// A token for `agent`'s calls to agent-proxy's MCP pass-through, which
-    /// its harness asks its wrapper's stream for (DrivenMCP): an hour's, as
-    /// its session, for MCP alone, so it can't Connect as the agent. Nil for
-    /// an agent not running here (gone, or let go).
-    package func passThroughToken(for agent: String) -> String? {
+    /// its harness asks its wrapper's stream for (DrivenMCP): as its
+    /// session, for MCP alone, so it can't Connect as the agent, and for as
+    /// long as its agent may run (AgentTokens.passThroughLifetime: Claude
+    /// keeps the headers it's given for the connection), its agent's end
+    /// ending it sooner (passThroughSession). Nil for an agent not running
+    /// here (gone, or let go).
+    package func passThroughToken(for agent: String, now: Date = Date()) -> String? {
         let id = Self.key(agent)
         guard let placed = agents[id], !placed.released else { return nil }
-        let token = tokens.mint(.runnerAgent, session: placed.session, agent: id, scope: [.mcp])
+        let token = tokens.mint(.runnerAgent, session: placed.session, agent: id, scope: [.mcp], lifetime: tokens.passThroughLifetime,
+                                now: now)
         return token.isEmpty ? nil : token
     }
 

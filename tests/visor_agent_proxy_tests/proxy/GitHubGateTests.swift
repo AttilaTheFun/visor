@@ -226,7 +226,7 @@ final class GitHubGateTests: XCTestCase {
         XCTAssertEqual(rest("POST", "\(repo)/actions/runs/1/cancel"), .check(.cancel(repository: "AttilaTheFun/shireworks", run: 1))) // 389
         // 390 and 371: a dispatch, now of a workflow gate.json lists alone, never on main (NCH's review of #417).
         XCTAssertEqual(dispatching("POST", "\(repo)/actions/workflows/12/dispatches", #"{"ref":"feature","inputs":{"kind":"quick"}}"#),
-                       .check(.dispatch(repository: "AttilaTheFun/shireworks", workflow: 12, branch: "feature")))
+                       .check(.dispatch(repository: "AttilaTheFun/shireworks", workflow: 12, branch: "feature", inputs: ["kind": "quick"])))
         passes(dispatching("POST", "\(repo)/actions/workflows/12/dispatches", #"{"ref":"feature","return_run_details":true}"#))
     }
 
@@ -329,6 +329,10 @@ final class GitHubGateTests: XCTestCase {
                                                             "metadata": "read", "checks": "read", "statuses": "read", "actions": "write"])
         var quiet = GateRules.standard
         quiet.rerunEvents = []
+        XCTAssertEqual(quiet.tokenPermissions["actions"], "write", "Visor's proposals on main: actions written")
+        quiet.mainDispatch = .off
+        XCTAssertEqual(quiet.tokenPermissions["actions"], "write", "Visor's verify on a branch: actions written")
+        quiet.branchDispatch = .off
         XCTAssertEqual(quiet.tokenPermissions["actions"], "read", "no re-run or dispatch: actions read")
         XCTAssertNil(GateRules.standard.tokenPermissions["workflows"])
     }
@@ -339,6 +343,18 @@ final class GitHubGateTests: XCTestCase {
         let rules = try JSONDecoder().decode(GateRules.self, from: Data(json.utf8))
         XCTAssertEqual(rules.ownBranchPrefixes, [])
         XCTAssertEqual(rules.dispatchableWorkflows, [])
+        XCTAssertEqual(rules.mainDispatch, .off, "no dispatch on main, as before it")
+        XCTAssertEqual(rules.branchDispatch, .off, "no inputs listed on a branch, as before it")
+        // The gate it makes refuses a dispatch on main, as before, and lets a listed one on a branch go to its check.
+        var listed = rules
+        listed.dispatchableWorkflows = ["ci.yml"]
+        let old = GitHubGate(rules: listed)
+        let main = old.decide(GateRequest(method: "POST", host: "api.github.com", target: "/repos/AttilaTheFun/visor/actions/workflows/12/dispatches",
+                                          body: Data(#"{"ref":"main","inputs":{"run":"verify"}}"#.utf8)))
+        refused(main, "never dispatched on main")
+        let branch = old.decide(GateRequest(method: "POST", host: "api.github.com", target: "/repos/AttilaTheFun/visor/actions/workflows/12/dispatches",
+                                            body: Data(#"{"ref":"feature","inputs":{"anything":"at all"}}"#.utf8)))
+        XCTAssertEqual(branch, .check(.dispatch(repository: "AttilaTheFun/visor", workflow: 12, branch: "feature", inputs: ["anything": "at all"])))
     }
 
     func testReleasesAreDraftsOnly() {
@@ -453,6 +469,144 @@ final class GitHubGateTests: XCTestCase {
         XCTAssertEqual(GitHubGate.pathClass("/a/b/c/d/e/f/g/h/i/j"), "/a/b/c/d/e/f/g/h/…")
     }
 
+    // MARK: Release proposals on main (NCH's conditions, 26 Nov 2026)
+
+    private func dispatch(_ gate: GitHubGate, in repository: String = "AttilaTheFun/visor", _ body: String) -> GateDecision {
+        gate.decide(GateRequest(method: "POST", host: "api.github.com", target: "/repos/\(repository)/actions/workflows/12/dispatches",
+                                body: Data(body.utf8)))
+    }
+
+    /// The standard rules, with no gate.json: Visor's ci.yml on main with
+    /// `run` one of verify, prerelease and release, at most four an hour;
+    /// no branch's dispatch.
+    func testTheStandardRulesProposeVisorsReleasesOnMain() {
+        XCTAssertEqual(GateRules.standard.mainDispatch.perHour, 4)
+        XCTAssertEqual(GateRules.standard.mainDispatch.workflows,
+                       ["AttilaTheFun/visor:.github/workflows/ci.yml": ["run": ["verify", "prerelease", "release"]]])
+        XCTAssertEqual(GateRules.standard.dispatchableWorkflows, [])
+        // NCH's review of #557: on a branch, Visor's ci.yml with run verify alone.
+        XCTAssertEqual(GateRules.standard.branchDispatch.workflows, ["AttilaTheFun/visor:.github/workflows/ci.yml": ["run": ["verify"]]])
+        // To the check, with its inputs, which reads which workflow it is and the default branch.
+        XCTAssertEqual(dispatch(gate, #"{"ref":"main","inputs":{"run":"release"}}"#),
+                       .check(.dispatch(repository: "AttilaTheFun/visor", workflow: 12, branch: "main", inputs: ["run": "release"])))
+        XCTAssertEqual(dispatch(gate, in: "attilathefun/Visor", #"{"ref":"main","inputs":{"run":"verify"}}"#),
+                       .check(.dispatch(repository: "attilathefun/Visor", workflow: 12, branch: "main", inputs: ["run": "verify"])))
+        // Another repository's main, and its branches: none.
+        refused(dispatch(gate, in: "AttilaTheFun/shireworks", #"{"ref":"main","inputs":{"run":"release"}}"#), "names none of its")
+        refused(dispatch(gate, in: "AttilaTheFun/shireworks", #"{"ref":"feature","inputs":{"run":"verify"}}"#), "dispatchableWorkflows lists none")
+        // Visor's branch, the check's to refuse (it may be a default branch of another name).
+        XCTAssertEqual(dispatch(gate, #"{"ref":"feature","inputs":{"run":"verify"}}"#),
+                       .check(.dispatch(repository: "AttilaTheFun/visor", workflow: 12, branch: "feature", inputs: ["run": "verify"])))
+        // Main by another spelling: never.
+        refused(dispatch(gate, #"{"ref":"heads/main","inputs":{"run":"release"}}"#), "never heads/")
+        refused(dispatch(gate, #"{"ref":"refs/heads/main","inputs":{"run":"release"}}"#), "names a branch")
+        // Inputs within dispatch's limits, as on a branch.
+        refused(dispatch(gate, #"{"ref":"main","inputs":{"run":"one\ntwo"}}"#), "one line")
+        refused(dispatch(gate, #"{"ref":"main","inputs":"run=release"}"#), "JSON object of strings")
+    }
+
+    /// Exact match: a mainDispatch workflow is `owner/name:.github/workflows/<file>`,
+    /// never a file's name or a path alone; gate.json with another isn't read.
+    func testMainDispatchNamesEachWorkflowExactlyByItsRepository() throws {
+        let rules = GateRules.standard.mainDispatch
+        XCTAssertEqual(rules.inputs(repository: "AttilaTheFun/visor", path: ".github/workflows/ci.yml"), ["run": ["verify", "prerelease", "release"]])
+        XCTAssertEqual(rules.inputs(repository: "attilathefun/VISOR", path: ".github/workflows/ci.yml"), ["run": ["verify", "prerelease", "release"]])
+        XCTAssertNil(rules.inputs(repository: "AttilaTheFun/visor", path: ".github/workflows/CI.yml"))
+        XCTAssertNil(rules.inputs(repository: "AttilaTheFun/visor", path: ".github/workflows/ci.yaml"))
+        XCTAssertNil(rules.inputs(repository: "AttilaTheFun/visor", path: "ci.yml"))
+        XCTAssertNil(rules.inputs(repository: "AttilaTheFun/shireworks", path: ".github/workflows/ci.yml"))
+        XCTAssertNil(rules.inputs(repository: "AttilaTheFun/visor-fork", path: ".github/workflows/ci.yml"))
+        func gateJSON(_ mainDispatch: String) -> Data {
+            Data((#"{"repositories":["AttilaTheFun/*"],"protectedBranches":["main"],"protectDefaultBranch":true,"merge":{"methods":["squash"],"passingConclusions":["success"],"codeOwners":true},"rerunEvents":["push"],"dispatch":{"maxInputs":10,"maxValueLength":200},"forcePushToOwnBranches":true,"mainDispatch":"#
+                + mainDispatch + "}").utf8)
+        }
+        for loose in [#"{"workflows":{"ci.yml":{"run":["verify"]}}}"#, #"{"workflows":{".github/workflows/ci.yml":{"run":["verify"]}}}"#,
+                      #"{"workflows":{"AttilaTheFun/*:.github/workflows/ci.yml":{"run":["verify"]}}}"#,
+                      #"{"workflows":{"AttilaTheFun/visor:ci.yml":{"run":["verify"]}}}"#,
+                      #"{"workflows":{"AttilaTheFun/visor:.github/workflows/a/ci.yml":{"run":["verify"]}}}"#,
+                      #"{"workflows":{"AttilaTheFun/visor:.github/workflows/ci.yml":{"run":[]}}}"#,
+                      #"{"workflows":{"AttilaTheFun/visor:.github/workflows/ci.yml":{"a b":["x"]}}}"#,
+                      #"{"perHour":-1,"workflows":{}}"#] {
+            XCTAssertThrowsError(try JSONDecoder().decode(GateRules.self, from: gateJSON(loose)), loose)
+        }
+        let read = try JSONDecoder().decode(GateRules.self, from: gateJSON(#"{"perHour":2,"workflows":{"AttilaTheFun/visor:.github/workflows/ci.yml":{"run":["verify"]}}}"#))
+        XCTAssertEqual(read.mainDispatch, GateRules.MainDispatch(perHour: 2, workflows: ["AttilaTheFun/visor:.github/workflows/ci.yml": ["run": ["verify"]]]))
+        // branchDispatch as exactly, and read.
+        func branchJSON(_ branchDispatch: String) -> Data {
+            Data((#"{"repositories":["AttilaTheFun/*"],"protectedBranches":["main"],"protectDefaultBranch":true,"merge":{"methods":["squash"],"passingConclusions":["success"],"codeOwners":true},"rerunEvents":["push"],"dispatch":{"maxInputs":10,"maxValueLength":200},"forcePushToOwnBranches":true,"branchDispatch":"#
+                + branchDispatch + "}").utf8)
+        }
+        for loose in [#"{"workflows":{"ci.yml":{"run":["verify"]}}}"#, #"{"workflows":{"AttilaTheFun/visor:.github/workflows/ci.yml":{"run":[]}}}"#] {
+            XCTAssertThrowsError(try JSONDecoder().decode(GateRules.self, from: branchJSON(loose)), loose)
+        }
+        let branchRead = try JSONDecoder().decode(GateRules.self, from: branchJSON(#"{"workflows":{"AttilaTheFun/visor:.github/workflows/ci.yml":{"run":["verify"]}}}"#))
+        XCTAssertEqual(branchRead.branchDispatch, .visor)
+        XCTAssertEqual(branchRead.mainDispatch, .off)
+        // perHour left out: four.
+        let unsaid = try JSONDecoder().decode(GateRules.self, from: gateJSON(#"{"workflows":{}}"#))
+        XCTAssertEqual(unsaid.mainDispatch.perHour, 4)
+        // A branch's list may name one repository's workflow too, exactly.
+        var branches = GateRules.standard
+        branches.dispatchableWorkflows = ["AttilaTheFun/shireworks:.github/workflows/ci.yml"]
+        XCTAssertTrue(branches.dispatches(workflowPath: ".github/workflows/ci.yml", repository: "attilathefun/shireworks"))
+        XCTAssertFalse(branches.dispatches(workflowPath: ".github/workflows/ci.yml", repository: "AttilaTheFun/visor"))
+        XCTAssertFalse(branches.dispatches(workflowPath: ".github/workflows/ci.yml"))
+    }
+
+    /// Logan's alone whatever gate.json says, with every dispatch on main
+    /// it could list: publishing, cancelling a release's run (a check:
+    /// GateCheckerTests), deleting refs and releases, by REST and GraphQL.
+    func testNoGateJSONLetsAPublishACancelOrADeleteThrough() {
+        var loose = GateRules.standard
+        loose.dispatchableWorkflows = ["ci.yml", "release.yml"]
+        loose.mainDispatch = GateRules.MainDispatch(perHour: 1000, workflows: [
+            "AttilaTheFun/shireworks:.github/workflows/release.yml": ["publish": ["true"]],
+        ])
+        loose.protectedBranches = []
+        loose.protectDefaultBranch = false
+        let gate = GitHubGate(rules: loose)
+        func rest(_ method: String, _ path: String, _ body: String? = nil) -> GateDecision {
+            gate.decide(GateRequest(method: method, host: "api.github.com", target: path, body: body.map { Data($0.utf8) }))
+        }
+        func graphQL(_ query: String) -> GateDecision {
+            let body = "{\"query\":\(Self.quoted(query))}"
+            return gate.decide(GateRequest(method: "POST", host: "api.github.com", target: "/graphql", body: Data(body.utf8)))
+        }
+        let publishing = "publishing a release is Logan's alone"
+        refused(rest("POST", "\(repo)/releases", #"{"tag_name":"v1","draft":false}"#), publishing)
+        refused(rest("POST", "\(repo)/releases", #"{"tag_name":"v1"}"#), publishing)
+        refused(rest("PATCH", "\(repo)/releases/9", #"{"draft":false}"#), publishing)
+        refused(rest("PATCH", "\(repo)/releases/9", #"{"draft":false,"tag_name":"v1"}"#), publishing)
+        refused(rest("PATCH", "\(repo)/releases/9", #"{"draft":"false"}"#), "never sends draft")
+        refused(rest("PATCH", "\(repo)/releases/9", #"{"make_latest":"true"}"#), "never sends make_latest")
+        refused(rest("PUT", "\(repo)/releases/9", #"{"draft":false}"#), "not among the writes")
+        refused(rest("POST", "\(repo)/releases/9", #"{"draft":false}"#), "not among the writes")
+        for mutation in ["createRelease", "updateRelease", "publishRelease"] {
+            refused(graphQL("mutation { \(mutation)(input: {repositoryId: \"R\", tagName: \"v1\"}) { clientMutationId } }"),
+                    "not among the mutations")
+        }
+        // A run's cancel is a check, refused for a release's (GateCheckerTests); force-cancel and deleting a run, never.
+        XCTAssertEqual(rest("POST", "\(repo)/actions/runs/1/cancel"), .check(.cancel(repository: "AttilaTheFun/shireworks", run: 1)))
+        refused(rest("POST", "\(repo)/actions/runs/1/force-cancel"), "not among the writes")
+        refused(rest("DELETE", "\(repo)/actions/runs/1"), "")
+        refused(graphQL("mutation { cancelWorkflowRun(input: {workflowRunId: \"W\"}) { clientMutationId } }"), "not among the mutations")
+        let deleting = "deleting a branch or any other ref is Logan's alone"
+        refused(rest("DELETE", "\(repo)/git/refs/heads/main"), deleting)
+        refused(rest("DELETE", "\(repo)/git/refs/tags/v1.0"), deleting)
+        refused(graphQL("mutation { deleteRef(input: {refId: \"REF\"}) { clientMutationId } }"), deleting)
+        refused(graphQL("mutation { updateRefs(input: {repositoryId: \"R\"}) { clientMutationId } }"), "pushed with git")
+        let deletingRelease = "deleting a release, a draft or its asset is Logan's alone"
+        refused(rest("DELETE", "\(repo)/releases/9"), deletingRelease)
+        refused(rest("DELETE", "\(repo)/releases/assets/3"), deletingRelease)
+        refused(rest("DELETE", "/repos/someone/else/releases/9"), deletingRelease)
+        refused(graphQL("mutation { deleteRelease(input: {releaseId: \"RE\"}) { clientMutationId } }"), deletingRelease)
+        let zero = String(repeating: "0", count: 40)
+        refused(push(["\(sha) \(zero) refs/tags/v1.0"], gate: gate), deleting)
+        refused(push(["\(sha) \(zero) refs/heads/main"], gate: gate), deleting)
+        // A tag is never pushed: no v* tag's release run.
+        refused(push(["\(zero) \(sha) refs/tags/v9.9.9"], gate: gate), "never tags")
+    }
+
     // MARK: GraphQL (§3.2)
 
     func testQueriesPassAndGhsWritesAreCheckedByTheirNodes() {
@@ -544,9 +698,9 @@ final class GitHubGateTests: XCTestCase {
         return bytes + Array("0000".utf8)
     }
 
-    private func push(_ lines: [String], repository: String = "AttilaTheFun/shireworks") -> GateDecision {
+    private func push(_ lines: [String], repository: String = "AttilaTheFun/shireworks", gate: GitHubGate? = nil) -> GateDecision {
         let body = Data(pushList(lines) + Array("PACK".utf8))
-        return gate.decide(GateRequest(method: "POST", host: "github.com", target: "/\(repository).git/git-receive-pack", body: body))
+        return (gate ?? self.gate).decide(GateRequest(method: "POST", host: "github.com", target: "/\(repository).git/git-receive-pack", body: body))
     }
 
     func testFetchesPassAndAPushIsCheckedByItsCommands() {

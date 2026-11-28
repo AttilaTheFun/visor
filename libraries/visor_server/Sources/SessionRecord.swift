@@ -205,6 +205,11 @@ public final class SessionRecord {
     /// The permission mode changed mid-turn: restart the process when the turn ends.
     var restartWhenIdle = false
 
+    /// The ids of the clients' sends taken lately, with when: a send asked
+    /// again (its answer lost on the way back) is taken once
+    /// (`takeSend`).
+    var takenSends: [String: Date] = [:]
+
     /// A turn was handed to the agent and never finished. Set when the
     /// message is sent, cleared when the agent goes idle, and persisted:
     /// after a kill it is the only sign that a reply is owed.
@@ -291,9 +296,12 @@ public final class SessionRecord {
 
     /// The on-disk copy of this session.
     var stored: StoredSession {
+        // Never its pin: that is the database's (VisorServer+SessionPins).
+        var kept = self.info
+        kept.pinned = false
         // The outbox is written down with the session: what waits to be
         // sent, and the files it carries, survive a restart of the app.
-        StoredSession(info: info, entries: Array(entries.suffix(Self.servedRows)), resumeID: process.resumeID, shape: StoredSession.currentShape, interrupted: interrupted, agentPID: process.processID, shownPrompts: Array(shownPrompts.suffix(Self.rememberedPrompts)), notice: notice, queuedImages: queuedImages, queuedOrigins: queuedOrigins, reportedUsage: reportedUsage, host: host, head: head, leaf: leaf,
+        return StoredSession(info: kept, entries: Array(entries.suffix(Self.servedRows)), resumeID: process.resumeID, shape: StoredSession.currentShape, interrupted: interrupted, agentPID: process.processID, shownPrompts: Array(shownPrompts.suffix(Self.rememberedPrompts)), notice: notice, queuedImages: queuedImages, queuedOrigins: queuedOrigins, reportedUsage: reportedUsage, host: host, head: head, leaf: leaf,
                              otherBranch: otherBranch, branchKept: branchKept ? true : nil, fork: pendingFork,
                              watchedSubagents: watchedSubagents.isEmpty ? nil : watchedSubagents.sorted(),
                              closedSubagents: closedSubagents.isEmpty ? nil : closedSubagents.sorted(),

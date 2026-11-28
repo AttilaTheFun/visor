@@ -52,6 +52,9 @@ case "$orientation" in portrait | landscape) ;; *) usage ;; esac
 DEVICE="iPhone 17"
 BUNDLE_ID="com.LoganShire.Visor"
 BAZEL="${PROOF_BAZEL:-bazel}"
+# Its Swift packages' git fetches with the job's token (GH_TOKEN): GitHub
+# limits anonymous git by address, which its runners share.
+"$ROOT/tools/ci/git_auth.sh"
 TEST=//tests/feature_map_tests:feature_map_proof_ios
 # The fixture's screens, as the probe pictured them (tests/ios_probe's
 # fixtureShots): their ids are the proof's, kept from release to release.

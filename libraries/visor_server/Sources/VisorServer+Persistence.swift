@@ -29,10 +29,13 @@ extension VisorServer {
     func loadSessions() {
         guard let stored = readStore() else { return }
         let asked = Self.requestedResumes()
+        // Its pins are the database's, not the file's (VisorServer+SessionPins).
+        let pinned = ServerCache.shared.pinnedSessions()
         var orphans: [(session: String, pid: Int32, resume: String?)] = []
         var hosted: [(record: SessionRecord, host: StoredHost, pid: Int32?, resume: String?)] = []
         for item in stored {
             var info = item.info
+            info.pinned = pinned.contains(info.id) && !info.archived
             info.busy = false
             info.ended = false
             // A stopped agent stays stopped; one the app went away under

@@ -82,6 +82,8 @@ extension VisorServer {
         case "signIn": performSignIn(envelope)
         case "permissions": performPermissions(envelope)
         case "notifications": performNotifications(envelope)
+        case "pin": performPin(envelope, pinned: true)
+        case "unpin": performPin(envelope, pinned: false)
         case "approve": performApprove(envelope)
         case "settings": performSettings(envelope)
         case "rename": performRename(envelope)
@@ -152,8 +154,24 @@ extension VisorServer {
         broadcastSessions()
     }
 
+    /// A message from a client for a session's agent. One that can't be
+    /// taken is said in the log, with the reason: the log said nothing of
+    /// a send, taken or not (26 Nov 2026).
     private func performSend(_ envelope: Envelope) {
-        guard let record = session(envelope.session), let text = envelope.text else { return }
+        guard let record = session(envelope.session) else {
+            Self.log("a message was not taken: there is no session \(envelope.session ?? "(none named)") here")
+            return
+        }
+        guard let text = envelope.text else {
+            Self.log("a message for \(record.info.title) (\(record.info.id)) was not taken: it had no text")
+            return
+        }
+        // Sent again under the same id, its first answer lost: taken once,
+        // and answered as it was.
+        if let id = envelope.id, !id.isEmpty, !record.takeSend(id) {
+            Self.log("a message for \(record.info.title) (\(record.info.id)) came again (\(id)): it was taken the first time")
+            return
+        }
         // Writing to an archived session brings it back, same parameters.
         if record.info.archived { unarchive(record) }
         deliver(text, to: record, images: envelope.images ?? [])
@@ -379,6 +397,7 @@ extension VisorServer {
         record.process.stop()
         record.markEnded()
         sessions.removeAll { $0 === record }
+        if record.info.pinned { setPinned(false, record) }
         forgetAgentToken(of: record.info.id)
         // Its agent's shims waiting on approvals go with it.
         for waiter in (approvalWaiters.removeValue(forKey: record.info.id) ?? [:]).values { waiter.close() }

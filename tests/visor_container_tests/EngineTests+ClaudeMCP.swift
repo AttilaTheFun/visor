@@ -55,11 +55,12 @@ extension EngineTests {
         _ = await engine.stop()
     }
 
-    /// Nimbus's alone, and only where the pass-through serves it: gh (the
+    /// Nimbus's alone (the MacBook's, and the Mini's devices-only
+    /// `nimbus-devices`), and only where the pass-through serves it: gh (the
     /// gh CLI through the GitHub gate), oss (retired) and shireworks (Nimbus's
     /// now) never, whatever it serves; the pass-through's own list.
     @Test func itsClaudeIsGivenNimbusAloneAndOnlyWhereItsServed() throws {
-        #expect(ContainerClaudeMCP.served == ["nimbus"])
+        #expect(ContainerClaudeMCP.served == ["nimbus", "nimbus-devices"])
         #expect(ContainerClaudeMCP.served == NativeMCPProxy.containerServers, "the pass-through refuses them any other")
         let others = ["gh": "http://mcp.agent.internal/mcp/gh", "oss": "http://mcp.agent.internal/mcp/oss",
                       "shireworks": "http://mcp.agent.internal/mcp/shireworks"]
@@ -72,6 +73,10 @@ extension EngineTests {
         #expect(!FileManager.default.fileExists(atPath: notServed.file.path) && said.isEmpty, "no Nimbus served: nothing written")
         let served = ContainerClaudeMCP(folder: folder.path, servers: others.merging(["nimbus": "http://mcp.agent.internal/mcp/nimbus"]) { one, _ in one })
         #expect(served.servers == ["nimbus": "http://mcp.agent.internal/mcp/nimbus"])
+        let both = ContainerClaudeMCP(folder: folder.path, servers: others.merging(["nimbus": "http://mcp.agent.internal/mcp/nimbus",
+                                                                                     "nimbus-devices": "http://mcp.agent.internal/mcp/nimbus-devices"]) { one, _ in one })
+        #expect(both.servers == ["nimbus": "http://mcp.agent.internal/mcp/nimbus",
+                                 "nimbus-devices": "http://mcp.agent.internal/mcp/nimbus-devices"])
     }
 
     @Test func itsClaudesFileIsWrittenOnlyWhenItsServersChangeIt() throws {

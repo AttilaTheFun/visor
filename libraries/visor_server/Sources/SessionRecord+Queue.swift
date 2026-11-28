@@ -6,6 +6,24 @@ import MessageCache
 import VisorProtocol
 
 extension SessionRecord {
+    /// How long, and how many, sends' ids are kept to know one asked again.
+    static let sendsKeptFor: TimeInterval = 15 * 60
+    static let sendsKept = 200
+
+    /// Whether the client's send with this id is new here, noting it: one
+    /// its client sent again because the answer was lost on the way back
+    /// (a connection closed under it, 26 Nov 2026) was taken already, and
+    /// is not taken twice.
+    func takeSend(_ id: String, now: Date = Date()) -> Bool {
+        takenSends = takenSends.filter { now.timeIntervalSince($0.value) < Self.sendsKeptFor }
+        guard takenSends[id] == nil else { return false }
+        if takenSends.count >= Self.sendsKept, let oldest = takenSends.min(by: { $0.value < $1.value })?.key {
+            takenSends.removeValue(forKey: oldest)
+        }
+        takenSends[id] = now
+        return true
+    }
+
     /// The user's words, handed to the agent. Every agent writes them to
     /// its log, which is the transcript: they are remembered as sent until
     /// the log has them, and are no row until then.

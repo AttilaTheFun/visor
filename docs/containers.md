@@ -394,7 +394,7 @@ to `sessions/logs/<session>.log`, with the environment a runner gives it
 | `AGENT_RUNNER` | `visor-sessions` unless the session says |
 | `AGENT_TOKEN_FD` | `0`: the agent's JWT is the wrapper's standard input (the exec writes it, then closes it), never a variable (agent_protocol#17, below) |
 | `AGENT_SESSIONS_DIR` | `/Volumes/Sessions` (a job with no folder works in `<it>/Claude/<agent>`) |
-| `AGENT_SOURCES_DIR` | Where a resumed session's sources are cloned, when given |
+| `AGENT_SOURCES_DIR` | Where a resumed session's sources are cloned, when given: never for the container runner's sessions, which are given none |
 | `AGENT_WRAPPER_CLAUDE` | Only for a stand-in (a test's): the harness is the image's `claude`, on its PATH (`/usr/local/bin/claude`, npm's Claude Code) |
 | `TMPDIR` | `/tmp`: the wrapper's MCP socket (`agent-mcp-*/mcp.sock`, which it hands its harness as `AGENT_MCP_SOCKET` for `agent-wrapper mcp`) on the guest's own disk, not on Sessions' share |
 | `HOME` | `/root` (the image sets none; processes run as root, and the image's `IS_SANDBOX=1` lets Claude Code bypass its prompts as root) |
@@ -529,7 +529,11 @@ container and proxy the outbound requests to github adding logan-shire-agent
 auth. agents can talk to the visor and nimbus mcps as well which are proxied
 through visor to authenticate them just adding the headers visor saves in its
 keychain." So a container's agent has Visor's own tools (from the driver, as
-before) and **Nimbus's MCP alone** of the servers this computer passes on.
+before) and **Nimbus's MCP alone** of the servers this computer passes on:
+`nimbus` (the MacBook's, VMs and containers) and, beside it, `nimbus-devices`
+(the Mini's devices-only Nimbus, the lab's phones: its `lease` with
+`platform: device`, and that lease's calls to the same server), until Nimbus
+forwards device leases itself (Nimbus, 27 Nov 2026).
 This replaces the 16 Nov rule (no passed-on servers in a container) for
 Nimbus only. gh there is the gh CLI, through the GitHub gate with the
 logan-shire-agent App's tokens ("gh in the container", above), never gh_mcp.
@@ -572,15 +576,31 @@ its agent:
   A change to agent-proxy's settings takes a restart of the server, as
   agent-proxy's does, and so a new boot.
 - **The auth:** the agent's own token. Claude runs the headersHelper as it
-  connects to each server, and again when one answers 401.
+  connects to each server (at its start, and on a reconnect, `/mcp`'s
+  among them) and keeps those headers for the connection: there is no
+  refresh interval. It runs it again when a call answers 401 or 403 only
+  where the helper gives the server's `Authorization`; without one, a 401
+  sent it to OAuth instead (Dynamic Client Registration, which the
+  pass-through refused too: "Dynamic Client Registration rejected (HTTP
+  401): No sessions' token for this proxy", on the Mini, 0.72.3, an hour
+  after the agent started).
   `visor-agent-host mcp-headers` asks the agent's wrapper on its MCP socket
   (`AGENT_MCP_SOCKET`, the one `agent-wrapper mcp` uses) with one JSON-RPC
   request, `visor/passThroughHeaders`. The wrapper relays it to Visor's
   driver as it does any of its harness's MCP, over the stream its own token
   opened, and the driver (DrivenMCP) answers for that agent:
-  `{"headers": {"X-Visor-Proxy": "<token>"}}`, a fresh JWT of the container
-  runner's (`visor.runner-agent`, naming the session and the agent, an hour's,
-  scope `mcp` alone, so it can't open the driver's Connect). The helper
+  `{"headers": {"X-Visor-Proxy": "<token>", "Authorization": "Bearer <token>"}}`,
+  a fresh JWT of the container runner's (`visor.runner-agent`, naming the
+  session and the agent, scope `mcp` alone, so it can't open the driver's
+  Connect). It lasts a week (AgentTokens.passThroughLifetime), as long as
+  its agent may run, not an hour as the wrapper's own does: a token is
+  checked at each call, so it is no one's once its agent ends or is let go,
+  or its session isn't live, whatever its `exp`; an emergency rotation of
+  the signing keys ends it at once, an ordinary one a day on, and the
+  helper, run again on the 401, gets a fresh one. The `Authorization` is
+  there for Claude alone: the pass-through reads `X-Visor-Proxy`, and
+  sends neither on (an upstream's own `Authorization` is agent-proxy's to
+  add). The helper
   prints that object, and nothing is kept: no file, no variable, no command
   line has the token. The pass-through takes `X-Visor-Proxy` as before: the
   sessions' token, or else a JWT-shaped token it asks the server about (in
@@ -599,7 +619,11 @@ its agent:
   expired, forged or other session's token, a native session's, or one of an
   agent that has ended, is refused (401). The wrapper's own token (its
   job's, MCP among the rest) is taken too; the harness is given its own, for
-  MCP alone.
+  MCP alone. A refusal is said in agent-proxy's log (`the MCP pass-through
+  refused a call to /mcp/nimbus of agent <id> (401): <why>`: no header, an
+  expired token, one not this server's, one of no agent running now, or no
+  answer in time), once for each agent and reason until a call of that
+  agent is taken again, and never with the token.
 - **What doesn't change:** a native session's MCP. It is still Visor's
   `visor` server alone, its passed-on servers through it (`gh__pr_create`,
   each of them, as before),
@@ -610,6 +634,21 @@ its agent:
 - Only the server agent (`Visor --server`, where the container runs) gives
   agent-proxy the server to ask. agent-proxy as a launchd job, or in
   visor-server on Linux, takes the sessions' token alone, as before.
+
+## Its Claude's instructions
+
+Every Claude in the container reads its Claude folder's CLAUDE.md
+(`<Sessions>/.claude/CLAUDE.md`, CLAUDE_CONFIG_DIR's), as a user's
+`~/.claude/CLAUDE.md`. At each boot, before anything runs in the guest, the
+engine makes one where there's none (ContainerClaudeInstructions; Logan,
+26 Nov 2026): it imports the checkouts' AGENTS.md
+(`@/Volumes/Sources/AGENTS.md`, the checkouts' folder's), the rules the
+agents working there keep, and says, in a few lines, that the agent runs
+in the container, where its folder is, and that nothing is cloned for it:
+it clones what it needs into the checkouts' folder and pushes what it does
+there. One there already, or a link by that name, is never written over;
+none is made while the container shares no checkouts' folder, which the
+import needs.
 
 ## Placing sessions (the container runner)
 
@@ -630,15 +669,23 @@ intake's containment and caps).
 - **Move to Container** (`POST /api/sessions/<id>/moveToContainer`):
   refused while the container can't take sessions (off, no egress), for a
   session that's archived, mid-turn, not Claude Code's, has no conversation
-  yet, or works in a repository outside the container's folders with work
-  not pushed. Otherwise its agent here is ended and one is started in the
+  yet, or whose own folder is a repository outside the container's folders
+  with work not pushed. Otherwise its agent here is ended and one is started in the
   container on the same conversation (the driver's `Conversation` sends it
-  down). A session working under a folder the container shares (Sessions,
-  the checkouts' folder) keeps its folder; any other works in
-  `<Sessions>/Claude/<agent>`, the repositories it worked in cloned there.
-  Its prompts are skipped (the container is its sandbox), and asked again
-  once it's back. One whose agent can't start there comes straight back,
-  saying why. Answered once its agent has started.
+  down, with Claude's memory: the project's, where Claude Code keeps it
+  here, placed under the project Claude Code keeps the memory of its
+  folder there under). A session working under a folder the container
+  shares (Sessions, the checkouts' folder) keeps its folder; any other
+  works in a folder of its own, `<Sessions>/Claude/<id>`, empty, and is
+  told so. Nothing is cloned for it (Logan, 26 Nov 2026): its agent
+  clones what it needs into the checkouts' folder itself. (Before, the
+  repositories its transcript ran git in or edited under the home folder
+  were cloned there: Overcast, moved from another Mac, was given a
+  checkout of this Mac's its transcript named, isomer.) Its own folder's
+  repository stays on the Mac, so one with work not pushed is refused
+  until it is. Its prompts are skipped (the container is its sandbox),
+  and asked again once it's back. One whose agent can't start there comes
+  straight back, saying why. Answered once its agent has started.
 - **A new session in the container** (`POST /api/container/sessions {title,
   model, effort, text}`): a Claude Code session in a folder of its own,
   `<Sessions>/Claude/<id>`, its first message `text`.
@@ -780,7 +827,9 @@ would start with no token, and the driver would refuse them.
   lifecycle: an end started again, three quick ends stopping it, a container
   held stopped, a restart under it uncounted, Stop and Start Agent, a move
   refused or coming straight back, a folder of its own outside the shared
-  ones, and a new session there; the container's Claude environment (the
+  ones (by its id, nothing cloned into it, whatever repositories its
+  conversation named, and one whose own repository has work not pushed
+  refused), and a new session there; the container's Claude environment (the
   placeholder and the authorities, never a credential), `/login` in a
   container session pointing at Settings, and the credential's endpoint
   (ContainerAPITests: kept, refused for its shape, never answered, Sign
@@ -791,7 +840,10 @@ would start with no token, and the driver would refuse them.
   trusted; and Nimbus's MCP put in its Claude's `.claude.json` at its boot,
   alone and only where it's served (at its URL with Visor's headersHelper,
   no credential, Visor's gh and oss entries taken out, the rest kept,
-  written only on a change, a file that isn't JSON left alone). `//tests/visor_agent_proxy_tests`
+  written only on a change, a file that isn't JSON left alone); and its
+  Claude's CLAUDE.md made at its boot where there's none, importing the
+  checkouts' AGENTS.md, one there (or a link by its name) never written
+  over, none made with no checkouts' folder shared. `//tests/visor_agent_proxy_tests`
   (AgentProxyHostTests, NativeMCPProxyTests): the pass-through's own dial-in,
   reaching it alone, a container's call to Nimbus's through the relay let in
   with its agent's token as its session's, Nimbus's secret header added as

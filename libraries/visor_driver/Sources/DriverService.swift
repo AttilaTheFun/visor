@@ -221,7 +221,7 @@ struct DriverService: AgentProtocol_V1_AgentDriver.ServiceProtocol {
             VisorServer.log("driver: \(request.agent.uuid) asked for a conversation, but it wasn't moved here")
             return
         }
-        let files = ConversationFiles.of(resume: move.resume, cwd: move.cwd, for: request.workingDirectory)
+        let files = ConversationFiles.of(resume: move.resume, cwd: move.cwd, for: request.workingDirectory, log: { VisorServer.log($0) })
         var sent = 0
         for file in files {
             guard let handle = try? FileHandle(forReadingFrom: file.url) else { continue }
