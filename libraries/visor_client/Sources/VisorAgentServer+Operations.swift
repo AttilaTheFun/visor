@@ -49,6 +49,8 @@ extension VisorAgentServer {
             reply = try await call("POST", base + "/unqueue", e)
         case .permissions(let skip): reply = try await call("POST", base + "/permissions", .permissions(session: session, skipPermissions: skip))
         case .notifications(let on): reply = try await call("POST", base + "/notifications", .notifications(session: session, on: on))
+        case .pin: reply = try await call("POST", base + "/pin")
+        case .unpin: reply = try await call("POST", base + "/unpin")
         case .settings(let model, let effort): reply = try await call("POST", base + "/settings", .settings(session: session, model: model, effort: effort))
         case .approve(let id, let allow, let answers):
             reply = try await call("POST", base + "/approve", .approve(session: session, id: id, allow: allow, answers: answers))

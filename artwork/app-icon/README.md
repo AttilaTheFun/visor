@@ -12,6 +12,13 @@ use a shared 1024 × 1024 canvas; their imported copies live in
 The icon intentionally contains no text, facial features, or baked-in corner
 mask. Icon Composer supplies the platform shape and material treatment.
 
+`Visor.icon/Flattened/` holds Xcode 27.2's flattened images of the document
+(`index.json` and the PNGs), which rules_applecross's actool compiles on
+Linux in place of its own rendering, while the document's SHA-256 matches.
+After editing the document, render it again on a Mac with Xcode
+(`python3 <rules_applecross>/tools/icon_flattened.py artwork/app-icon/Visor.icon`)
+and commit the folder with the edit: docs/DEVELOPMENT.md, "The app icon".
+
 ## Exports
 
 `Visor.icns` is the compiled macOS icon (the same file actool writes

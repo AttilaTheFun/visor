@@ -10,5 +10,4 @@ struct SessionCard: Identifiable {
     let project: AgentServerConnection.Project
     let session: SessionInfo
     var id: String { host.id + "|" + session.id }
-    var updated: Double { session.updated ?? session.created }
 }

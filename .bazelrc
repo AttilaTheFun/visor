@@ -72,9 +72,10 @@ build:apple_on_linux --action_env=PATH=external/rules_applecross++apple_cross_to
 # blue's snapshots), as Linux's own default, x86_64, an Apple-silicon
 # simulator refuses.
 build:apple_on_linux --macos_cpus=arm64
-# Its clean-room tools make a near match to Xcode's output where they cannot
-# make it byte for byte (Visor's Icon Composer icon, drawn flat).
-build:apple_on_linux --action_env=RULES_APPLECROSS_RESOURCE_OUTPUT_MODE=relaxed
+# Strict: its clean-room tools' output is Xcode's, byte for byte, or the build
+# fails. Visor's Icon Composer icon is compiled from Xcode's own flattened
+# images, pre-rendered beside the document (artwork/app-icon/Visor.icon/
+# Flattened; docs/DEVELOPMENT.md, "The app icon").
 
 # A proposal's and a release's Apple apps, built on a Mac (CI's `xcode-27`:
 # alpha-apple, release-apple; not on Linux, whose clean-room actool draws

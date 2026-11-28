@@ -33,6 +33,11 @@ public protocol MessageStorage: AnyObject {
     /// The latest row whose id begins with one of `idPrefixes`, or a
     /// user's row whose words begin with one of `userTexts`.
     func lastMessage(_ session: String, idPrefixes: [String], userTexts: [String]) -> TranscriptEntry?
+    /// The sessions pinned (a server's: `SessionInfo.pinned`). Kept apart
+    /// from a session's rows and states: neither a session's reset
+    /// (`deleteSession`) nor a new schema drops them.
+    func pinnedSessions() -> Set<String>
+    func setPinned(_ pinned: Bool, _ session: String) throws
 }
 
 extension MessageStorage {
@@ -43,6 +48,10 @@ extension MessageStorage {
     /// A storage that keeps no list of its sessions: none forgotten, and
     /// each syncs on from where it stood.
     public func forgetGenerations() throws {}
+
+    /// A storage that keeps no pins: none pinned, and a pin is not kept.
+    public func pinnedSessions() -> Set<String> { [] }
+    public func setPinned(_ pinned: Bool, _ session: String) throws {}
 
     /// For a storage a host made before these could be asked of it: the
     /// rows read, and written back without those that go.

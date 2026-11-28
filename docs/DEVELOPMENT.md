@@ -1220,6 +1220,22 @@ container agents.
   says so, `--ios_multi_cpus=sim_arm64` (Linux's own default, x86_64, an
   Apple-silicon simulator refuses), and a device build says arm64: the
   flag accumulates, so `apple_on_linux` names neither.
+- The app icon (`artwork/app-icon/Visor.icon`, the Icon Composer document
+  every Apple app compiles, and blue's `artwork/visor_isomer_icon/
+  VisorIsomer.icon`): on Linux, rules_applecross's actool takes its
+  flattened images, which only Xcode draws, from the document's
+  `Flattened/` folder (`index.json` and a PNG for each image), rendered by
+  Xcode 27.2 once and checked in. It uses them while the SHA-256 of the
+  document's other files is the one `index.json` records: byte for byte
+  Xcode's output for the simulator, the devices and the Mac (Apple Cross
+  checked both icons against Xcode 27.2, rules_applecross#509), so Linux's
+  builds are strict (no relaxed output mode in .bazelrc). After any edit to
+  a `.icon` (in Icon Composer, or its `icon.json` or `Assets/`), render its
+  folder again on a Mac with Xcode 27.2 (a Nimbus macOS lease): `python3
+  <rules_applecross>/tools/icon_flattened.py <path>/Visor.icon`, from a
+  checkout of the rules_applecross that MODULE.bazel pins, and commit
+  `Flattened/` with the edit. A stale folder fails Linux's build, saying
+  so; a Mac's own build (its Xcode's actool) never reads it.
 - Test, on Linux: `bazel test //tests:linux` — the server's, the
   driver's, the message cache's, the transcript parser's and the Runner
   agent's, `swift_test` targets in Swift Testing. The server's suites are

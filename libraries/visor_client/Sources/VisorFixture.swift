@@ -46,6 +46,12 @@ public enum VisorFixture {
     /// (`-visor.fixture.orientation landscape`: the iPhone's proof, as a
     /// simulator can't be turned by a command); "" for the device's way.
     @MainActor public static var orientation: String { active ? (VisorHost.settings?.get(key: "fixture.orientation") ?? "") : "" }
+    /// The Mac window's width for its pictures, in points (`-visor.fixture.width
+    /// 320`: the content at its narrowest); nil for the window's default.
+    @MainActor public static var windowWidth: Double? {
+        guard active, let text = VisorHost.settings?.get(key: "fixture.width"), let width = Double(text), width > 0 else { return nil }
+        return width
+    }
 
     /// The draft a session opens with: "/" in the chat on the commands
     /// screen, so its slash commands are offered with nothing typed;
@@ -92,6 +98,8 @@ public enum VisorFixture {
     /// An exported session's bytes, as the fixture's computer gives them.
     static let archive = Data("A session archive in the fixture.".utf8)
 
+    /// (The widget's and the rate limits' previews are markdown, as an
+    /// agent's messages are: their rows show it rendered.)
     @MainActor static var sessions: [SessionInfo] {
         func session(_ id: String, _ agent: AgentKind, _ cwd: String, _ title: String, model: String, preview: String,
                      busy: Bool = false, age: Double) -> SessionInfo {
@@ -109,6 +117,11 @@ public enum VisorFixture {
         var chat = session(chatSession, .claude, "/Users/visor/Developer/weather", "Offline sync",
                            model: "opus", preview: "Rows now sync in the background; waiting for your approval to run the tests.", age: 60)
         chat.goal = "Rows written offline are all on the server after reconnecting"
+        // What its thread waits on (FixtureAgentServer's subscribe), as its
+        // computer lists it too: on the chat screen, the approval of its
+        // tests; on the question screen, the question.
+        if screen == "chat" { chat.pendingApproval = ApprovalRequest(id: "fixture-approval", tool: "Bash", summary: "swift test --filter SyncTests") }
+        if screen == "question" { chat.pendingApproval = question }
         // On the turn screens, the chat's turn as the list has it.
         if screen == "turn" || stillTurn != nil {
             let turn = stillTurn ?? turnSteps[0]
@@ -123,14 +136,16 @@ public enum VisorFixture {
                            model: "sonnet", preview: "Drafted the notes for 2.4 with the three fixes.", age: 7200)
         docs.goal = "The release notes cover every change since 2.3"
         docs.loopCron = "*/30 * * * *"
+        // Pinned, so it lists first (Pin in a row's menu).
+        docs.pinned = true
         var widget = session("fixture-busy", .codex, "/Users/visor/Developer/weather", "Widget layout",
-                             model: "gpt-5.5", preview: "Laying out the medium widget.", busy: true, age: 300)
+                             model: "gpt-5.5", preview: "Laying out the **medium** widget in `WidgetView`.", busy: true, age: 300)
         var sessions = [
             chat,
             widget,
             docs,
             session("fixture-api", .codex, "/Users/visor/Developer/api", "Rate limits",
-                    model: "gpt-5.5", preview: "The limiter now allows bursts of 20 per minute.", age: 86_400),
+                    model: "gpt-5.5", preview: "- The limiter now allows bursts of *20* per minute.", age: 86_400),
         ]
         // On the `machines` screen, where each runs: the widget's agent in a
         // container (the server's own), the release notes' in the Mac's

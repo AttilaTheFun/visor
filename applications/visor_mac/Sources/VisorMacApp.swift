@@ -99,17 +99,21 @@ struct VisorMacApp: App {
         Window("Visor", id: Self.mainWindow) {
             VisorRootView()
                 .environment(store)
-                // The sidebar at its ideal (300: AppKit lays the columns out
-                // at their ideal widths), the detail's least (440) and
-                // Settings' inspector at its ideal (320), with room: at 980
-                // the detail got 360 and the chat ran under its composer.
-                .frame(minWidth: 1_100, minHeight: 480)
+                // As narrow as the content goes (320, the narrowest an iPad
+                // app gets in Stage Manager: Logan, 27 Nov 2026) with the
+                // sidebar hidden; with it shown, the sidebar's room too, and
+                // the pane a sheet where it has no room beside the content
+                // (VisorRootView, NarrowWindow). It opens at its default
+                // size, below.
+                .frame(minWidth: 320, minHeight: 480)
                 // visor://connect?code=… — a connection code from a QR code
                 // or a link adds that computer; visor://sign-in shows a
                 // computer's settings.
                 .onOpenURL { url in store.open(url.absoluteString) }
                 .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
                 .background(SceneOpeners())
+                // A picture's narrow window, narrowed once it is up.
+                .task { await FixtureWindow.narrow() }
                 // Shireworks Kit: crashes and Help › Report a Bug… (below)
                 // filed as issues in the Info.plist's ShireworksRepository,
                 // and Shireworks' offers of an update answered as
@@ -126,8 +130,10 @@ struct VisorMacApp: App {
         // launch's to say (above), not what was open when Visor last went,
         // so launchd's launch at login keeps to the menu bar.
         .restorationBehavior(.disabled)
-        // The sidebar, and a thread about as wide as the transcript grows.
-        .defaultSize(width: 1200, height: 820)
+        // The sidebar, and a thread about as wide as the transcript grows;
+        // a picture's own width where the fixture names one (its
+        // fixture.width: the content at its narrowest, FixtureWindow).
+        .defaultSize(width: FixtureWindow.openingWidth ?? 1200, height: 820)
         .commands {
             // ⌘Q closes the window, back to the menu bar: quitting ends the
             // agents of the server in the app, which only the menu's Quit

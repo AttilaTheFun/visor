@@ -8,6 +8,9 @@ import SwiftUI
 #if canImport(QuickLook)
 import QuickLook
 #endif
+#if os(macOS)
+import AppKit
+#endif
 
 /// What differs by platform outside a view modifier.
 enum Compat {
@@ -18,6 +21,22 @@ enum Compat {
         true
         #else
         false
+        #endif
+    }
+
+    /// The Mac's key window widened to `width` where it is narrower (the
+    /// sidebar shown in a window too narrow for it: NarrowWindow), kept on
+    /// its screen. Elsewhere nothing: a phone's or a tablet's width is the
+    /// system's.
+    @MainActor static func widenWindow(toAtLeast width: CGFloat) {
+        #if os(macOS)
+        guard let window = NSApp.keyWindow ?? NSApp.mainWindow, window.frame.width < width else { return }
+        var frame = window.frame
+        frame.size.width = width
+        if let screen = window.screen?.visibleFrame, frame.maxX > screen.maxX {
+            frame.origin.x = max(screen.minX, screen.maxX - frame.width)
+        }
+        window.setFrame(frame, display: true, animate: true)
         #endif
     }
 
@@ -104,16 +123,18 @@ extension View {
     /// A short list of choices in a sheet: on the Mac a sheet gives a list
     /// no height of its own, and it draws at none; a floor of a row each
     /// (plus the chrome) shows it. A phone's sheet fills the screen anyway.
+    /// In a narrow window, no wider at its least than the content's 320
+    /// (MacSheetWidth).
     @ViewBuilder func choiceListInSheet(rows: Int) -> some View {
         #if os(macOS)
-        frame(minWidth: 360, minHeight: CGFloat(rows) * 32 + 24)
+        modifier(MacSheetWidth(width: 360, height: CGFloat(rows) * 32 + 24))
         #else
         self
         #endif
     }
 
     /// The chat's column on the Mac: no minimum width of its own, so its
-    /// column's is the split view's (320) and the rows and the composer fit
+    /// column's is the split view's (320, VisorRootView) and the rows and the composer fit
     /// what they get. With the chat's own minimum (its composer's buttons
     /// and command, the rows' fixed pieces), opening the inspector on a
     /// screen too narrow for the three columns set the split view raising
@@ -168,18 +189,46 @@ extension View {
 
 extension View {
     /// A sheet's heights on a phone (and on the portable SwiftUI, whose
-    /// sheets are a phone's); a window's size on the Mac.
+    /// sheets are a phone's); a window's size on the Mac, no wider at its
+    /// least than the content's 320 in a narrow window (MacSheetWidth).
     @ViewBuilder func presentationDetentsLarge() -> some View {
         #if os(macOS)
-        frame(minWidth: 520, minHeight: 560)
+        modifier(MacSheetWidth(width: 520, height: 560))
         #else
         presentationDetents([.large])
         #endif
     }
 
+    /// The Mac window's least width: the content's, and the sidebar's room
+    /// beside it while it shows (NarrowWindow). Elsewhere as it is.
+    @ViewBuilder func narrowWindowMinimum(sidebarShown: Bool) -> some View {
+        #if os(macOS)
+        frame(minWidth: sidebarShown ? NarrowWindow.besideSidebar : NarrowWindow.content)
+        #else
+        self
+        #endif
+    }
+
+    /// The pane (Settings, a session's details) as a sheet on the Mac, in
+    /// a window too narrow for it beside the content (NarrowWindow): a
+    /// sheet's size, as the pane's column gave it one. Elsewhere as it is.
+    @ViewBuilder func paneSheetOnMac(_ sheet: Bool) -> some View {
+        #if os(macOS)
+        if sheet {
+            // Grouped, as the pane's column draws it (Settings' form in a
+            // sheet is otherwise the Mac's columns form).
+            formStyle(.grouped).frame(minWidth: NarrowWindow.content, minHeight: 480, idealHeight: 640)
+        } else {
+            self
+        }
+        #else
+        self
+        #endif
+    }
+
     @ViewBuilder func presentationDetentsMediumLarge() -> some View {
         #if os(macOS)
-        frame(minWidth: 440, minHeight: 380)
+        modifier(MacSheetWidth(width: 440, height: 380))
         #else
         presentationDetents([.medium, .large])
         #endif

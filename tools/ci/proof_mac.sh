@@ -27,6 +27,8 @@
 #                          --shots, Nimbus' picture of a VM's framebuffer,
 #                          whose VMs may not picture their own screen yet),
 #                          cut to the window here with sips
+#   VISOR_PROOF_MAC_SCREENS  the screens, in place of all of them (a few,
+#                          by hand in a VM)
 #
 # Fails when a screen's window never showed, after every screen.
 set -euo pipefail
@@ -35,7 +37,10 @@ me="$(basename "$0")"
 apps="$(cd "$1" && pwd)"
 mkdir -p "$2"
 out="$(cd "$2" && pwd)"
-SCREENS="sessions machines chat question goal inspector models search connect new-session commands settings"
+# A screen ending in a width (chat-320) is the same screen in a window that
+# many points wide (the fixture's fixture.width): at 320, the content at its
+# narrowest, the sidebar collapsed and the chat or the pane in what is left.
+SCREENS="${VISOR_PROOF_MAC_SCREENS:-sessions machines chat question goal inspector models search connect new-session commands settings chat-320 inspector-320}"
 SETTLE="${VISOR_SNAPSHOT_SETTLE:-8}"
 SHOT="${VISOR_PROOF_SHOT:-screencapture}"
 case "$SHOT" in screencapture | framebuffer) ;; *) echo "$me: VISOR_PROOF_SHOT is screencapture or framebuffer, not $SHOT" >&2; exit 2 ;; esac
@@ -127,8 +132,10 @@ scrollbars="$(defaults read -g AppleShowScrollBars 2> /dev/null || true)"
 echo "The runner's scroll bars: ${scrollbars:-unset (Automatic)}"
 for screen in $SCREENS; do
     echo "::group::$screen"
+    width=()
     case "$screen" in
         *-overlay) defaults write -g AppleShowScrollBars WhenScrolling; fixture="${screen%-overlay}" ;;
+        *-[0-9][0-9][0-9]) fixture="${screen%-*}"; width=(-visor.fixture.width "${screen##*-}") ;;
         *) fixture="$screen" ;;
     esac
     # Each launch a first one, whatever the one before did (a crash left
@@ -146,7 +153,7 @@ for screen in $SCREENS; do
     # accessibility, every menu opened: 50% of the runner's CPU on the
     # settings screen, 33% on commands (0.63's release run).
     open -n --env ISO_DRIVER=none --stdout "$out/logs/$screen.log" --stderr "$out/logs/$screen.log" "$app" --args \
-        -visor.fixture snapshot -visor.fixture.screen "$fixture" -visor.fixture.appearance light \
+        -visor.fixture snapshot -visor.fixture.screen "$fixture" -visor.fixture.appearance light ${width[@]+"${width[@]}"} \
         -ApplePersistenceIgnoreState YES \
         -NSTextInsertionPointBlinkPeriodOn 100000000 -NSTextInsertionPointBlinkPeriodOff 0.001
     pid=""
