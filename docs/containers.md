@@ -92,7 +92,9 @@ for its `Sessions/`, the working folders of sessions moved in before 0.65,
 which the sessions' store and Claude's project keys know by their paths, and
 which go with Migrate… or Move to Container; server.sqlite goes with the
 files SQLite keeps beside it, all of them or none, and is put aside with them
-when the volume has one), the server's cache and the logs; the app moves its own cache. Not while an agent's host still answers
+when the volume has one; what a crash in the middle left staged is never
+deleted, but kept in `moved-aside/` as `<name>.staged-<time>` when its place is
+taken), the server's cache and the logs; the app moves its own cache. Not while an agent's host still answers
 in the data folder's `hosts/` (an update leaves the agents running): then
 the data folder stays in the home folder until a start with none running (a
 restart of the Mac, or Quit Visor). Without the volume, everything is where

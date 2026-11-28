@@ -15,7 +15,8 @@
 //   database is never put beside another's log. A database's files move
 //   together, by staged names first (`.moving`), and all go back if one
 //   can't; what a crash in the middle left staged is sorted out at the
-//   next start.
+//   next start on the volume, and never deleted: one whose place is taken
+//   is kept in `moved-aside/` as `<name>.staged-<time>`.
 // - Not while an agent's host still answers in its `hosts/` folder: an
 //   in-place relaunch leaves the agents running, and their hosts' sockets
 //   and token files are in that folder. The move waits for a start with no
@@ -194,7 +195,9 @@ public struct VisorFolderMove: Sendable {
         var placed: [Step] = []
         var failure: String?
         for step in group {
-            try? files.removeItem(at: Self.staged(step.to))
+            if files.fileExists(atPath: Self.staged(step.to).path) {
+                keepAside(Self.staged(step.to), why: "found where \(step.name) is staged")
+            }
             do {
                 try files.moveItem(at: step.from, to: Self.staged(step.to))
                 staged.append(step)
@@ -217,36 +220,103 @@ public struct VisorFolderMove: Sendable {
         guard let failure else { return nil }
         for step in staged {
             let at = placed.contains { $0.name == step.name } ? step.to : Self.staged(step.to)
-            try? files.moveItem(at: at, to: step.from)
+            do {
+                try files.moveItem(at: at, to: step.from)
+            } catch {
+                // Left where it is (staged, the next start sorts it out), never lost.
+                log("\(at.path) couldn't be put back at \(step.from.path): \(error.localizedDescription); it is left where it is")
+            }
         }
         return failure + "; \(first.unit) and its files stay at \(first.from.deletingLastPathComponent().path)"
     }
 
     /// What a move cut short left staged (a crash in a copy to the volume):
-    /// put back in the home folder while any file of its unit is still
-    /// there (or dropped, where the home folder has that file itself: the
-    /// copy hadn't finished), else put where it was going.
+    /// put back in the home folder while another file of its unit is still
+    /// there, else put where it was going. Never deleted: one whose place is
+    /// taken (the home folder has the file again, a later start without the
+    /// volume having made it there, or a copy cut short) is kept aside
+    /// (`keepAside`). In moved-aside/ a file's name carries its tag after its
+    /// unit's (`-<8 hex>`), which the home folder's hasn't.
     private func finishStaged(from legacy: URL) {
         let files = FileManager.default
-        for folder in [folders.data, folders.data.appendingPathComponent(Self.movedAside, isDirectory: true)] {
-            for name in (try? files.contentsOfDirectory(atPath: folder.path)) ?? [] where name.hasSuffix(Self.staging) {
+        let aside = folders.data.appendingPathComponent(Self.movedAside, isDirectory: true)
+        for folder in [folders.data, aside] {
+            for name in ((try? files.contentsOfDirectory(atPath: folder.path)) ?? []).sorted() where name.hasSuffix(Self.staging) {
                 let stage = folder.appendingPathComponent(name)
                 let base = String(name.dropLast(Self.staging.count))
-                let unit = Self.unit(of: base)
-                let home = legacy.appendingPathComponent(base)
+                let homeName = folder == aside ? Self.untagged(base) : base
+                let unit = Self.unit(of: homeName)
+                let home = legacy.appendingPathComponent(homeName)
                 let unitAtHome = ([unit] + Self.databaseCompanions.map { unit + $0 }).contains {
                     files.fileExists(atPath: legacy.appendingPathComponent($0).path)
                 }
                 if files.fileExists(atPath: home.path) {
-                    try? files.removeItem(at: stage)
+                    keepAside(stage, why: "the home folder has \(homeName) too")
                 } else if unitAtHome {
-                    try? files.moveItem(at: stage, to: home)
+                    do {
+                        try files.moveItem(at: stage, to: home)
+                        log("\(stage.path), left by a move cut short, is back at \(home.path), with the rest of \(unit)")
+                    } catch {
+                        log("\(stage.path), left by a move cut short, couldn't be put back at \(home.path): \(error.localizedDescription); it is left where it is")
+                    }
                 } else if !files.fileExists(atPath: folder.appendingPathComponent(base).path) {
-                    try? files.moveItem(at: stage, to: folder.appendingPathComponent(base))
+                    do {
+                        try files.moveItem(at: stage, to: folder.appendingPathComponent(base))
+                        log("\(stage.path), left by a move cut short, is put in its place")
+                    } catch {
+                        log("\(stage.path), left by a move cut short, couldn't be put in its place: \(error.localizedDescription); it is left where it is")
+                    }
+                } else {
+                    keepAside(stage, why: "\(base) is there already")
                 }
-                log("\(stage.path), left by a move cut short, is \(files.fileExists(atPath: stage.path) ? "left as it is" : "dealt with")")
             }
         }
+    }
+
+    /// A staged file kept, never deleted: in moved-aside/ as
+    /// `<unit>.staged-<yyyymmdd-hhmmss><its end>` (`-wal` and the like after
+    /// it, so a database and its log kept so still go together), never over
+    /// another, and logged.
+    private func keepAside(_ stage: URL, why: String) {
+        let files = FileManager.default
+        let aside = folders.data.appendingPathComponent(Self.movedAside, isDirectory: true)
+        try? files.createDirectory(at: aside, withIntermediateDirectories: true)
+        let base = String(stage.lastPathComponent.dropLast(Self.staging.count))
+        let unit = Self.unit(of: base)
+        let end = String(base.dropFirst(unit.count))
+        let stamp = Self.stamp(Date())
+        var to = aside.appendingPathComponent("\(unit).staged-\(stamp)\(end)")
+        var number = 1
+        while files.fileExists(atPath: to.path) || isLink(to) {
+            number += 1
+            to = aside.appendingPathComponent("\(unit).staged-\(stamp)-\(number)\(end)")
+        }
+        do {
+            try files.moveItem(at: stage, to: to)
+            log("\(stage.path), left by a move cut short (\(why)), is kept as \(to.path)")
+        } catch {
+            log("\(stage.path), left by a move cut short (\(why)), couldn't be kept aside: \(error.localizedDescription); it is left where it is")
+        }
+    }
+
+    /// A name in moved-aside/ without the tag its unit was given there
+    /// (`server.sqlite-1a2b3c4d-wal` is `server.sqlite-wal`); one with none,
+    /// itself.
+    public static func untagged(_ name: String) -> String {
+        let end = databaseCompanions.first { name.hasSuffix($0) } ?? ""
+        let core = name.dropLast(end.count)
+        let tag = core.suffix(9)
+        guard core.count > 9, tag.first == "-", tag.dropFirst().allSatisfy({ $0.isHexDigit && !$0.isUppercase }) else { return name }
+        return String(core.dropLast(9)) + end
+    }
+
+    /// A moment as a kept file is named by it: 20261127-153000 (UTC).
+    static func stamp(_ date: Date) -> String {
+        let format = DateFormatter()
+        format.locale = Locale(identifier: "en_US_POSIX")
+        format.timeZone = TimeZone(identifier: "UTC")
+        format.dateFormat = "yyyyMMdd-HHmmss"
+        return format.string(from: date)
     }
 
     /// A cache's folder (`Server`, `Client`) moved onto the volume whole,
