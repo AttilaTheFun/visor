@@ -1,0 +1,104 @@
+{
+  "document": "5989232d6a81a6a92c82b855336f6ec053f4ccfd859c580c164c2d271206deb5",
+  "format": "rules_applecross flattened Icon Composer images 1",
+  "images": {
+    "ios/60x60@2x": {
+      "bytes": "rgba",
+      "file": "ios_60x60@2x.png",
+      "height": 120,
+      "width": 120
+    },
+    "ios/76x76@2x~ipad": {
+      "bytes": "rgba",
+      "file": "ios_76x76@2x~ipad.png",
+      "height": 152,
+      "width": 152
+    },
+    "ios/any": {
+      "bytes": "rgba",
+      "file": "ios_any.png",
+      "height": 1024,
+      "width": 1024
+    },
+    "ios/dark": {
+      "bytes": "rgba",
+      "file": "ios_dark.png",
+      "height": 1024,
+      "width": 1024
+    },
+    "ios/tintable": {
+      "bytes": "rgba",
+      "file": "ios_tintable.png",
+      "height": 1024,
+      "width": 1024
+    },
+    "mac/1024@1x": {
+      "bytes": "bgra-premultiplied",
+      "file": "mac_1024@1x.png",
+      "height": 1024,
+      "width": 1024
+    },
+    "mac/128@2x": {
+      "bytes": "bgra-premultiplied",
+      "file": "mac_128@2x.png",
+      "height": 256,
+      "width": 256
+    },
+    "mac/16@2x": {
+      "bytes": "bgra-premultiplied",
+      "file": "mac_16@2x.png",
+      "height": 32,
+      "width": 32
+    },
+    "mac/256@2x": {
+      "bytes": "bgra-premultiplied",
+      "file": "mac_256@2x.png",
+      "height": 512,
+      "width": 512
+    },
+    "mac/32@2x": {
+      "bytes": "bgra-premultiplied",
+      "file": "mac_32@2x.png",
+      "height": 64,
+      "width": 64
+    },
+    "mac/512@2x": {
+      "bytes": "bgra-premultiplied",
+      "file": "mac_512@2x.png",
+      "height": 1024,
+      "width": 1024
+    },
+    "mac/64@2x": {
+      "bytes": "bgra-premultiplied",
+      "file": "mac_64@2x.png",
+      "height": 128,
+      "width": 128
+    },
+    "mac/icns/ic04": {
+      "bytes": "rgba",
+      "file": "mac_icns_ic04.png",
+      "height": 16,
+      "width": 16
+    },
+    "mac/icns/ic07": {
+      "bytes": "rgba",
+      "file": "mac_icns_ic07.png",
+      "height": 128,
+      "width": 128
+    },
+    "mac/icns/ic11": {
+      "bytes": "rgba",
+      "file": "mac_icns_ic11.png",
+      "height": 32,
+      "width": 32
+    },
+    "mac/icns/ic13": {
+      "bytes": "rgba",
+      "file": "mac_icns_ic13.png",
+      "height": 256,
+      "width": 256
+    }
+  },
+  "machine": "VirtualMac2,1",
+  "xcode": "Xcode 27.2 Build version 27B52"
+}

@@ -23,11 +23,11 @@ bazel_dep(name = "rules_swift", version = "4.3.0.isomer.1")
 # The server's one C file (libraries/visor_server_posix/c); already in the
 # graph at this version through rules_applecross.
 bazel_dep(name = "rules_cc", version = "0.2.26")
-# rules_apple from the project's registry: 5.3.1.applecross.6 is rules_apple
-# 5.3.1 with rules_applecross's patches (bundling and signing on Linux),
-# asking for rules_applecross 0.0.3.382f8c3, which asks for it back (a
-# preset pair, as isomer has it).
-bazel_dep(name = "rules_apple", version = "5.3.1.applecross.6")
+# rules_apple from the project's registry: 5.3.1.applecross.7 is rules_apple
+# 5.3.1 with rules_applecross's patches (bundling and signing on Linux), the
+# one rules_applecross 0.0.3.d44bc87 (below) asks for (a preset pair, as
+# isomer has it).
+bazel_dep(name = "rules_apple", version = "5.3.1.applecross.7")
 # Visor's own patch on top: on a phone (the lab's iPhone), a UI test's runner
 # app named as Xcode names a device's (<app>.xctrunner): a device finds no
 # container for the simulator's "com.apple.test." name.
@@ -35,7 +35,7 @@ single_version_override(
     module_name = "rules_apple",
     patch_strip = 1,
     patches = ["//third_party/patches:rules_apple_device_xctrunner.patch"],
-    version = "5.3.1.applecross.6",
+    version = "5.3.1.applecross.7",
 )
 
 # The Apple apps built on Linux (a container, a VM): rules_applecross (its
@@ -48,19 +48,20 @@ single_version_override(
 # served (a Shireworks server's /files/sha256/<hex>, with its read token in .netrc).
 # Without either, Linux fails to resolve apple-sdks.invalid. Its ported
 # tools (the clean-room ones, built for Linux) come the same way, by their
-# SHA-256 (third_party/applecross/ported_tools.sha256: newer than its last
-# release, whose codesign can't seal a Mac app's nested code), from the same
+# SHA-256 (third_party/applecross/ported_tools.sha256: rules_applecross's
+# own at d44bc87, ported tools 0.0.142), from the same
 # --distdir or a rewrite of ported-tools.invalid. The toolchains
 # are registered for Linux alone, by the builder that has the SDKs
 # (.bazelrc's apple_on_linux, turned on in .bazelrc.user), so a Mac builds
 # as before and a Linux without them builds what runs on Linux.
-# From the project's registry: 0.0.3.382f8c3 is rules_applecross's main at
-# 382f8c3 (rules_apple's imported frameworks find its lipo on Linux, and
-# ibtool fixes), the preset rules_apple above asks for, until it has a
-# release in the BCR.
+# From the project's registry: 0.0.3.d44bc87 is rules_applecross's main at
+# d44bc87 (ported tools 0.0.142: actool compiles an Icon Composer document
+# strictly with Xcode's own flattened images, pre-rendered beside it in
+# DOC.icon/Flattened, rules_applecross#509), asking for the rules_apple
+# above, until it has a release in the BCR.
 # Its actool and coremlc take Xcode 27.0 or 27.2 alone (else
 # --config=relax_xcode_version).
-bazel_dep(name = "rules_applecross", version = "0.0.3.382f8c3")
+bazel_dep(name = "rules_applecross", version = "0.0.3.d44bc87")
 apple_cross_toolchain = use_extension("@rules_applecross//toolchain:extensions.bzl", "apple_cross_toolchain")
 # The Swift that built Xcode 27.2's SDKs.
 apple_cross_toolchain.swift(
