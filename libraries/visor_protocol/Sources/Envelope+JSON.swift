@@ -78,6 +78,7 @@ extension Envelope {
         e.codes = ConnectionCodes(json: value["codes"])
         e.standalone = value["standalone"].bool
         e.keepMessages = value["keepMessages"].bool
+        e.pins = value["pins"].bool
         e.container = value["container"].bool
         e.on = value["on"].bool
         e.resumable = value["resumable"].array?.compactMap(ResumableSession.init(json:))
@@ -154,6 +155,7 @@ extension Envelope {
         if let codes { o["codes"] = codes.json }
         putBool("standalone", standalone)
         putBool("keepMessages", keepMessages)
+        putBool("pins", pins)
         putBool("container", container)
         putBool("on", on)
         if let resumable { o["resumable"] = .array(resumable.map(\.json)) }

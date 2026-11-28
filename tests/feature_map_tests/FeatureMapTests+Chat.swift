@@ -23,7 +23,11 @@ extension FeatureMapTests {
         func details() throws {
             let app = try chat()
             defer { app.quit() }
-            FeatureMapNode.details.expectShown(on: try app.tap("session-title"))
+            let details = try app.tap("session-title")
+            FeatureMapNode.details.expectShown(on: details)
+            // Its folder is here, not in its row in Sessions.
+            #expect(details.shows("/Users/visor/Developer/weather") || details.elements.contains { ($0.value ?? "").contains("/Users/visor/Developer/weather") },
+                    "the folder: \(details.summary)")
             FeatureMapNode.chat.expectShown(on: try app.tap("details-done"))
         }
 
@@ -114,6 +118,26 @@ extension FeatureMapTests {
         /// reply's row once it syncs, once, and the line gone. (Not among
         /// FixtureScreens': while the turn runs the composer offers Stop,
         /// not Send, so the chat is told by its end.)
+        /// An approval or a question the chat waits on: in Sessions, its
+        /// row's own mark, a raised hand or a question (`activity-‹id›`),
+        /// where any other wait is a clock.
+        @Test("Session chat → Sessions: back; the row marks what waits on the person", arguments: [
+            ("chat", "Waiting for your approval"),
+            ("question", "Asking you a question"),
+        ])
+        func waitsOnThePerson(screen: String, mark: String) throws {
+            let app = try VisorLaunch.fixture(screen)
+            defer { app.quit() }
+            if screen == "question" {
+                try app.screen { FeatureMapNode.question.isShown(on: $0) }
+                try app.dismiss()
+            }
+            try app.screen { FeatureMapNode.chat.isShown(on: $0) }
+            _ = try app.back()
+            let listed = try app.screen { $0.row("Offline sync", marked: "activity-fixture-chat", mark) }
+            #expect(listed.row("Offline sync", marked: "activity-fixture-chat", mark), "the list's mark: \(listed.summary)")
+        }
+
         @Test("Session chat: the turn's line through its states, then the reply's row")
         func turnStates() throws {
             let reply = "All 42 sync tests pass, offline rows included, and the banner shows how many are still waiting."
@@ -133,23 +157,28 @@ extension FeatureMapTests {
         }
 
         /// A turn held in one state (the turn-‹state› fixtures): its words
-        /// under the thread, and on the iPhone's Sessions page under the
-        /// session's row (`waiting-‹id›`).
-        @Test("Session chat: a waiting turn's line, in the chat and in the list", arguments: [
-            ("turn-tool", "Running Bash: swift test --filter SyncTests"),
-            ("turn-subagents", "Waiting for 2 subagents"),
-            ("turn-background", "Waiting on CI checks on PR #92"),
+        /// under the thread; on the iPhone's Sessions page only the mark
+        /// at the end of the session's first line (`activity-‹id›`): a
+        /// spinner while the agent runs a tool call of its own, a clock
+        /// while it waits on anything else (subagents, a monitor), and
+        /// its goal's flag (`goal-‹id›`). The words stay the chat's.
+        @Test("Session chat: a waiting turn's line in the chat, its mark in the list", arguments: [
+            ("turn-tool", "Running Bash: swift test --filter SyncTests", "Working"),
+            ("turn-subagents", "Waiting for 2 subagents", "Waiting"),
+            ("turn-background", "Waiting on CI checks on PR #92", "Waiting"),
         ])
-        func turnWaiting(screen: String, words: String) throws {
+        func turnWaiting(screen: String, words: String, mark: String) throws {
             let app = try VisorLaunch.fixture(screen)
             defer { app.quit() }
             let chat = try app.screen(within: 10) { $0.texts.contains(words) }
             #expect(chat.texts.contains(words), "the chat's line: \(chat.summary)")
             #expect(chat.has(id: "session-title"), "the chat: \(chat.summary)")
-            let list = try app.back()
-            let listed = try app.screen { $0.has(id: "waiting-fixture-chat") }
-            #expect(listed.element("waiting-fixture-chat")?.label == words || listed.texts.contains(words),
-                    "the list's line: \(list.summary)")
+            _ = try app.back()
+            let listed = try app.screen { $0.row("Offline sync", marked: "activity-fixture-chat", mark) }
+            #expect(listed.row("Offline sync", marked: "activity-fixture-chat", mark), "the list's mark: \(listed.summary)")
+            #expect(listed.row("Offline sync", marked: "goal-fixture-chat", "Goal: Rows written offline are all on the server after reconnecting"),
+                    "the goal's flag: \(listed.summary)")
+            #expect(!listed.has(id: "waiting-fixture-chat"), "no line of the turn's under its row: \(listed.summary)")
         }
 
         @Test("Session chat → Side Questions: type /btw, tap “Send”; back")

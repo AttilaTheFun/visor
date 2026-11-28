@@ -400,7 +400,7 @@ public struct VisorRootView: View {
         }
         .onChange(of: selection) { _, value in
             // Another session's chat starts with nothing over it, or with
-            // the page it was opened for (a capsule in the list).
+            // the page it was opened for from outside its chat.
             subPath = pendingPath ?? []
             pendingPath = nil
             // A session's inspector open: it follows the selection, so its
@@ -547,8 +547,9 @@ public struct VisorRootView: View {
         }
     }
 
-    /// One section per computer, headed by its name and whether it is
-    /// answering: its sessions, the latest activity first; its projects'
+    /// One section per computer, by name, headed by its name and whether
+    /// it is answering: its sessions, those pinned first, each by title
+    /// (SidebarOrder: nothing that happens moves a row); its projects'
     /// archives. The last section adds a computer. Each computer's
     /// settings and the account are in Settings (VisorSettingsView).
     /// Search narrows the rows in every section at once.
@@ -556,7 +557,7 @@ public struct VisorRootView: View {
         // On a phone the selection is what shows: a session's chat, or the
         // list again once Back clears it.
         List(selection: $selection) {
-            ForEach(store.servers) { host in
+            ForEach(store.servers.sorted { SidebarOrder.computer($0.record.name, before: $1.record.name) }) { host in
                 HostSection(host: host) { host in hostRows(host) }
             }
             // What was said, as well as what the sessions are called.
@@ -613,7 +614,7 @@ public struct VisorRootView: View {
     @ViewBuilder private func hostRows(_ host: AgentServerConnection) -> some View {
         let projects = entries(for: host)
         let cards = projects.flatMap { entry in entry.project.sessions.map { SessionCard(host: host, project: entry.project, session: $0) } }
-            .sorted { $0.updated > $1.updated }
+            .sorted { SidebarOrder.session($0.session, before: $1.session) }
         let archived = projects.flatMap(\.project.archived)
         // While messages match the search below, a computer with no
         // session named so says nothing.
@@ -624,9 +625,7 @@ public struct VisorRootView: View {
         }
         ForEach(cards) { card in
             let which = SessionSelection(serverID: host.id, sessionID: card.session.id)
-            SessionCardRow(session: card.session, selected: selection == .session(which),
-                           subSessions: SubSessionList.items(of: card.session, children: host.children(of: card.session.id)),
-                           open: openSelection, serverID: host.id)
+            SessionCardRow(session: card.session, selected: selection == .session(which))
                 .tag(ContentSelection.session(which))
                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                     Button { host.archive(card.session.id) } label: { Label("Archive", systemImage: "archivebox") }
@@ -664,6 +663,16 @@ public struct VisorRootView: View {
 
     @ViewBuilder private func sessionMenu(_ card: SessionCard) -> some View {
         let host = card.host, session = card.session
+        // To the top of its computer's list, among those pinned; unpinned,
+        // back among the rest. Not from a server that keeps no pins
+        // (before 0.73).
+        if host.pins {
+            if !session.pinned {
+                Button { host.pin(session.id) } label: { Label("Pin", systemImage: "pin") }
+            } else {
+                Button { host.unpin(session.id) } label: { Label("Unpin", systemImage: "pin.slash") }
+            }
+        }
         Button { nameDraft = session.title; renamingSession = SessionTarget(host: host, session: session) } label: {
             Label("Rename", systemImage: "pencil")
         }
