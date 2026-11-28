@@ -5,7 +5,8 @@
 # entitlements its signature already carries (apple_profiles.py, by
 # rcodesign), so an app built unsigned would lose them (the microphone,
 # Visor.app's). rules_apple signs the app ad hoc with its entitlements (CI's
-# macOS VM, --config=ci_device); this says so or fails. The app's executable
+# build on a Nimbus runner, on Linux, --config=ci_device); this says so or
+# fails. The app's executable
 # (its CFBundleExecutable) must have a code signature (LC_CODE_SIGNATURE)
 # holding each entitlement named, and every program in Contents/Helpers a
 # signature of its own.

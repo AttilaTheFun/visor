@@ -1,4 +1,5 @@
 # rules_applecross's ported tools by their SHA-256 (MODULE.bazel): its
-# ported-tools workflow's archives from its main at 0785e7f, which a
+# ported-tools workflow's archives (ported tools 0.0.142), as its main at
+# d44bc87 lists them (toolchain/ported_tools.sha256), which a
 # builder's --distdir or a Shireworks server's /files serves.
 exports_files(["ported_tools.sha256"])
