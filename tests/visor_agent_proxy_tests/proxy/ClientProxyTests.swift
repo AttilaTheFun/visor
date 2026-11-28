@@ -49,11 +49,20 @@ private final class FakeServer: Sendable {
 }
 
 final class ClientProxyTests: XCTestCase {
+    /// A front on a random port that 127.0.0.1 reaches. A front is had with
+    /// IPv4's or IPv6's listener alone, so one whose IPv4 port another
+    /// socket held (a test run beside this one) answered only on ::1: it is
+    /// let go, and another port tried.
     private func front(to host: String, _ hostPort: Int) throws -> ClientProxy {
         for _ in 0..<20 {
             if let proxy = ClientProxy(front: .init(name: "co-tenant", port: Int.random(in: 20000...45000), host: host, hostPort: hostPort)) {
                 proxy.start()
-                return proxy
+                let probe = agent_proxy_connect_tcp("127.0.0.1", UInt16(proxy.front.port))
+                if probe >= 0 {
+                    close(probe)
+                    return proxy
+                }
+                proxy.stop()
             }
         }
         throw XCTSkip("no port for the front")

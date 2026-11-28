@@ -158,6 +158,18 @@ final class DNSTests: XCTestCase {
         } catch {}
     }
 
+    /// A server its owner drops without serving (here, as when the next
+    /// server can't be had and the test throws): its listeners are closed,
+    /// and NIO's writers don't trap.
+    func testAServerDroppedWithoutServingClosesWithoutTrapping() async throws {
+        guard #available(macOS 14, *) else { throw XCTSkip("DNSServer is macOS 14's") }
+        let forwarder = DNSForwarder(routes: { DNSRoutes(system: [], fallbacks: []) }, exchange: NIODNSExchange())
+        var server: DNSServer? = try await DNSServer(hosts: ["127.0.0.1"], port: 0, forwarder: forwarder)
+        XCTAssertEqual(server?.addresses.count, 1)
+        server = nil
+        XCTAssertNil(server)
+    }
+
     func testTheServerAnswersOverUDPAndTCPAndATruncatedAnswerIsAskedAgainOverTCP() async throws {
         guard #available(macOS 14, *) else { throw XCTSkip("DNSServer is macOS 14's") }
         let upstreamExchange = ScriptedExchange([:], answer: { query in

@@ -20,6 +20,17 @@ final class EgressPolicyTests: XCTestCase {
         return String(cString: buffer).split(separator: "\n").map(String.init)
     }
 
+    /// The first of `tries` that `make` gives, each made once. Not a lazy
+    /// compactMap's `first`: that runs its closure twice for the element it
+    /// gives (once to test it, once to return it), so a random port was
+    /// bound, let go and bound again, and the second time could be refused.
+    private func firstOf<T>(_ tries: Int, _ make: () -> T?) -> T? {
+        for _ in 0..<tries {
+            if let made = make() { return made }
+        }
+        return nil
+    }
+
     func testTheInternetIsAllowed() {
         let policy = EgressPolicy()
         for address in ["1.1.1.1", "140.82.112.3", "172.32.0.1", "100.128.0.1", "192.169.0.1", "2606:4700::1111", "64:ff9b::101:101",
@@ -47,19 +58,19 @@ final class EgressPolicyTests: XCTestCase {
         guard let own = ownAddresses().first(where: { !$0.hasPrefix("127.") && $0 != "::1" && !$0.lowercased().hasPrefix("fe80") }) else {
             throw XCTSkip("no address but loopback here")
         }
-        let listener = (0..<20).lazy.compactMap { _ -> (Int32, UInt16)? in
+        let listener = firstOf(20) { () -> (Int32, UInt16)? in
             let port = UInt16.random(in: 20000...45000)
             let socket = own.contains(":") ? agent_proxy_listen6(port) : agent_proxy_listen(port, 1)
             return socket >= 0 ? (socket, port) : nil
-        }.first
+        }
         guard let listener else { throw XCTSkip("no port to listen on") }
         let (socket, serverPort) = listener
         defer { close(socket) }
         let proxy = EgressProxy(policy: everything, log: { _ in })
-        let relay = try XCTUnwrap((0..<20).lazy.compactMap { _ -> (RelayListener, Int)? in
+        let relay = try XCTUnwrap(firstOf(20) { () -> (RelayListener, Int)? in
             let port = Int.random(in: 20000...45000)
             return RelayListener(port: port, relayToken: { "relay-secret" }, proxy: proxy, log: { _ in }).map { ($0, port) }
-        }.first)
+        })
         relay.0.start()
         defer { relay.0.stop() }
         XCTAssertEqual(everything.connect(.init(host: own, port: serverPort)), -1)
@@ -209,10 +220,10 @@ final class EgressPolicyTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: folder) }
         let egress = EgressLog(file: folder.appendingPathComponent("egress.log"))
         let proxy = EgressProxy(egress: egress, log: { _ in })
-        let relay = try XCTUnwrap((0..<20).lazy.compactMap { _ -> (RelayListener, Int)? in
+        let relay = try XCTUnwrap(firstOf(20) { () -> (RelayListener, Int)? in
             let port = Int.random(in: 20000...45000)
             return RelayListener(port: port, relayToken: { "relay-secret" }, proxy: proxy, log: { _ in }).map { ($0, port) }
-        }.first)
+        })
         relay.0.start()
         defer { relay.0.stop() }
         for target in ["10.255.255.1:22", "100.73.57.115:7480", "[fd7a:115c:a1e0::1]:7434", "192.168.1.1:80"] {

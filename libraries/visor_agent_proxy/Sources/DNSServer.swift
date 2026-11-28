@@ -5,6 +5,7 @@
 // and starts none yet. Discarding task groups are macOS 14's, above this
 // package's floor.
 
+import Foundation
 import NIOCore
 import NIOPosix
 
@@ -31,26 +32,39 @@ public final class DNSServer: Sendable {
         // the error goes on (dropped open, NIO's writers trap).
         do {
             for host in hosts {
-                let datagrams = try await DatagramBootstrap(group: group)
-                    .channelOption(.socketOption(.so_reuseaddr), value: 1)
-                    .bind(host: host, port: port) { channel in
-                        channel.eventLoop.makeCompletedFuture {
-                            try NIOAsyncChannel<AddressedEnvelope<ByteBuffer>, AddressedEnvelope<ByteBuffer>>(wrappingChannelSynchronously: channel)
+                var tries = 0
+                while true {
+                    let datagrams = try await DatagramBootstrap(group: group)
+                        .channelOption(.socketOption(.so_reuseaddr), value: 1)
+                        .bind(host: host, port: port) { channel in
+                            channel.eventLoop.makeCompletedFuture {
+                                try NIOAsyncChannel<AddressedEnvelope<ByteBuffer>, AddressedEnvelope<ByteBuffer>>(wrappingChannelSynchronously: channel)
+                            }
                         }
+                    udp.append(datagrams)
+                    // TCP on the same port as UDP's, the one the system chose
+                    // included. A port the system chose for UDP can be another
+                    // socket's for TCP: then another pair, a few times.
+                    let bound = datagrams.channel.localAddress?.port ?? port
+                    let streams: NIOAsyncChannel<NIOAsyncChannel<ByteBuffer, ByteBuffer>, Never>
+                    do {
+                        streams = try await ServerBootstrap(group: group)
+                            .serverChannelOption(.socketOption(.so_reuseaddr), value: 1)
+                            .bind(host: host, port: bound) { channel in
+                                channel.eventLoop.makeCompletedFuture {
+                                    try NIOAsyncChannel<ByteBuffer, ByteBuffer>(wrappingChannelSynchronously: channel)
+                                }
+                            }
+                    } catch let error as IOError where port == 0 && error.errnoCode == EADDRINUSE && tries < 8 {
+                        udp.removeLast()
+                        try? await datagrams.executeThenClose { _, _ in }
+                        tries += 1
+                        continue
                     }
-                udp.append(datagrams)
-                // TCP on the same port as UDP's, the one the system chose
-                // included.
-                let bound = datagrams.channel.localAddress?.port ?? port
-                let streams = try await ServerBootstrap(group: group)
-                    .serverChannelOption(.socketOption(.so_reuseaddr), value: 1)
-                    .bind(host: host, port: bound) { channel in
-                        channel.eventLoop.makeCompletedFuture {
-                            try NIOAsyncChannel<ByteBuffer, ByteBuffer>(wrappingChannelSynchronously: channel)
-                        }
-                    }
-                tcp.append(streams)
-                if let address = datagrams.channel.localAddress { addresses.append(address) }
+                    tcp.append(streams)
+                    if let address = datagrams.channel.localAddress { addresses.append(address) }
+                    break
+                }
             }
         } catch {
             for channel in udp { try? await channel.executeThenClose { _, _ in } }
@@ -62,6 +76,20 @@ public final class DNSServer: Sendable {
         self.addresses = addresses
         self.forwarder = forwarder
         self.group = group
+    }
+
+    /// A server dropped without run() or close() (its owner threw before
+    /// serving, say): its listeners closed here, each kept until NIO has
+    /// closed it and finished its writer. Dropped open, NIO's writers trap.
+    deinit {
+        for channel in udp {
+            channel.channel.close(promise: nil)
+            channel.channel.closeFuture.whenComplete { _ in withExtendedLifetime(channel) {} }
+        }
+        for channel in tcp {
+            channel.channel.close(promise: nil)
+            channel.channel.closeFuture.whenComplete { _ in withExtendedLifetime(channel) {} }
+        }
     }
 
     /// Answers until the listeners close (close()).
