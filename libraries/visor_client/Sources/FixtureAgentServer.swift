@@ -8,8 +8,8 @@ import VisorServices
 /// something is taken, and nothing changes. What it answers with goes
 /// through the wire's own coding first (`wire`), as a server's answer
 /// does: a screenshot of the fixture is then a run of the decoders too, on
-/// whatever platform it is taken. (One setting is kept, for its switch:
-/// a session's notifications.)
+/// whatever platform it is taken. (Two settings are kept, for their
+/// switches: a session's notifications, and its pin.)
 final class FixtureAgentServer: AgentServer {
     private var onEvent: (@MainActor (AgentServerEvent) -> Void)?
 
@@ -134,6 +134,13 @@ final class FixtureAgentServer: AgentServer {
     /// setting the fixture keeps, as a server keeps it, so its switch in
     /// Session details stays where it was put.
     private var muted: Set<String> = []
+    /// The sessions pinned here, and those unpinned here: kept, as a
+    /// server keeps them, so a pin or an unpin stays (the fixture's own
+    /// pins until then).
+    private var pinned: Set<String> = []
+    private var unpinned: Set<String> = []
+    /// It keeps pins, as a server of 0.73 or later does.
+    var pins: Bool { true }
     /// Where the sessions moved here are placed (Migrate…'s container and
     /// back).
     private var placed: [String: SessionPlacement] = [:]
@@ -143,6 +150,7 @@ final class FixtureAgentServer: AgentServer {
         sessions.map { info in
             var info = info
             info.notifications = !muted.contains(info.id)
+            if pinned.contains(info.id) { info.pinned = true } else if unpinned.contains(info.id) { info.pinned = false }
             if let place = placed[info.id] { info.placement = place }
             return info
         }
@@ -222,8 +230,16 @@ final class FixtureAgentServer: AgentServer {
             placed[session] = action == .moveToContainer ? .container : .host
             return kept(listed).filter { $0.id == session }.map { Self.wire(.sessions([$0])).sessions?.first ?? $0 }
         }
-        guard case .notifications(let on) = action else { return [] }
-        if on { muted.remove(session) } else { muted.insert(session) }
+        switch action {
+        case .notifications(let on): if on { muted.remove(session) } else { muted.insert(session) }
+        case .pin:
+            unpinned.remove(session)
+            pinned.insert(session)
+        case .unpin:
+            pinned.remove(session)
+            unpinned.insert(session)
+        default: return []
+        }
         return kept(Self.welcome.sessions ?? []).filter { $0.id == session }.map { Self.wire(.sessions([$0])).sessions?.first ?? $0 }
     }
     func sendMessage(_ session: String, text: String, images: [String]) async throws -> [SessionInfo] { [] }
