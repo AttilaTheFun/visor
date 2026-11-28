@@ -18,12 +18,12 @@ extension VisorServer {
     /// The rows an import is to merge in, those the store has made three
     /// ways; one kept as the store has it is left out (the merge leaves a
     /// row it isn't given as it is).
-    func reconciled(_ rows: [SessionStore.Row], file: Data?, store: SessionStore, in folder: URL) throws -> [SessionStore.Row] {
+    func reconciled(_ rows: [SessionStore.Row], file: Data?, base baseFile: (name: String?, data: Data?), store: SessionStore) throws -> [SessionStore.Row] {
         var here: [String: SessionStore.Row] = [:]
         for row in try store.rows() where here[row.id] == nil { here[row.id] = row }
         let theirs = file.map(Self.sessionObjects) ?? [:]
-        let baseName = try store.note("importedAs")
-        let base = baseName.flatMap { try? Data(contentsOf: folder.appendingPathComponent($0, isDirectory: false)) }.map(Self.sessionObjects)
+        let baseName = baseFile.name
+        let base = baseFile.data.map(Self.sessionObjects)
         if base == nil {
             Self.log("sessions.json is imported again without the file imported before (\(baseName ?? "none noted")): the sessions both have keep the store's")
         }

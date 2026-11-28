@@ -110,6 +110,13 @@ extension VisorServer {
             }
         }
         let day = RetiredFiles.day(now)
+        // The base of three ways, read before anything is written beside
+        // it (a new copy may take the name of one removed).
+        var base: (name: String?, data: Data?) = (nil, nil)
+        if imported != nil {
+            base.name = try? store.note("importedAs")
+            base.data = base.name.flatMap { try? Data(contentsOf: folder.appendingPathComponent($0, isDirectory: false)) }
+        }
         let importedName = Self.unusedName("sessions.json.imported-" + day, in: folder)
         // The file copied beside it first: the base the next import goes by,
         // there before the store notes it. Imported again without it, the
@@ -139,7 +146,7 @@ extension VisorServer {
         do {
             var rows = try sessions.enumerated().map { try SessionStore.Row($1, position: $0) }
             // Again, after an older build: three ways (VisorServer+SessionReimport).
-            if imported != nil { rows = try reconciled(rows, file: data, store: store, in: folder) }
+            if imported != nil { rows = try reconciled(rows, file: data, base: base, store: store) }
             merged = try store.merge(rows, notes: [
                 Self.importedFingerprintNote: data.map(Self.fingerprint) ?? "",
                 "importedAs": importedName,
