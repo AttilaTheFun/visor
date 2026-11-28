@@ -50,7 +50,9 @@ single_version_override(
 # tools (the clean-room ones, built for Linux) come the same way, by their
 # SHA-256 (third_party/applecross/ported_tools.sha256: rules_applecross's
 # own at d44bc87, ported tools 0.0.142), from the same
-# --distdir or a rewrite of ported-tools.invalid. The toolchains
+# --distdir or a rewrite of ported-tools.invalid, else from rules_applecross's
+# own public release of them (ported-tools-0.0.142, by name: the same
+# SHA-256s), where a builder's files don't have them yet. The toolchains
 # are registered for Linux alone, by the builder that has the SDKs
 # (.bazelrc's apple_on_linux, turned on in .bazelrc.user), so a Mac builds
 # as before and a Linux without them builds what runs on Linux.
@@ -86,7 +88,10 @@ apple_cross_toolchain.configure(
     # Linux; the builders that do are arm64), so none loses them.
     ported_tools_archives = {"x86_64": "third_party/applecross/no_ported_tools"},
     ported_tools_manifest = "//third_party/applecross:ported_tools.sha256",
-    ported_tools_urls = ["https://ported-tools.invalid/sha256/{sha256}"],
+    ported_tools_urls = [
+        "https://ported-tools.invalid/sha256/{sha256}",
+        "https://github.com/apple-cross-toolchain/rules_applecross/releases/download/ported-tools-0.0.142/{name}",
+    ],
     swift_tools = {
         "aarch64": "@applecross_swift_ubuntu24.04-aarch64//:tools",
         "x86_64": "@applecross_swift_ubuntu24.04//:tools",
