@@ -34,8 +34,9 @@ public protocol MessageStorage: AnyObject {
     /// user's row whose words begin with one of `userTexts`.
     func lastMessage(_ session: String, idPrefixes: [String], userTexts: [String]) -> TranscriptEntry?
     /// The sessions pinned in a `pins` table a server of 0.73 kept here
-    /// before its sessions' store (`MessageCache.pinnedSessions`).
-    func pinnedSessions() -> Set<String>
+    /// before its sessions' store (`MessageCache.pinnedSessions`): nil
+    /// when they couldn't be read.
+    func pinnedSessions() -> Set<String>?
 }
 
 extension MessageStorage {
@@ -47,8 +48,9 @@ extension MessageStorage {
     /// each syncs on from where it stood.
     public func forgetGenerations() throws {}
 
-    /// A storage that never kept pins: none.
-    public func pinnedSessions() -> Set<String> { [] }
+    /// A storage that never kept pins, and has no file of one that did:
+    /// nothing to read them from.
+    public func pinnedSessions() -> Set<String>? { nil }
 
     /// For a storage a host made before these could be asked of it: the
     /// rows read, and written back without those that go.

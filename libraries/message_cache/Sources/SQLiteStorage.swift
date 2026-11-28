@@ -11,10 +11,13 @@ import VisorProtocol
 
 public final class SQLiteStorage: MessageStorage {
     private let db: Database
+    /// A file's (not ":memory:"): what an earlier build's pins are read from.
+    private let onDisk: Bool
 
     /// The file at a path, created if need be; ":memory:" for none.
     public init(path: String) throws {
         db = path == ":memory:" ? try Database.inMemory() : try Database(path: path)
+        onDisk = path != ":memory:"
         if path != ":memory:" { try? db.execute("PRAGMA journal_mode=WAL") }
         let version = (try? db.query("PRAGMA user_version") { $0.int(0) })?.first ?? 0
         if version != MessageCache.schemaVersion {
@@ -40,8 +43,18 @@ public final class SQLiteStorage: MessageStorage {
             """)
     }
 
-    /// None where there's no table (`all` reads an error as nothing).
-    public func pinnedSessions() -> Set<String> { Set(all("SELECT session FROM pins", []) { $0.text(0) ?? "" }) }
+    /// None from a file without the table; nil in memory, or when the read
+    /// fails.
+    public func pinnedSessions() -> Set<String>? {
+        guard onDisk else { return nil }
+        do {
+            let table = try db.query("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'pins'") { $0.int(0) }.first ?? 0
+            guard table > 0 else { return [] }
+            return Set(try db.query("SELECT session FROM pins") { $0.text(0) ?? "" })
+        } catch {
+            return nil
+        }
+    }
 
     public func transaction(_ body: () throws -> Void) throws { try db.transaction { _ in try body() } }
 

@@ -209,8 +209,10 @@ public final class MessageCache: Sendable {
     /// The sessions a server of 0.73 before its sessions' store kept
     /// pinned here (a `pins` table): read once by the server, which keeps
     /// them in its store (server.sqlite) from then on. Nothing writes them
-    /// now; none in a cache that never had the table.
-    public func pinnedSessions() -> Set<String> { storage.withLock { $0.pinnedSessions() } }
+    /// now. None from a cache's file that never had the table; nil when
+    /// there's no file to read them from (a cache in memory) or the read
+    /// failed, which is not the same as none.
+    public func pinnedSessions() -> Set<String>? { storage.withLock { $0.pinnedSessions() } }
 
     // MARK: Search
 

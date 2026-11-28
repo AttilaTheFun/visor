@@ -211,5 +211,55 @@ extension ServerTests {
         defer { third.stop() }
         #expect(third.sessions.map(\.info.pinned) == [true, false, false])
     }
+
+    /// A cache that couldn't be opened (in memory in its file's place) has
+    /// no pins to give, which isn't the same as none: nothing is noted as
+    /// moved, and the next start, with the cache's file, moves them.
+    @Test func testPinsAreNotMarkedMovedWhenTheCacheWasntRead() throws {
+        let earlier = FileManager.default.temporaryDirectory.appendingPathComponent("visor-session-pins-unread-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: earlier, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: earlier) }
+        VisorServer.storeRoot = earlier
+        try Data(#"[{"info":{"id":"a","agent":"claude","cwd":"/tmp","title":"Alpha","created":1},"entries":[]}]"#.utf8)
+            .write(to: earlier.appendingPathComponent("sessions.json"))
+        ServerCache.shared = .inMemory()
+        defer { ServerCache.shared = .inMemory() }
+        let first = VisorServer(port: 7954)
+        defer { first.stop() }
+        #expect(first.sessions.map(\.info.pinned) == [false])
+        #expect(try SessionStore(path: VisorServer.storeURL.path).note(VisorServer.pinsMovedNote) == nil, "not noted")
+
+        let cache = earlier.appendingPathComponent("cache", isDirectory: true)
+        _ = MessageCache.open(named: "messages", in: cache)
+        try Database(path: cache.appendingPathComponent("messages.sqlite").path).execute(
+            #"CREATE TABLE "pins" ("session" TEXT PRIMARY KEY NOT NULL); INSERT INTO pins VALUES ('a')"#)
+        ServerCache.shared = MessageCache.open(named: "messages", in: cache)
+        let second = VisorServer(port: 7953)
+        defer { second.stop() }
+        #expect(second.sessions.map(\.info.pinned) == [true], "moved once the cache was read")
+        #expect(try SessionStore(path: VisorServer.storeURL.path).note(VisorServer.pinsMovedNote) != nil)
+    }
+
+    /// A pinned session comes through an older build's sessions.json, imported
+    /// again, still pinned: the merge keeps its pin.
+    @Test func testAPinSurvivesAReimport() throws {
+        let earlier = FileManager.default.temporaryDirectory.appendingPathComponent("visor-session-pins-reimport-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: earlier, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: earlier) }
+        VisorServer.storeRoot = earlier
+        let json = earlier.appendingPathComponent("sessions.json")
+        try Data(#"[{"info":{"id":"a","agent":"claude","cwd":"/tmp","title":"Alpha","created":1},"entries":[]}]"#.utf8).write(to: json)
+        let first = VisorServer(port: 7952)
+        defer { first.stop() }
+        first.perform(.pin(session: "a"), from: nil)
+        // The older build's file: the same session, written again.
+        try Data(#"[{"info":{"id":"a","agent":"claude","cwd":"/tmp","title":"Alpha, from 0.72","created":1},"entries":[]}]"#.utf8)
+            .write(to: json, options: .atomic)
+        let second = VisorServer(port: 7951)
+        defer { second.stop() }
+        #expect((second.session("a")?.info.title) == "Alpha, from 0.72", "imported again")
+        #expect((second.session("a")?.info.pinned) == true, "still pinned")
+        #expect(try pinnedRows() == ["a"])
+    }
 }
 }

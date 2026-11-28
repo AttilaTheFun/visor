@@ -133,17 +133,18 @@ import Testing
 
     /// The pins a server of 0.73 kept here before its sessions' store: read
     /// from a `pins` table an earlier build left, kept by a new schema,
-    /// which drops the rows; none where there's no table, which the cache
-    /// no longer makes.
+    /// which drops the rows; none from a file without the table, which the
+    /// cache no longer makes; and nil, not none, from a cache in memory,
+    /// which has no file to read them from.
     @Test func testPinsAnEarlierBuildKeptAreReadAndNoneAreMade() throws {
-        #expect(MessageCache.inMemory().pinnedSessions().isEmpty)
-        #expect(try MessageCache.sqliteInMemory().pinnedSessions().isEmpty)
+        #expect(MessageCache.inMemory().pinnedSessions() == nil)
+        #expect(try MessageCache.sqliteInMemory().pinnedSessions() == nil)
         let folder = URL(fileURLWithPath: NSTemporaryDirectory() + "visor-pins-" + String(UInt64.random(in: 0...UInt64.max)), isDirectory: true)
         defer { try? FileManager.default.removeItem(at: folder) }
         let path = folder.appendingPathComponent("messages.sqlite").path
         try MessageCache.open(named: "messages", in: folder).append("s", [TranscriptEntry(id: "r", role: .assistant, text: "row")])
         #expect(try Database(path: path).query("SELECT COUNT(*) FROM sqlite_master WHERE name = 'pins'", row: { $0.int(0) }) == [0], "not made")
-        #expect(MessageCache.open(named: "messages", in: folder).pinnedSessions().isEmpty)
+        #expect(MessageCache.open(named: "messages", in: folder).pinnedSessions() == [])
 
         // As the earlier build left it.
         try Database(path: path).execute(#"CREATE TABLE "pins" ("session" TEXT PRIMARY KEY NOT NULL); INSERT INTO pins VALUES ('s')"#)
