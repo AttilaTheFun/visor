@@ -46,6 +46,12 @@ public enum VisorFixture {
     /// (`-visor.fixture.orientation landscape`: the iPhone's proof, as a
     /// simulator can't be turned by a command); "" for the device's way.
     @MainActor public static var orientation: String { active ? (VisorHost.settings?.get(key: "fixture.orientation") ?? "") : "" }
+    /// The Mac window's width for its pictures, in points (`-visor.fixture.width
+    /// 320`: the content at its narrowest); nil for the window's default.
+    @MainActor public static var windowWidth: Double? {
+        guard active, let text = VisorHost.settings?.get(key: "fixture.width"), let width = Double(text), width > 0 else { return nil }
+        return width
+    }
 
     /// The draft a session opens with: "/" in the chat on the commands
     /// screen, so its slash commands are offered with nothing typed;
