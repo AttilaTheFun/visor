@@ -12,7 +12,10 @@
 //   item the volume already has is put in `Data/moved-aside/`, never lost;
 //   a database (server.sqlite, the sessions' store) with its own files
 //   beside it (`-wal`, `-shm`, `-journal`), which go where it goes, so a
-//   database is never put beside another's log.
+//   database is never put beside another's log. A database's files move
+//   together, by staged names first (`.moving`), and all go back if one
+//   can't; what a crash in the middle left staged is sorted out at the
+//   next start.
 // - Not while an agent's host still answers in its `hosts/` folder: an
 //   in-place relaunch leaves the agents running, and their hosts' sockets
 //   and token files are in that folder. The move waits for a start with no
@@ -90,6 +93,7 @@ public struct VisorFolderMove: Sendable {
     public func moveData() -> Outcome {
         guard folders.onVolume else { return .nothing }
         let legacy = folders.legacyData
+        finishStaged(from: legacy)
         let items = Self.pending(in: legacy)
         guard !items.isEmpty else { return .nothing }
         if let host = answeringHost(in: legacy.appendingPathComponent("hosts", isDirectory: true)) {
@@ -119,6 +123,7 @@ public struct VisorFolderMove: Sendable {
             together(unit).contains { files.fileExists(atPath: data.appendingPathComponent($0).path) || isLink(data.appendingPathComponent($0)) }
         })
         var asideTags: [String: String] = [:]
+        var steps: [Step] = []
         for name in items {
             let from = legacy.appendingPathComponent(name)
             var to = data.appendingPathComponent(name)
@@ -135,12 +140,13 @@ public struct VisorFolderMove: Sendable {
                 to = aside.appendingPathComponent(unit + tag + name.dropFirst(unit.count))
                 log("\(data.path) has \(unit) already: the home folder's \(name) is kept as \(to.path)")
             }
-            do {
-                try files.moveItem(at: from, to: to)
-                moved.append(name)
-            } catch {
-                log("\(from.path) couldn't be moved to \(to.path): \(error.localizedDescription)")
-            }
+            steps.append(Step(unit: unit, name: name, from: from, to: to))
+        }
+        var units: [String] = []
+        for step in steps where !units.contains(step.unit) { units.append(step.unit) }
+        for unit in units {
+            let group = steps.filter { $0.unit == unit }
+            if let failure = move(together: group) { log(failure) } else { moved += group.map(\.name) }
         }
         // Emptied but for the sessions' folders: removed when nothing is left.
         try? files.removeItem(at: legacy.appendingPathComponent(".DS_Store"))
@@ -149,6 +155,98 @@ public struct VisorFolderMove: Sendable {
         log("the data folder moved to \(data.path): \(moved.joined(separator: ", "))"
             + (left.isEmpty ? "" : "; still at \(legacy.path): \(left.joined(separator: ", "))"))
         return left.isEmpty ? .moved(moved) : .waiting("\(left.joined(separator: ", ")) couldn't be moved")
+    }
+
+    /// One item's move: its name, the unit it goes with (a database's, for
+    /// one of its files), from where to where.
+    private struct Step {
+        var unit: String
+        var name: String
+        var from: URL
+        var to: URL
+    }
+
+    /// The end of a staged name: a database's file on its way.
+    static let staging = ".moving"
+
+    /// The volume's name for a file still on its way to `url`.
+    private static func staged(_ url: URL) -> URL {
+        url.deletingLastPathComponent().appendingPathComponent(url.lastPathComponent + staging)
+    }
+
+    /// A unit moved whole: an item on its own as it is; a database (a
+    /// `.sqlite` file, or one with its files beside it) each of its files to
+    /// a staged name beside where it goes, then all of them into place, and
+    /// on a failure every one put back, so a database is never split from
+    /// its log. Why not, when it didn't move.
+    private func move(together group: [Step]) -> String? {
+        let files = FileManager.default
+        guard let first = group.first else { return nil }
+        guard group.count > 1 || first.name.hasSuffix(".sqlite") else {
+            do {
+                try files.moveItem(at: first.from, to: first.to)
+                return nil
+            } catch {
+                return "\(first.from.path) couldn't be moved to \(first.to.path): \(error.localizedDescription)"
+            }
+        }
+        var staged: [Step] = []
+        var placed: [Step] = []
+        var failure: String?
+        for step in group {
+            try? files.removeItem(at: Self.staged(step.to))
+            do {
+                try files.moveItem(at: step.from, to: Self.staged(step.to))
+                staged.append(step)
+            } catch {
+                failure = "\(step.from.path) couldn't be moved to \(step.to.path): \(error.localizedDescription)"
+                break
+            }
+        }
+        if failure == nil {
+            for step in group {
+                do {
+                    try files.moveItem(at: Self.staged(step.to), to: step.to)
+                    placed.append(step)
+                } catch {
+                    failure = "\(step.name) couldn't be put at \(step.to.path): \(error.localizedDescription)"
+                    break
+                }
+            }
+        }
+        guard let failure else { return nil }
+        for step in staged {
+            let at = placed.contains { $0.name == step.name } ? step.to : Self.staged(step.to)
+            try? files.moveItem(at: at, to: step.from)
+        }
+        return failure + "; \(first.unit) and its files stay at \(first.from.deletingLastPathComponent().path)"
+    }
+
+    /// What a move cut short left staged (a crash in a copy to the volume):
+    /// put back in the home folder while any file of its unit is still
+    /// there (or dropped, where the home folder has that file itself: the
+    /// copy hadn't finished), else put where it was going.
+    private func finishStaged(from legacy: URL) {
+        let files = FileManager.default
+        for folder in [folders.data, folders.data.appendingPathComponent(Self.movedAside, isDirectory: true)] {
+            for name in (try? files.contentsOfDirectory(atPath: folder.path)) ?? [] where name.hasSuffix(Self.staging) {
+                let stage = folder.appendingPathComponent(name)
+                let base = String(name.dropLast(Self.staging.count))
+                let unit = Self.unit(of: base)
+                let home = legacy.appendingPathComponent(base)
+                let unitAtHome = ([unit] + Self.databaseCompanions.map { unit + $0 }).contains {
+                    files.fileExists(atPath: legacy.appendingPathComponent($0).path)
+                }
+                if files.fileExists(atPath: home.path) {
+                    try? files.removeItem(at: stage)
+                } else if unitAtHome {
+                    try? files.moveItem(at: stage, to: home)
+                } else if !files.fileExists(atPath: folder.appendingPathComponent(base).path) {
+                    try? files.moveItem(at: stage, to: folder.appendingPathComponent(base))
+                }
+                log("\(stage.path), left by a move cut short, is \(files.fileExists(atPath: stage.path) ? "left as it is" : "dealt with")")
+            }
+        }
     }
 
     /// A cache's folder (`Server`, `Client`) moved onto the volume whole,

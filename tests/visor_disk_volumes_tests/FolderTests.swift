@@ -207,6 +207,40 @@ import Testing
         #expect(scratch.read("moved-aside/" + second + "-wal", in: data) == "second")
     }
 
+    /// A move cut short by a crash, part of a database staged on the volume
+    /// and part still at home: put back and moved again whole; and one
+    /// staged whole, nothing left at home, put in place.
+    @Test func aDatabaseMoveCutShortIsSortedOutAtTheNextStart() throws {
+        let scratch = try Scratch()
+        defer { try? FileManager.default.removeItem(at: scratch.root) }
+        let legacy = scratch.folders.legacyData
+        let data = scratch.folders.data
+        try scratch.write("db", "server.sqlite.moving", in: data)
+        try scratch.write("log", "server.sqlite-wal", in: legacy)
+        try scratch.write("{}", "settings.json", in: legacy)
+        #expect(VisorFolderMove(folders: scratch.folders, answers: { _ in false }).moveData()
+            == .moved(["server.sqlite", "server.sqlite-wal", "settings.json"]))
+        #expect(scratch.read("server.sqlite", in: data) == "db")
+        #expect(scratch.read("server.sqlite-wal", in: data) == "log")
+        #expect(!scratch.exists("server.sqlite.moving", in: data))
+
+        // A copy cut short: the home folder still has the file, so the
+        // staged part is dropped and the move done again.
+        try FileManager.default.removeItem(at: data.appendingPathComponent("server.sqlite"))
+        try FileManager.default.removeItem(at: data.appendingPathComponent("server.sqlite-wal"))
+        try scratch.write("half", "server.sqlite.moving", in: data)
+        try scratch.write("whole", "server.sqlite", in: legacy)
+        _ = VisorFolderMove(folders: scratch.folders, answers: { _ in false }).moveData()
+        #expect(scratch.read("server.sqlite", in: data) == "whole")
+        #expect(!scratch.exists("server.sqlite.moving", in: data))
+
+        // Staged whole, the home folder empty of it: put in place.
+        try FileManager.default.removeItem(at: data.appendingPathComponent("server.sqlite"))
+        try scratch.write("staged", "server.sqlite.moving", in: data)
+        #expect(VisorFolderMove(folders: scratch.folders, answers: { _ in false }).moveData() == .nothing)
+        #expect(scratch.read("server.sqlite", in: data) == "staged")
+    }
+
     @Test func aCacheMovesWholeOrIsDropped() throws {
         let scratch = try Scratch()
         defer { try? FileManager.default.removeItem(at: scratch.root) }
