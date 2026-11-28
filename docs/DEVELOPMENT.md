@@ -218,11 +218,17 @@ rolled back lands the same way. It writes its own sessions.json, and the
 next start of 0.73 or later sees the file isn't the one it imported (the
 store notes its SHA-256) and imports it again, merged: the store first
 copied aside whole (`server.sqlite.before-import-<yyyymmdd-hhmmss>`, VACUUM
-INTO), then each session the file has brought up to date from it (its
-title, archived, the session's JSON; its place and pin kept), each it has
-that the store hasn't added after the rest, and the sessions it hasn't
-(made on 0.73 since, with their history) kept as they are, so going back
-and forth loses nothing. A session ended on the older build comes back,
+INTO); then a session the file and the store both have takes from the
+file only what the older build changed, three ways against the file the
+store last imported (`importedAs`, the copy beside sessions.json; an older
+build writes back what it read for every session it didn't touch): key by
+key, and within `info` key by key, the file's where it isn't that base's,
+else the store's, its place and pin kept (VisorServer+SessionReimport).
+With no base to go by (its copy gone, or a session it hasn't), the store's
+whole, said in the log. Each session the file has that the store hasn't is
+added after the rest, and the sessions it hasn't (made on 0.73 since, with
+their history) are kept as they are, so going back and forth loses
+nothing. A session ended on the older build comes back,
 to be ended again. The copy beside sessions.json is
 `sessions.json.imported-<day>-2` then. Leaving sessions.json for an older
 build is for one version: a later one stops. To read the store by hand: `sqlite3

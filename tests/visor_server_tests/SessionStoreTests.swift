@@ -298,6 +298,66 @@ extension ServerTests {
         #expect(try before.rows().filter(\.pinned).map(\.id) == ["alpha", "made"])
     }
 
+    /// 0.72 writes back what it read for every session it didn't touch:
+    /// against the file imported before, that's no change, so what 0.73 did
+    /// since (a rename, a model, rows, a queued message) stays, and what
+    /// 0.72 did change (alpha's title) is taken.
+    @Test func testAnEditOn073UntouchedOn072IsKept() throws {
+        try Data(Self.sessionsJSON().utf8).write(to: file("sessions.json"))
+        let first = launch()
+        let beta = try #require(first.session("beta"))
+        beta.info.title = "Beta, renamed on 0.73"
+        beta.info.model = "sonnet"
+        beta.info.queued = ["Waiting on 0.73"]
+        beta.entries = [TranscriptEntry(id: "b-u1", role: .user, text: "Said on 0.73")]
+        first.saveArchiveNow()
+
+        // 0.72: beta written back as it read it, alpha renamed, and a key
+        // dropped from alpha (its goal met there).
+        var older = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: file("sessions.json"))) as? [[String: Any]])
+        var info = try #require(older[1]["info"] as? [String: Any])
+        info["title"] = "Alpha on 0.72"
+        info["goal"] = nil
+        older[1]["info"] = info
+        try JSONSerialization.data(withJSONObject: older).write(to: file("sessions.json"), options: .atomic)
+
+        let again = launch()
+        let kept = try #require(again.session("beta"))
+        #expect(kept.info.title == "Beta, renamed on 0.73", "0.73's edit kept")
+        #expect(kept.info.model == "sonnet")
+        #expect(kept.info.queued == ["Waiting on 0.73"])
+        #expect(kept.entries.map(\.id) == ["b-u1"])
+        let alpha = try #require(again.session("alpha"))
+        #expect(alpha.info.title == "Alpha on 0.72", "0.72's edit taken")
+        #expect(alpha.info.goal == nil, "and what it dropped, dropped")
+        #expect(alpha.info.model == "opus", "the rest of it as it was")
+        #expect(try reader().rows().map(\.title) == ["Beta, renamed on 0.73", "Alpha on 0.72"])
+    }
+
+    /// Without the file imported before to go by (removed by hand), the
+    /// sessions both have keep the store's, said in the log; one only the
+    /// file has is still added.
+    @Test func testWithoutTheFileImportedBeforeTheStoresAreKept() throws {
+        try Data(Self.sessionsJSON().utf8).write(to: file("sessions.json"))
+        let first = launch()
+        let beta = try #require(first.session("beta"))
+        beta.info.title = "Beta on 0.73"
+        first.saveArchiveNow()
+        try FileManager.default.removeItem(at: file("sessions.json.imported-\(day)"))
+
+        var older = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: file("sessions.json"))) as? [[String: Any]])
+        var info = try #require(older[1]["info"] as? [String: Any])
+        info["title"] = "Alpha on 0.72"
+        older[1]["info"] = info
+        let added: [String: Any] = ["id": "older", "agent": "claude", "cwd": "/tmp", "title": "From 0.72", "created": 4.5]
+        older.append(["info": added, "entries": [Any]()])
+        try JSONSerialization.data(withJSONObject: older).write(to: file("sessions.json"), options: .atomic)
+
+        let again = launch()
+        #expect(again.sessions.map(\.info.title) == ["Beta on 0.73", "Alpha", "From 0.72"])
+        #expect(logged.all.contains { $0.contains("without the file imported before") })
+    }
+
     @Test func testAFileThatCantBeReadIsLeftAndNothingIsImported() throws {
         let broken = #"[{"info":{"id":"alpha","title":"Half"#
         try Data(broken.utf8).write(to: file("sessions.json"))

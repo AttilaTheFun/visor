@@ -15,10 +15,12 @@
 // of this one finds the file isn't the one it imported (by its SHA-256,
 // which the store notes) and imports it again. Merged, never in place of
 // the store: the store is first copied aside whole
-// (server.sqlite.before-import-<yyyymmdd-hhmmss>), then each session the file has is
-// brought up to date from it (its place and its pin kept) and each it has
-// that the store hasn't is added, and the sessions the file hasn't (made
-// since the first import, with all they hold) are left as they are, so
+// (server.sqlite.before-import-<yyyymmdd-hhmmss>); then a session the
+// file and the store both have takes from the file only what the older
+// build changed, against the file the store last imported (three ways:
+// VisorServer+SessionReimport), its place and its pin kept; each the file
+// has that the store hasn't is added; and the sessions the file hasn't
+// (made since the import, with all they hold) are left as they are, so
 // going back and forth loses nothing. A session ended on the older build
 // comes back here; it can be ended again.
 //
@@ -105,7 +107,9 @@ extension VisorServer {
         }
         let merged: SessionStore.Merged
         do {
-            let rows = try sessions.enumerated().map { try SessionStore.Row($1, position: $0) }
+            var rows = try sessions.enumerated().map { try SessionStore.Row($1, position: $0) }
+            // Again, after an older build: three ways (VisorServer+SessionReimport).
+            if imported != nil { rows = try reconciled(rows, file: data, store: store, in: folder) }
             merged = try store.merge(rows, notes: [
                 Self.importedFingerprintNote: data.map(Self.fingerprint) ?? "",
                 "importedAs": importedName,
