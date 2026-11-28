@@ -84,6 +84,55 @@ extension FeatureMapTests {
             FeatureMapNode.sessions.expectShown(on: home)
         }
 
+        /// The computer's sessions, top to bottom.
+        private static func order(_ screen: HeadlessScreen) -> [String] {
+            var seen: [String] = []
+            for element in screen.elements {
+                guard let id = element.id, id.hasPrefix("session-fixture-"), !seen.contains(id) else { continue }
+                seen.append(id)
+            }
+            return seen.map { String($0.dropFirst("session-".count)) }
+        }
+
+        /// Pinned sessions list first, then the rest, each by title: the
+        /// fixture's release notes pinned (marked `pinned-‹id›`) over the
+        /// rest. Pin puts one among the pinned, by its title; Unpin, back
+        /// among the rest by its title; Pin again, where it was.
+        @Test("Sessions → Sessions: longpress session-‹id›, tap “Pin”; “Unpin”, and “Pin” again")
+        func pinsAndUnpins() throws {
+            let app = try VisorLaunch.fixture("sessions")
+            defer { app.quit() }
+            let first = try app.screen { FeatureMapNode.sessions.isShown(on: $0) && Self.order($0).count == 4 }
+            #expect(Self.order(first) == ["fixture-docs", "fixture-chat", "fixture-api", "fixture-busy"], "\(first.summary)")
+            #expect(first.row("Release notes", marked: "pinned-fixture-docs", "Pinned"), "\(first.summary)")
+            #expect(!first.row("Offline sync", marked: "pinned-fixture-chat", "Pinned"), "\(first.summary)")
+            // A row is its title, its marks and its preview: no folder
+            // (its details have it).
+            #expect(first.rowTexts("Rate limits") == ["Rate limits", "The limiter now allows bursts of 20 per minute."], "\(first.summary)")
+            #expect(!first.texts.contains("/Users/visor/Developer/api"), "no folder in the list: \(first.summary)")
+            // A preview's markdown rendered: its words, none of its marks.
+            #expect(first.texts.contains("Laying out the medium widget in WidgetView."), "\(first.summary)")
+            #expect(!first.texts.contains { $0.contains("**") || $0.contains("`") || $0.hasPrefix("- ") }, "no markdown marks: \(first.summary)")
+
+            let menu = try app.longPress("session-fixture-api")
+            #expect(menu.has(label: "Pin") && !menu.has(label: "Unpin"), "no Pin in the menu: \(menu.summary)")
+            _ = try app.tap("Pin")
+            let pinned = try app.screen { $0.row("Rate limits", marked: "pinned-fixture-api", "Pinned") }
+            #expect(Self.order(pinned) == ["fixture-api", "fixture-docs", "fixture-chat", "fixture-busy"], "\(pinned.summary)")
+
+            let pinnedMenu = try app.longPress("session-fixture-docs")
+            #expect(pinnedMenu.has(label: "Unpin") && !pinnedMenu.has(label: "Pin"), "no Unpin in the menu: \(pinnedMenu.summary)")
+            _ = try app.tap("Unpin")
+            let unpinned = try app.screen { !$0.row("Release notes", marked: "pinned-fixture-docs", "Pinned") && $0.has(id: "session-fixture-docs") }
+            #expect(Self.order(unpinned) == ["fixture-api", "fixture-chat", "fixture-docs", "fixture-busy"], "\(unpinned.summary)")
+
+            _ = try app.longPress("session-fixture-docs")
+            _ = try app.tap("Pin")
+            let again = try app.screen { $0.row("Release notes", marked: "pinned-fixture-docs", "Pinned") }
+            #expect(Self.order(again) == ["fixture-api", "fixture-docs", "fixture-chat", "fixture-busy"], "\(again.summary)")
+            FeatureMapNode.sessions.expectShown(on: again)
+        }
+
         @Test("Sessions → Settings: tap settings")
         func opensSettings() throws {
             let app = try VisorLaunch.fixture("sessions")

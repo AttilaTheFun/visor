@@ -8,5 +8,6 @@ swift_test(
     deps = [
         "//libraries/message_cache",
         "//libraries/visor_protocol",
+        "@swiftpkg_swift_sql//:SwiftSQL",
     ],
 )

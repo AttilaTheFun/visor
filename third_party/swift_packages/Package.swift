@@ -19,7 +19,10 @@ let package = Package(
         .package(url: "https://github.com/AttilaTheFun/isomer.git", revision: "v0.58.1"),
         .package(
             url: "https://github.com/AttilaTheFun/agent_ui.git",
-            exact: "0.51.0"
+            // MarkdownPreview (agent_ui#102, on its main with #101 and #103), for the
+            // sidebar's previews (visor#560): by version once AgentUI
+            // releases it, before Visor's next release (CI's pins job).
+            revision: "4a478350b3695a75225dfb37c4da47b9fecfb8bb"
         ),
         // agent_protocol: its services' Swift (VisorDriver, the native
         // runner) and agent-wrapper (the Mac app's Helpers), by release:
@@ -80,7 +83,8 @@ let package = Package(
         // signing job (tools/ci/sign_builds.sh, //tools/ci:sign) signs the
         // Apple apps with, stamping the build settings they were built
         // without (`sign apple --add-infoplist`, `--add-groups`: 0.7.0,
-        // build_tools#18 and #20). It brings swift-subprocess.
-        .package(url: "https://github.com/AttilaTheFun/build_tools.git", exact: "0.7.0"),
+        // build_tools#18 and #20; 0.8.0 fills `$(AppIdentifierPrefix)` in them from
+        // each app's profile, build_tools#22). It brings swift-subprocess.
+        .package(url: "https://github.com/AttilaTheFun/build_tools.git", exact: "0.8.0"),
     ]
 )

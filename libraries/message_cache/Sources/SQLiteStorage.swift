@@ -2,7 +2,8 @@
 // words, the tree of their source lines. On every host: the file a cache
 // opened with `MessageCache.open(named:)` keeps. The tables are the ones
 // SQLite.swift made before (schema 7), so a cache kept by an earlier build
-// reads on.
+// reads on. The server's pins (`pins`) are no cache: a new schema drops
+// the rest and keeps them.
 
 import SwiftSQL
 import VisorProtocol
@@ -35,7 +36,14 @@ public final class SQLiteStorage: MessageStorage {
             CREATE INDEX IF NOT EXISTS "index_messages_on_session_source_key" ON "messages" ("session", "source_key");
             CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(session UNINDEXED, id UNINDEXED, role UNINDEXED, text,
                 tokenize='unicode61');
+            CREATE TABLE IF NOT EXISTS "pins" ("session" TEXT PRIMARY KEY NOT NULL);
             """)
+    }
+
+    public func pinnedSessions() -> Set<String> { Set(all("SELECT session FROM pins", []) { $0.text(0) ?? "" }) }
+
+    public func setPinned(_ pinned: Bool, _ s: String) throws {
+        if pinned { try db.run("INSERT OR IGNORE INTO pins (session) VALUES (?)", s) } else { try db.run("DELETE FROM pins WHERE session = ?", s) }
     }
 
     public func transaction(_ body: () throws -> Void) throws { try db.transaction { _ in try body() } }
