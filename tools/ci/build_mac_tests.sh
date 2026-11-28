@@ -1,7 +1,7 @@
 #!/bin/bash
 # The tests that need a Mac, built for an Apple silicon Mac, in the checkout
-# (CI's test job, on one of GitHub's `xcode-27` Macs, with Bazel's settings
-# from tools/ci/ci_bazel.sh; or on Linux with --config=apple_on_linux):
+# (CI's test-bundles job, on a Nimbus runner: Linux, with apple_on_linux
+# from Nimbus' bazelrc, .github/actions/nimbus_bazel; or on a Mac):
 # the .xctest bundles under tests/ (macos_unit_test: the server's Apple
 # side, the client, its views, SSH), each rules_apple's .zip of its bundle
 # at its package's path (what the Mac's `xcrun xctest` runs:

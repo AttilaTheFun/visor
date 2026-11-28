@@ -1,6 +1,7 @@
 #!/bin/bash
-# The site's pictures (site/), on one of GitHub's own Macs (`xcode-27`, a
-# desktop session whose shell may picture the screen, as proof_mac.sh's):
+# The site's pictures (site/), on a Mac: in CI the desktop session of a
+# macOS VM a Nimbus runner leases (tools/ci/mac_vm.sh --desktop, as
+# proof_mac.sh's):
 # Visor's window on the Mac on the screenshot fixture (tools/mac_screenshots, in an app
 # of its own opened as apps are, so it comes to the front with its window
 # key, then pictured by its own `screencapture` of its window), and the
@@ -20,7 +21,7 @@ me="$(basename "$0")"
 OUT="${1:?usage: tools/ci/hosted_screenshots.sh <folder>}"
 mkdir -p "$OUT"
 OUT="$(cd "$OUT" && pwd)"
-[ "$(uname -s)" = Darwin ] || { echo "$me: runs on a Mac (CI's xcode-27)" >&2; exit 2; }
+[ "$(uname -s)" = Darwin ] || { echo "$me: runs on a Mac (in CI, a Nimbus macOS VM)" >&2; exit 2; }
 if [ -z "${DEVELOPER_DIR:-}" ] && [ -d /Applications/Xcode_27.2.app ]; then
     export DEVELOPER_DIR=/Applications/Xcode_27.2.app/Contents/Developer
 fi

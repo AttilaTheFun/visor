@@ -1210,8 +1210,9 @@ container agents.
   and `rewrite ported-tools\.invalid/sha256/(.*)
   http://<Shireworks host>:7490/files/sha256/$1`, for a Shireworks server that serves
   them (a container's `.netrc`, from `<data>/containers/home/`, has the
-  token). Without it (CI's Linux
-  runners) Linux builds what runs on Linux. The iPhone app, the Mac apps,
+  token). CI's Nimbus runners (`visor-ci`) take it from Nimbus
+  (`nimbus job bazel-config`, .github/actions/nimbus_bazel). Without it
+  (CI's GitHub Linux runners) Linux builds what runs on Linux. The iPhone app, the Mac apps,
   the Linux client (`//applications/visor_client_linux`), the Linux
   server (`//applications/visor_server_linux:visor-server`; the static
   release build is SwiftPM's, tools/linux_programs.sh), the web site and the Android APK
@@ -1246,11 +1247,11 @@ container agents.
   scratch; a `VisorServer()` built over the real archive KILLS every agent
   it lists as an orphan (it has: "claude exited 143").
   `RealFileIndexTests` indexes a real file when `--test_env=VISOR_REAL_FILE=…`.
-  CI's `linux` job runs `//tests:linux`. Its `test` job builds the Mac's
-  .xctest bundles (`macos_unit_test` under tests/, not the manual ones:
-  tools/ci/build_mac_tests.sh) and runs each with `xcrun xctest`
-  (tools/ci/mac_tests_run.sh) on one of GitHub's own Macs (`xcode-27`),
-  which a public repository has for free. A test whose server listens takes
+  CI's `linux` job runs `//tests:linux`. Its `test-bundles` job builds the
+  Mac's .xctest bundles on a Nimbus runner (`macos_unit_test` under tests/,
+  not the manual ones: tools/ci/build_mac_tests.sh, apple_on_linux), and
+  `test` runs each with `xcrun xctest` (tools/ci/mac_tests_run.sh) in a
+  macOS VM a Nimbus runner leases (tools/ci/mac_vm.sh). A test whose server listens takes
   `ServerTestCase.freePort()`.
 - Test the client's screens, on Linux: `bazel test --config=headless
   //tests/feature_map_tests/...` — FEATURE_MAP.md walked through Isomer's
@@ -1343,17 +1344,26 @@ container agents.
   driver (FEATURE_MAP.md, `//tests/feature_map_tests`), run before and
   after every merge (Logan, 15 Nov 2026: "run all our tests headlessly
   from containers pre and post merge"). It runs on GitHub's own standard
-  runners and cache alone, as every public app repository's (Logan, 15
-  Nov 2026): no Shireworks runner, lease, cache, files or signing service;
-  no paid larger runner. The header of ci.yml has it whole.
+  runners and cache (Logan, 15 Nov 2026; no paid larger runner), but for
+  the Apple builds that are neither proposed nor released (the proof's,
+  the Mac's test bundles, populate-apple's and container-apple's), which
+  run on Nimbus' self-hosted runners (Logan, 26 Nov 2026: GitHub's Mac
+  queue held every Apple job for hours): single-use Linux containers,
+  `runs-on: [self-hosted, visor-ci]`, made by Nimbus' ci-github
+  controller, which never take a pull request's job, get no secret and no
+  token that writes, and reach only the hosts Nimbus lists for Visor
+  (`ci.egress`). The header of ci.yml has it whole.
   - **Release builds: rules_applecross, not Xcode** (pinned). A
     proposal's and a release's iPhone app and Visor.app (`alpha-apple`,
     `release-apple`) are built with rules_applecross's toolchain, not
-    Xcode's own Swift, on GitHub's `xcode-27` Mac (`--config=apple_cross_mac`
-    in .bazelrc: swift.org's Swift 6.4.2 and LLVM's ld64.lld compile and
-    link; the Mac's Xcode 27.2 gives the SDKs, actool, ibtool and the macro
-    plugins; MODULE.bazel gives a Mac no ported tools, which it never runs),
-    because of the 18–19 Nov 2026 crash: 0.62.1,
+    Xcode's own Swift, unsigned in a Nimbus macOS VM (`xcode_27_2`;
+    `--config=apple_cross_mac` in .bazelrc: swift.org's Swift 6.4.2 and
+    LLVM's ld64.lld compile and link; the VM's Xcode 27.2 gives the SDKs,
+    actool, ibtool and the macro plugins; MODULE.bazel gives a Mac no ported
+    tools, which it never runs).
+    Not on Linux (Logan, 27 Nov 2026): apple_on_linux's clean-room actool
+    draws Visor's Icon Composer icon flat, and a release keeps Xcode's. All
+    this because of the 18–19 Nov 2026 crash: 0.62.1,
     the first built by Xcode 27.2 (Apple's Swift 6.4.2, on GitHub's
     `xcode-27` Mac), aborted at launch on macOS 27.0 in
     `swift_task_dealloc`, from the short-lived deadline tasks of
@@ -1378,13 +1388,28 @@ container agents.
     Swift's image (`swift:6.4.0-noble`, by digest) with what
     tools/ci/job_tools.sh adds (Bazelisk, the Linux client's libraries,
     clang), Bazel's tree on the runner's second disk (Google's Android SDK
-    and NDK tools are x86_64, and GitHub's arm runners have no Rosetta);
-    the Apple targets on GitHub's `xcode-27` Macs with their own Xcode
-    (27.2 where the image has it; a proposal's and a release's apps with
-    rules_applecross's Swift, above): Apple's SDKs may not be
-    redistributed, so CI never builds them on Linux (`apple_on_linux` is a
-    builder's own). tools/ci/container_build.sh builds the platform's apps
-    where it runs. Visor's Linux programs (`linux-programs`) build on
+    and NDK tools are x86_64, and GitHub's arm runners have no Rosetta).
+    The Apple targets' builds for the proof, the Mac's tests and the cache
+    on Nimbus' arm64 runners (`visor-ci`, 8 CPUs and 16 GB, in Visor's
+    agent image) with rules_applecross (`apple_on_linux`, above): Apple's
+    SDKs may not be redistributed, so they come from Nimbus' files and
+    never reach GitHub's runners. What needs macOS itself (the Mac's tests
+    run, the iPhone's and the Mac's proofs, the launch checks, the site's
+    pictures) runs in a macOS VM (`xcode_27_2`, macOS 27) that such a job
+    leases (tools/ci/mac_vm.sh: the VM's own ssh, its key the job's;
+    renewed while it runs, released at its end; two such VMs in all,
+    shared, so a verify run takes one: its `mac` job runs the Mac's tests,
+    then the Mac's and the iPhone's proofs, in it), on a dispatch or a release's tag alone, never
+    a pull request's or a fork's code (Logan, 27 Nov 2026: no paid GitHub
+    runner, and the VM's open network taken until Nimbus' VMs have the
+    containers' egress rule). Nothing secret goes in (no token, no key, no
+    build setting), and nothing is signed there: a proposal's and a
+    release's Apple apps are built there unsigned (above), and the Sign
+    step on GitHub's Ubuntu stamps the build settings they were built
+    without as it signs them. The iPhone's proof moves to Nimbus'
+    `nimbus-ios` runners once they run jobs. tools/ci/container_build.sh
+    builds the platform's apps where it runs (`VISOR_CI_PLATFORM=apple` for
+    the Apple set on Linux). Visor's Linux programs (`linux-programs`) build on
     GitHub's arm64 Ubuntu in Visor's agent image (by digest).
   - **Caches**: Bazel's settings are tools/ci/ci_bazel.sh's
     (.github/actions/bazel_cache): GitHub's cache (actions/cache) holds
@@ -1399,7 +1424,11 @@ container agents.
     in its home (mode 600, the key unset once written). main's and a
     release's runs, which alone sign, use the default instance; a pull
     request's or a branch's its own, `visor-unreviewed`, so nothing
-    unreviewed lands by mistake where a signed build reads.
+    unreviewed lands by mistake where a signed build reads. The Nimbus
+    runners use Nimbus' Bazel cache alone, read by every job (the runner's
+    ~/.bazelrc) and written by `populate-apple` alone, which Nimbus grants
+    by the job's OIDC token (a push to main, the job `ci.populate` names:
+    `nimbus job cache-write`).
   - **A pull request** runs `container`, main's required check (the rules,
     tools/check_rules.py; the Linux client and blue Visor's APK built; the
     client's screens walked headless, `bazel test --config=headless
@@ -1408,20 +1437,20 @@ container agents.
     there; a newer push cancels the run before. A fork's pull request runs
     it too, with no secret and writing no cache. **No Mac at a pull
     request** (Logan, 13 Nov 2026: Apple runners for release verification
-    alone, as they are the bottleneck): `container-apple` on an `xcode-27`
-    Mac (the iPhone and Mac apps, the Mac's test bundles, libraries and
+    alone, as they are the bottleneck): `container-apple` on a Nimbus
+    runner (the iPhone and Mac apps, the Mac's test bundles, libraries and
     servers) runs by hand on a branch that touches Apple code (`gh workflow
     run ci.yml --ref <branch> -f run=container-apple`), and `verify` builds
     and tests them all.
   - **Each commit on main** runs `populate`: the merged tree built as the
     pull request's Linux jobs build it and its screens walked headless,
     into GitHub's cache and BuildBuddy's; nothing published.
-    `populate-apple`, the same for the Apple apps, runs **nightly** (06:00Z,
-    on main) and by hand (`-f run=populate`), not at each push: GitHub gives
-    a public repository's account 5 macOS runners in all, and a populate on
-    every merge held one while a prerelease waited (25 Nov 2026). A
-    `container-apple` by hand, and verify's Apple jobs, read the last
-    night's cache.
+    `populate-apple`, the same for the Apple apps on a Nimbus runner, runs
+    at each push to main too, into Nimbus' cache (the one event Nimbus
+    grants its write for), one at a time: a newer push's waits, and older
+    waiting ones are dropped. Its failure opens an issue, "Apple build
+    failed on main" (or comments on the open one). A `container-apple` by
+    hand, and verify's Apple builds, read it.
   - **By hand on main** (`gh workflow run ci.yml --ref main -f run=…`, or
     the gh tools' run_dispatch; a container agent's goes through
     agent-proxy's GitHub gate, `run` one of verify, prerelease and release,
@@ -1430,7 +1459,8 @@ container agents.
     docs/agent-proxy.md, "Release proposals on main"): `verify` runs the
     tests on Linux
     (`//tests:linux`, and the headless screens), those that need a Mac
-    (`test`: their bundles built and run on an `xcode-27` Mac), tries the
+    (`test-bundles` builds their bundles on a Nimbus runner, `test` runs
+    them in a macOS VM it leases), tries the
     command-line server on Linux (tools/ci/linux_tests.sh), builds blue
     Visor's web client (tools/ci/container_blue_web.sh `--build-only`) and
     makes the proof below, and keeps the `proof` artifact (for a day: every
@@ -1441,34 +1471,42 @@ container agents.
     does as `prerelease` and proposes a draft release naming its run. A
     proposal's version comes from the repository's releases and tags
     (tools/ci/version_from_tags.sh: one past the line's highest, the same
-    again for the same commit). The iPhone app and Visor.app are built on
-    an `xcode-27` Mac (`alpha-apple`) with rules_applecross's Swift
+    again for the same commit), on GitHub's Ubuntu (`alpha-version`, the
+    one job of them whose token writes). The iPhone app, Visor.app and
+    Visor Disk Utility are built unsigned in a macOS VM that a Nimbus
+    runner leases (`alpha-apple`), with rules_applecross's Swift
     (`--config=apple_cross_mac`, above), optimized, with `--config=alpha`
     and `--config=ci_device` (the iPhone's a device build signed ad hoc
     with a placeholder profile; Visor.app signed ad hoc asking for push,
-    `app.ci.entitlements`), with the update settings from the
-    `VISOR_UPDATE_APP_GROUP` and `VISOR_UPDATE_APPLICATIONS_BUNDLE_IDS`
-    secrets. The `alpha` job, on Ubuntu, builds Visor for Android (arm64,
+    `app.ci.entitlements`), and without the build settings from the
+    repository's secrets, which no VM or self-hosted runner gets. The `alpha` job, on Ubuntu, builds Visor for Android (arm64,
     `--config=alpha`) with the same version (tools/ci/stamp_android.sh:
     its versionName and versionCode), gives Visor.app Visor's Linux
     programs (tools/ci/mac_app_linux_programs.sh), and signs every build
     in its `Sign` step (tools/ci/sign_builds.sh), the one step the GitHub
     environment `release`'s secrets reach (deployments from main and `v*`
     tags alone; Logan, 15 Nov 2026: a public repository signs with keys in
-    its GitHub secrets), with the signers copied byte for byte from
-    AttilaTheFun/shireworks: the iPhone app with its development profiles
-    and Visor.app with Developer ID, notarized and stapled, on Linux
-    (tools/ci/apple_sign.sh and apple_profiles.py: `APPLE_DEVELOPMENT_P12`
-    and `_PASSWORD`, `APPLE_DEVELOPER_ID_P12` and `_PASSWORD`,
-    `APPLE_NOTARY_KEY`, `_KEY_ID` and `_ISSUER`, `APPLE_PROFILES`), the
+    its GitHub secrets): the Apple apps by build_tools' `sign apple`
+    (third_party/swift_packages, //tools/ci:sign, with the repository's own
+    rcodesign and dmg), first stamping the build settings they were built
+    without (`--add-infoplist`, `--add-groups`, build_tools#18: the
+    `VISOR_UPDATE_APP_GROUP` and `VISOR_UPDATE_APPLICATIONS_BUNDLE_IDS`
+    secrets' UpdateKit keys and app group, both or nothing signed; with the
+    `VISOR_GITHUB_SHARED_CLIENT_ID` secret and the `VISOR_TEAM_ID` variable,
+    the shared sign-in's keys and keychain group), then the iPhone app with
+    its development profiles and Visor.app with Developer ID, notarized and
+    stapled, on Linux (`APPLE_DEVELOPMENT_P12` and `_PASSWORD`,
+    `APPLE_DEVELOPER_ID_P12` and `_PASSWORD`, `APPLE_NOTARY_KEY`, `_KEY_ID`
+    and `_ISSUER`, `APPLE_PROFILES`), the
     APK with its private release key (never Isomer's public debug key;
     tools/ci/android_sign.sh: `ANDROID_SIGNING_KEYSTORE` and
     `ANDROID_SIGNING_PASSWORD`, the JDK Visor's Bazel pins and
     @android_build_tools' apksigner), its certificate checked against the
     workflow's `VISOR_ANDROID_PIN`. The draft is CI's
     (tools/ci/propose_release.sh, the run's token): no agent makes a draft
-    or a tag. Before it, `alpha-launch` opens the signed Visor.app on an
-    `xcode-27` Mac (tools/ci/launch_check), and `alpha-propose` proposes
+    or a tag. Before it, `alpha-launch` opens the signed Visor.app in a
+    macOS VM a Nimbus runner leases (tools/ci/launch_check, built on the
+    runner for the Mac), and `alpha-propose` proposes
     only once it passed. The signed builds are attached to the draft
     (`Visor-<version>-ios.ipa`, `-macos.zip`, `-android.apk` and
     `builds.json`: tools/ci/attach_release.sh), which is what Applications
@@ -1492,7 +1530,7 @@ container agents.
     nothing publishes them.
   - **Released**: Logan's Release in Reviews publishes a proposed
     release's draft, which makes its tag. Production comes from the tag:
-    `release-apple` (an `xcode-27` Mac, `--config=apple_cross_mac`) and
+    `release-apple` (unsigned in a Nimbus macOS VM, `--config=apple_cross_mac`) and
     `release-android` (Ubuntu)
     build the tag's commit with `--config=prod` and the tag's version
     (never the Alphas stamped again). `release` checks the commit is on
@@ -1507,7 +1545,7 @@ container agents.
     run red afterwards if the APK wasn't made. Re-run failed jobs then
     signs the APK alone: Apple's, Production already, are left as they
     are, and only the APK and builds.json are attached again.
-    `release-launch` opens the signed Visor.app on an `xcode-27` Mac
+    `release-launch` opens the signed Visor.app in a macOS VM
     (tools/ci/launch_check) and `release-assets` waits for it, then
     attaches the Production builds to the release in
     place of the Alphas, under the same names, with the disk image and
@@ -1520,8 +1558,8 @@ container agents.
     server on Windows and blue Visor's iPhone snapshots have no CI job
     (their Shireworks leases went with Shireworks' runners, 17 Nov 2026).
   - Other workflows: `Site` (pages.yml) and `Proof diff backfill` run on
-    `ubuntu-24.04`; `Screenshots` (by hand) pictures the site's images on
-    an `xcode-27` Mac (tools/ci/hosted_screenshots.sh).
+    `ubuntu-24.04`; `Screenshots` (by hand) pictures the site's images in
+    a macOS VM a Nimbus runner leases (tools/ci/hosted_screenshots.sh).
   - main is strict: a pull request merges once its CI is green on main's
     head. One that touches a path CODEOWNERS gives Logan is his to merge;
     any other its agent squash-merges.
@@ -1777,11 +1815,12 @@ CI makes the proof in its `verify` run, only by hand: on main
 (`gh workflow run ci.yml --ref main -f run=verify`), and in every
 `release` run, which proposes a release once it passes, never on a push or
 a pull request. Its apps are built where their tools run, the iPhone's and
-Visor.app on an `xcode-27` Mac and Android's on Ubuntu
-(`tools/ci/container_build.sh` with `VISOR_CI_PACKAGE`), and pictured on
-GitHub's own runners, which a public repository has for free:
+Visor.app on a Nimbus runner (rules_applecross) and Android's on Ubuntu
+(`tools/ci/container_build.sh` with `VISOR_CI_PACKAGE`), and pictured in
+macOS VMs that Nimbus runners lease (the iPhone's and the Mac's) and on
+GitHub's Ubuntu (Android's):
 
-Five jobs side by side: the iPhone and Android, each upright and on its
+Five parts: the iPhone and Android, each upright and on its
 side, and the Mac. The iPhone's and Android's take their pictures through
 Isomer's driver, from apps built with `--config=drive` (the proof's builds
 alone, never a release's): `//tests/feature_map_tests:feature_map_proof_ios`
@@ -1802,8 +1841,8 @@ Android), and each script names its pictures as the proof's parts are
 named, so `proof_make.sh` is unchanged. A walk that stops (an element not
 found) leaves its screens to launches of their own, and fails the test.
 
-- The iPhone (`tools/ci/proof_ios.sh <apps> <out> portrait|landscape`, on
-  an `xcode-27` Mac): the app on an iPhone 17 simulator of iOS 27.2, made
+- The iPhone (`tools/ci/proof_ios.sh <apps> <out> portrait|landscape`, both
+  in turn in one macOS VM): the app on an iPhone 17 simulator of iOS 27.2, made
   for the run, its status bar held still, keyboard suggestions off and the
   light look. GitHub rolls a new image out over days, and the older one had
   iOS 27.0 alone, whose pictures differ from 27.2's in most screens: where
@@ -1812,7 +1851,9 @@ found) leaves its screens to launches of their own, and fails the test.
   the app turns itself (its `fixture.orientation` setting, which its
   delegate answers with landscapeRight alone), and the picture, the
   device's upright frame, is turned to stand.
-- The Mac (`tools/ci/proof_mac.sh`, on another `xcode-27` Mac):
+- The Mac (`tools/ci/proof_mac.sh`, in the same VM's desktop session, its
+  pictures cut from Nimbus' picture of the VM's screen,
+  `VISOR_PROOF_SHOT=framebuffer`, until the VMs may picture their own):
   Visor.app, signed ad hoc as its build left it, opened on each of the
   fixture's screens in the light look and pictured cropped to its window.
   Not through the driver yet: Isomer's Mac launcher takes no launch
