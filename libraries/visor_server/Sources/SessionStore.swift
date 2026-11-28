@@ -120,20 +120,56 @@ final class SessionStore: Sendable {
         }
     }
 
-    /// Every row replaced by `rows`, and `notes` noted, in one transaction:
-    /// none of it unless all of it, and the count read back is the count
-    /// given (an import's).
-    func replaceAll(with rows: [Row], notes: [String: String]) throws {
+    /// What a merge did: the rows it left as they were (sessions the file
+    /// it came from didn't have), the rows it brought up to date, and the
+    /// rows it added.
+    struct Merged: Equatable, Sendable {
+        var kept: Int
+        var updated: Int
+        var added: Int
+    }
+
+    /// `rows` merged in, and `notes` noted, in one transaction: a row of the
+    /// same id brought up to date (its title, whether it's archived, when
+    /// its latest message came, the session itself; its place and its pin
+    /// as they were), one that isn't here added after the rest, in the
+    /// order given, and every row not among them left as it is. None of it
+    /// unless all of it, and the count read back is the count there should
+    /// be (an import's).
+    @discardableResult
+    func merge(_ rows: [Row], notes: [String: String]) throws -> Merged {
         try db.transaction(.immediate) { connection in
-            try connection.execute("DELETE FROM sessions")
-            try Self.insert(rows, into: connection)
+            let here = try connection.query("SELECT id, position FROM sessions") { (id: $0.text(0) ?? "", position: $0.int(1)) }
+            let ids = Set(here.map(\.id))
+            var next = (here.map(\.position).max() ?? -1) + 1
+            var updated = 0
+            try connection.prepare("UPDATE sessions SET title = ?, archived = ?, updated = ?, stored = ? WHERE id = ?") { statement in
+                for row in rows where ids.contains(row.id) {
+                    try statement.bind(row.title, row.archived, row.updated, row.stored, row.id)
+                    updated += try statement.run()
+                }
+            }
+            var added: [Row] = []
+            for var row in rows where !ids.contains(row.id) && !added.contains(where: { $0.id == row.id }) {
+                row.position = next
+                next += 1
+                added.append(row)
+            }
+            try Self.insert(added, into: connection)
+            let expected = ids.union(rows.map(\.id)).count
             let written = try connection.query("SELECT COUNT(*) FROM sessions") { $0.int(0) }.first ?? 0
-            let distinct = Set(rows.map(\.id)).count
-            guard written == distinct else {
-                throw Refusal(description: "\(distinct) sessions written, \(written) read back")
+            guard written == expected else {
+                throw Refusal(description: "\(expected) sessions there should be, \(written) read back")
             }
             try Self.note(notes, in: connection)
+            return Merged(kept: ids.subtracting(rows.map(\.id)).count, updated: updated, added: added.count)
         }
+    }
+
+    /// The whole store copied to a file of its own at `path` (one file,
+    /// what its log holds included: VACUUM INTO), which must not be there.
+    func copy(to path: String) throws {
+        try db.run("VACUUM INTO ?", path)
     }
 
     /// These sessions pinned (those of them here and not archived), and

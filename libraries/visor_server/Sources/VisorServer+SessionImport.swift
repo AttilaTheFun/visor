@@ -1,20 +1,26 @@
 // sessions.json, the sessions' store before 0.73, read into the server's
-// database (server.sqlite, SessionStore) once, at the first start of a
-// build that has one: every session in one transaction, the count read
-// back before it's committed, and only then the files renamed, never
-// deleted: sessions.json to sessions.json.imported-<day>, and
-// sessions.previous.json (its copy of the day before) and archive.json
-// (older still) likewise. Later starts read the database alone.
+// database (server.sqlite, SessionStore) at the first start of a build that
+// has one: every session in one transaction, the count read back before
+// it's committed. Later starts read the database alone.
 //
-// What was imported is left at sessions.json too, read-only, for a build
-// of 0.72 or before, should Visor go back to one (an update that doesn't
-// stay up is rolled back by itself: VisorServer+Rollback): it lists the
-// sessions as they were at the import, rather than none. Such a build
-// writes its own sessions.json over the copy, and the next start of this
-// one finds the file no longer the one it imported (by its SHA-256, which
-// the store notes) and imports it again, in place of what the database
-// had: the older build ran last, so its sessions are the ones there are.
-// The copy goes once no build before 0.73 is to be gone back to.
+// sessions.json itself stays where it is, made read-only, for a build of
+// 0.72 or before should Visor go back to one (Logan did, 27 Nov; and an
+// update that doesn't stay up is rolled back by itself:
+// VisorServer+Rollback): it lists the sessions as they were at the import.
+// A copy is kept beside it, sessions.json.imported-<day>; its copy of the
+// day before (sessions.previous.json) and archive.json (older still) are
+// renamed likewise. Nothing is deleted.
+//
+// An older build that runs writes its own sessions.json, and the next start
+// of this one finds the file isn't the one it imported (by its SHA-256,
+// which the store notes) and imports it again. Merged, never in place of
+// the store: the store is first copied aside whole
+// (server.sqlite.before-import-<yyyymmdd-hhmmss>), then each session the file has is
+// brought up to date from it (its place and its pin kept) and each it has
+// that the store hasn't is added, and the sessions the file hasn't (made
+// since the first import, with all they hold) are left as they are, so
+// going back and forth loses nothing. A session ended on the older build
+// comes back here; it can be ended again.
 //
 // A sessions.json that can't be read is left as it is: nothing is
 // imported, and nothing written (the store isn't readable, as when the
@@ -23,7 +29,8 @@
 // The pins builds of 0.73 before the store kept in messages.sqlite, the
 // message cache (its `pins` table, #560), are moved in once too, after
 // sessions.json: each session there and not archived is pinned in its row,
-// and the store notes it. The table is left as it is, and never read again.
+// and the store notes it, once the table was read from the cache's file.
+// The table is left as it is, and never read again after that.
 
 import Crypto
 import Foundation
@@ -60,7 +67,7 @@ extension VisorServer {
             // The copy left for a downgrade, unless an older build has
             // written its own over it since.
             guard let data, Self.fingerprint(data) != imported else { return true }
-            Self.log("sessions.json isn't the one imported: a Visor of 0.72 or before ran here since, and its sessions are imported in place of the database's")
+            Self.log("sessions.json isn't the one imported: a Visor of 0.72 or before ran here since, and its sessions are merged into the database's")
         } else if data == nil, files.fileExists(atPath: json.path) {
             return refuseStore("Could not read sessions.json. It is left as it is and nothing was imported from it; sessions are not being saved.")
         }
@@ -86,9 +93,20 @@ extension VisorServer {
         }
         let day = RetiredFiles.day(now)
         let importedName = Self.unusedName("sessions.json.imported-" + day, in: folder)
+        // What the store holds, copied aside before it takes another file in.
+        do {
+            if try store.count() > 0 {
+                let aside = folder.appendingPathComponent(Self.unusedName("\(Self.storeURL.lastPathComponent).before-import-\(Self.backupStamp(now))", in: folder))
+                try store.copy(to: aside.path)
+                Self.log("\(Self.storeURL.lastPathComponent) copied to \(aside.lastPathComponent) before sessions.json is imported again")
+            }
+        } catch {
+            return refuseStore("Could not copy \(Self.storeURL.lastPathComponent) aside before importing sessions.json: \(error). It is left as it is; sessions are not being saved.")
+        }
+        let merged: SessionStore.Merged
         do {
             let rows = try sessions.enumerated().map { try SessionStore.Row($1, position: $0) }
-            try store.replaceAll(with: rows, notes: [
+            merged = try store.merge(rows, notes: [
                 Self.importedFingerprintNote: data.map(Self.fingerprint) ?? "",
                 "importedAs": importedName,
                 "importedAt": ISO8601DateFormatter().string(from: now),
@@ -97,26 +115,26 @@ extension VisorServer {
         } catch {
             return refuseStore("Could not import sessions.json into \(Self.storeURL.lastPathComponent): \(error). It is left as it is; sessions are not being saved.")
         }
-        Self.log("imported \(sessions.count) session\(sessions.count == 1 ? "" : "s") from sessions.json into \(Self.storeURL.lastPathComponent)")
-        // Renamed, never deleted.
-        var renamed: [(URL, String)] = [(json, importedName)]
-        for name in ["sessions.previous.json", "archive.json"] {
-            renamed.append((folder.appendingPathComponent(name, isDirectory: false), Self.unusedName(name + ".imported-" + day, in: folder)))
-        }
-        for (url, name) in renamed where files.fileExists(atPath: url.path) {
-            do {
-                try files.moveItem(at: url, to: folder.appendingPathComponent(name, isDirectory: false))
-            } catch {
-                Self.log("\(url.lastPathComponent) couldn't be renamed \(name): \(error.localizedDescription)")
-            }
-        }
-        // The copy for a build of 0.72 or before to read.
+        Self.log("imported \(sessions.count) session\(sessions.count == 1 ? "" : "s") from sessions.json into \(Self.storeURL.lastPathComponent)"
+            + (imported == nil ? "" : ": \(merged.updated) brought up to date, \(merged.added) added, \(merged.kept) it hasn't kept as they were"))
+        // sessions.json stays, for an older build, read-only; a copy of it
+        // beside it, and the other two renamed. Never deleted.
         if let data {
             do {
-                try data.write(to: json, options: .atomic)
-                try files.setAttributes([.posixPermissions: 0o444], ofItemAtPath: json.path)
+                try data.write(to: folder.appendingPathComponent(importedName, isDirectory: false), options: .atomic)
             } catch {
-                Self.log("sessions.json couldn't be left for an older Visor: \(error.localizedDescription)")
+                Self.log("sessions.json couldn't be copied to \(importedName): \(error.localizedDescription)")
+            }
+            try? files.setAttributes([.posixPermissions: 0o444], ofItemAtPath: json.path)
+        }
+        for name in ["sessions.previous.json", "archive.json"] {
+            let url = folder.appendingPathComponent(name, isDirectory: false)
+            guard files.fileExists(atPath: url.path) else { continue }
+            let renamed = Self.unusedName(name + ".imported-" + day, in: folder)
+            do {
+                try files.moveItem(at: url, to: folder.appendingPathComponent(renamed, isDirectory: false))
+            } catch {
+                Self.log("\(name) couldn't be renamed \(renamed): \(error.localizedDescription)")
             }
         }
         return true
@@ -127,11 +145,16 @@ extension VisorServer {
 
     /// The pins messages.sqlite kept (ServerCache), moved into the store if
     /// they haven't been: once, whatever there was (none, for a cache that
-    /// never had pins). Not done, it's tried again at the next start.
+    /// never had pins), but only once its file was read. A cache in memory
+    /// (one that couldn't be opened) or a read that failed moves nothing
+    /// and notes nothing: the next start tries again.
     func movePinsFromCache(into store: SessionStore, now: Date = Date()) {
         do {
             guard try store.note(Self.pinsMovedNote) == nil else { return }
-            let kept = ServerCache.shared.pinnedSessions()
+            guard let kept = ServerCache.shared.pinnedSessions() else {
+                Self.log("the pins messages.sqlite kept couldn't be read (the cache isn't its file, or the read failed): tried again at the next start")
+                return
+            }
             let pinned = try store.pin(kept, notes: [Self.pinsMovedNote: ISO8601DateFormatter().string(from: now) + " (\(kept.count) kept)"])
             if !kept.isEmpty { Self.log("moved \(pinned) of the \(kept.count) pins messages.sqlite kept into \(Self.storeURL.lastPathComponent)") }
         } catch {

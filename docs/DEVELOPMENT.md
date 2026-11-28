@@ -190,32 +190,42 @@ once), `updated`, and `stored`, the session as `StoredSession` encodes it
 (JSON, keys sorted); `notes` holds what the store notes of itself (its
 imports). The pins a build of 0.73 before the store kept in messages.sqlite
 (a `pins` table, #560) are moved into the rows once, at the start after
-sessions.json's import (`movePinsFromCache`), and noted; the cache's table
-is left as it is, and never read or written again. The schema grows a step
+sessions.json's import (`movePinsFromCache`), and noted, but only once the
+cache's file was read: a cache in memory, or a read that failed, moves
+and notes nothing, and the next start tries again. The cache's table is
+left as it is, and never written again. The schema grows a step
 at a time (`SessionStore.migrations`, `PRAGMA user_version`), never
 dropped as the message cache's is, and a file at a later version than a
 build knows is not opened: the server says so and saves nothing. A save
 (`saveArchive`, 30 s after a change; `saveArchiveNow` at once) writes, in
 one transaction, the rows of the sessions whose JSON changed since they
-were written, the places of those that moved, and deletes the rows of
-those gone; it never rewrites the store. Before 0.73 the store was
-`sessions.json`, written whole (`sessions.previous.json` its copy of the
-day before): the first start of 0.73 imports it (VisorServer+SessionImport)
-when the store has never imported one and is empty, every session in one
-transaction with the count read back, then renames `sessions.json`,
-`sessions.previous.json` and `archive.json` to `<name>.imported-<day>`
-(never deleted) and leaves a read-only copy of what it imported at
-`sessions.json`, for a downgrade. A sessions.json that doesn't decode is
-left as it is, nothing is imported and nothing saved, and the next start
-tries again. **Going back to 0.72 or before:** the older build reads the
-copy, so it lists the sessions as they were at the import (not what
-changed since; the transcripts are the agents' own files either way),
-and an update that doesn't stay up and is rolled back lands the same
-way. It writes its own sessions.json over the copy; the next start of
-0.73 or later sees the file isn't the one it imported (the store notes
-its SHA-256) and imports it again in place of what it had, renaming it
-`sessions.json.imported-<day>-2`. The copy is for one version: a later
-one stops leaving it. To read the store by hand: `sqlite3
+were written, the places and pins of those that moved or were pinned, and
+deletes the rows of those gone; it never rewrites the store. Before 0.73
+the store was `sessions.json`, written whole (`sessions.previous.json` its
+copy of the day before): the first start of 0.73 imports it
+(VisorServer+SessionImport) when the store has never imported one and is
+empty, every session in one transaction with the count read back. It
+leaves `sessions.json` where it is, read-only, so an older build always
+finds it, with a copy beside it, `sessions.json.imported-<day>`, and
+renames `sessions.previous.json` and `archive.json` to
+`<name>.imported-<day>`; nothing is deleted. A sessions.json that doesn't
+decode is left as it is, nothing is imported and nothing saved, and the
+next start tries again. **Going back to 0.72 or before** (Logan did, 27
+Nov): the older build reads sessions.json, so it lists the sessions as they
+were at the import (not what changed since; the transcripts are the
+agents' own files either way), and an update that doesn't stay up and is
+rolled back lands the same way. It writes its own sessions.json, and the
+next start of 0.73 or later sees the file isn't the one it imported (the
+store notes its SHA-256) and imports it again, merged: the store first
+copied aside whole (`server.sqlite.before-import-<yyyymmdd-hhmmss>`, VACUUM
+INTO), then each session the file has brought up to date from it (its
+title, archived, the session's JSON; its place and pin kept), each it has
+that the store hasn't added after the rest, and the sessions it hasn't
+(made on 0.73 since, with their history) kept as they are, so going back
+and forth loses nothing. A session ended on the older build comes back,
+to be ended again. The copy beside sessions.json is
+`sessions.json.imported-<day>-2` then. Leaving sessions.json for an older
+build is for one version: a later one stops. To read the store by hand: `sqlite3
 /Volumes/Visor/Data/server.sqlite "select position, id, title, archived
 from sessions order by position"`.
 

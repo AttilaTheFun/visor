@@ -204,8 +204,9 @@ extension ServerTests {
         #expect(beta.info.agentState == .stopped)
         #expect(beta.info.agent == .codex)
 
-        // The files renamed, never deleted, and a copy of what was imported
-        // left where an older build reads it, read-only.
+        // sessions.json left where an older build reads it, read-only and
+        // never missing, with a copy beside it; the other renamed. Nothing
+        // deleted.
         #expect(try String(contentsOf: file("sessions.json.imported-\(day)"), encoding: .utf8) == text)
         #expect(try String(contentsOf: file("sessions.previous.json.imported-\(day)"), encoding: .utf8) == "[]")
         #expect(!FileManager.default.fileExists(atPath: file("sessions.previous.json").path))
@@ -244,17 +245,57 @@ extension ServerTests {
         #expect(!FileManager.default.fileExists(atPath: file("sessions.json.imported-\(day)-2").path))
         #expect(logged.all.filter { $0.contains("from sessions.json into") }.count == 1)
 
-        // A build of 0.72 or before ran since, and wrote its own over the
-        // copy: its sessions are the ones there are.
+        // A build of 0.72 or before ran since, and wrote its own: merged in,
+        // what the store has that the file hasn't kept.
         let older = #"[{"info":{"id":"older","agent":"claude","cwd":"/tmp","title":"From 0.72","created":3},"entries":[]}]"#
         try Data(older.utf8).write(to: file("sessions.json"), options: .atomic)
         let fourth = launch()
-        #expect(fourth.sessions.map(\.info.id) == ["older"])
+        #expect(fourth.sessions.map(\.info.id) == ["alpha", "older"])
         #expect(try String(contentsOf: file("sessions.json.imported-\(day)-2"), encoding: .utf8) == older)
-        #expect(try reader().rows().map(\.id) == ["older"])
+        #expect(try reader().rows().map(\.id) == ["alpha", "older"])
         let fifth = launch()
-        #expect(fifth.sessions.map(\.info.id) == ["older"])
+        #expect(fifth.sessions.map(\.info.id) == ["alpha", "older"])
         #expect(!FileManager.default.fileExists(atPath: file("sessions.json.imported-\(day)-3").path))
+    }
+
+    /// Back to 0.72 and up again: a session made on this build since the
+    /// import, with its history, is still there, a pinned one still pinned,
+    /// and what 0.72 changed of the sessions it has is taken; the store as
+    /// it was is copied aside first.
+    @Test func testADowngradeAndBackLosesNothing() throws {
+        try Data(Self.sessionsJSON().utf8).write(to: file("sessions.json"))
+        let first = launch()
+        let made = record("made", title: "Made on 0.73")
+        made.entries = [TranscriptEntry(id: "m-u1", role: .user, text: "Since the upgrade"),
+                        TranscriptEntry(id: "m-r1", role: .assistant, text: "And its answer")]
+        first.sessions.append(made)
+        first.perform(.pin(session: "alpha"), from: nil)
+        first.perform(.pin(session: "made"), from: nil)
+        #expect(try reader().rows().filter(\.pinned).map(\.id) == ["alpha", "made"])
+
+        // 0.72 reads sessions.json, renames alpha and writes it again.
+        var older = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: file("sessions.json"))) as? [[String: Any]])
+        var info = try #require(older[1]["info"] as? [String: Any])
+        info["title"] = "Alpha on 0.72"
+        older[1]["info"] = info
+        try JSONSerialization.data(withJSONObject: older).write(to: file("sessions.json"), options: .atomic)
+
+        let again = launch()
+        #expect(again.storeIsReadable)
+        #expect(again.sessions.map(\.info.id) == ["beta", "alpha", "made"], "the store's order, what it alone has kept")
+        #expect((again.session("alpha")?.info.title) == "Alpha on 0.72")
+        #expect((again.session("alpha")?.info.pinned) == true, "still pinned")
+        let back = try #require(again.session("made"))
+        #expect(back.info.pinned)
+        #expect(back.entries.map(\.id) == ["m-u1", "m-r1"], "with its history")
+        #expect(logged.all.contains { $0.contains("1 it hasn't kept as they were") })
+
+        // The store as it was before, aside, whole.
+        let names = try FileManager.default.contentsOfDirectory(atPath: root.path)
+        let aside = try #require(names.first(where: { $0.hasPrefix("server.sqlite.before-import-") }))
+        let before = try SessionStore(path: root.appendingPathComponent(aside).path)
+        #expect(try before.rows().map(\.title) == ["Beta", "Alpha", "Made on 0.73"])
+        #expect(try before.rows().filter(\.pinned).map(\.id) == ["alpha", "made"])
     }
 
     @Test func testAFileThatCantBeReadIsLeftAndNothingIsImported() throws {
