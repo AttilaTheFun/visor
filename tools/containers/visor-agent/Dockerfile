@@ -57,6 +57,7 @@ LABEL org.opencontainers.image.source="https://github.com/AttilaTheFun/visor"
 LABEL org.opencontainers.image.description="Visor's image: the Linux a session's agent runs in, in a container, with Claude Code and Codex."
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates curl git openssh-client tmux python3 unzip zip less procps ripgrep bubblewrap tini \
+      jq rsync file xz-utils \
       libcurl4t64 libstdc++6 \
  && rm -rf /var/lib/apt/lists/*
 COPY --from=docker.io/library/node:22-bookworm-slim /usr/local/bin/node /usr/local/bin/node
@@ -97,6 +98,7 @@ LABEL org.opencontainers.image.description="Visor's agent image: the Linux a ses
 ARG TARGETARCH
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates curl git openssh-client tmux python3 unzip zip less procps ripgrep bubblewrap tini \
+      jq rsync file xz-utils \
       libxml2 libgcc-13-dev lld clang pkg-config \
       libsdl2-dev libsdl2-ttf-dev libcurl4-openssl-dev libgl-dev libegl-dev libglvnd-dev libsqlite3-dev libgtk-3-dev libwebkit2gtk-4.1-dev \
       libnss3 \
