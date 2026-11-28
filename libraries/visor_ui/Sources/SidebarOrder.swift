@@ -10,15 +10,23 @@ import VisorProtocol
 enum SidebarOrder {
     /// Whether the computer named `a` lists before the one named `b`.
     static func computer(_ a: String, before b: String) -> Bool {
-        let order = a.localizedStandardCompare(b)
+        let order = compare(a, b)
         return order == .orderedSame ? a < b : order == .orderedAscending
     }
 
     /// Whether session `a` lists before `b` under their computer.
     static func session(_ a: SessionInfo, before b: SessionInfo) -> Bool {
         if a.pinned != b.pinned { return a.pinned }
-        let order = title(a).localizedStandardCompare(title(b))
-        return order == .orderedSame ? (title(a), a.id) < (title(b), b.id) : order == .orderedAscending
+        let order = compare(title(a), title(b))
+        return order == .orderedSame ? a.id < b.id : order == .orderedAscending
+    }
+
+    /// Finder's comparison without its forced ordering: Apple's
+    /// localizedStandardCompare puts "same" before "Same" (Linux's calls
+    /// them the same), so the same name in another case is left to the id
+    /// on every platform.
+    static func compare(_ a: String, _ b: String) -> ComparisonResult {
+        a.compare(b, options: [.caseInsensitive, .numeric, .widthInsensitive], range: nil, locale: .current)
     }
 
     /// The name a row shows: its title, or its agent's.
