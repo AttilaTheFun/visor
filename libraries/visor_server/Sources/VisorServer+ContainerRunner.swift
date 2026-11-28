@@ -343,7 +343,7 @@ extension VisorServer {
     }
 
     /// The sessions placed in the container whose agents ran when this
-    /// server last stopped (taken up from sessions.json), started again in
+    /// server last stopped (taken up from the sessions' store), started again in
     /// it, once the engine is given: each on its latest conversation, and
     /// one whose turn was cut short told to pick it up first, as a host
     /// session is.

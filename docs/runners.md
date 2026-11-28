@@ -263,7 +263,7 @@ agent_protocol#9, #10 and #12.
   the dispatcher: agent jobs move to Nimbus CI, and runner tokens are
   removed once they run there. Visor mints a token for each
   runner name (`container@<computer>`, as the runner's claims say it),
-  kept with the server's secrets (`runnerTokens`; never in sessions.json,
+  kept with the server's secrets (`runnerTokens`; never in the sessions' store,
   jobs.json or the log) and shown once, when minted. The computer's owner
   mints, lists and revokes them over REST (the password, a `hello` token,
   the admin token, or the socket file; never an agent's token, which the

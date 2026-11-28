@@ -173,6 +173,126 @@ import Testing
         #expect(!FileManager.default.fileExists(atPath: legacy.path))
     }
 
+    /// The sessions' store, a database with its log beside it, goes
+    /// together: the volume's database is never left beside the home
+    /// folder's log.
+    @Test func aDatabaseAndItsFilesGoTogether() throws {
+        let scratch = try Scratch()
+        defer { try? FileManager.default.removeItem(at: scratch.root) }
+        let legacy = scratch.folders.legacyData
+        let data = scratch.folders.data
+        let database = ["server.sqlite", "server.sqlite-wal", "server.sqlite-shm"]
+        for name in database { try scratch.write("home", name, in: legacy) }
+        try scratch.write("{}", "settings.json", in: legacy)
+        #expect(VisorFolderMove(folders: scratch.folders, answers: { _ in false }).moveData()
+            == .moved(["server.sqlite", "server.sqlite-shm", "server.sqlite-wal", "settings.json"]))
+        for name in database { #expect(scratch.read(name, in: data) == "home") }
+
+        // The volume has a database of its own, without a log: all three
+        // of the home folder's are put aside, under the same name, twice.
+        for round in ["first", "second"] {
+            for name in database { try scratch.write(round, name, in: legacy) }
+            try scratch.write("volume", "server.sqlite", in: data)
+            try? FileManager.default.removeItem(at: data.appendingPathComponent("server.sqlite-wal"))
+            try? FileManager.default.removeItem(at: data.appendingPathComponent("server.sqlite-shm"))
+            _ = VisorFolderMove(folders: scratch.folders, answers: { _ in false }).moveData()
+            #expect(scratch.read("server.sqlite", in: data) == "volume")
+            #expect(!scratch.exists("server.sqlite-wal", in: data), "not beside the volume's")
+        }
+        #expect(scratch.read("moved-aside/server.sqlite", in: data) == "first")
+        #expect(scratch.read("moved-aside/server.sqlite-wal", in: data) == "first")
+        let aside = try FileManager.default.contentsOfDirectory(atPath: data.appendingPathComponent("moved-aside").path)
+        let second = try #require(aside.first(where: { $0.hasPrefix("server.sqlite-") && !$0.hasSuffix("-wal") && !$0.hasSuffix("-shm") }))
+        #expect(aside.contains(second + "-wal") && aside.contains(second + "-shm"), "\(aside)")
+        #expect(scratch.read("moved-aside/" + second + "-wal", in: data) == "second")
+    }
+
+    /// The crash Manager found (#566): server.sqlite staged on the volume,
+    /// its log still at home; a start without the volume then made a new,
+    /// empty server.sqlite at home. The start on the volume after keeps the
+    /// staged one, the real database, in moved-aside/, and says so: never
+    /// deleted.
+    @Test func aStagedDatabaseWhoseHomeMadeAnotherIsKept() throws {
+        let scratch = try Scratch()
+        defer { try? FileManager.default.removeItem(at: scratch.root) }
+        let legacy = scratch.folders.legacyData
+        let data = scratch.folders.data
+        try scratch.write("real", "server.sqlite.moving", in: data)
+        try scratch.write("log", "server.sqlite-wal", in: legacy)
+        // Without the volume: the home folder's data folder, a new database.
+        #expect(VisorFolderMove(folders: scratch.without, answers: { _ in false }).moveData() == .nothing)
+        try scratch.write("empty", "server.sqlite", in: legacy)
+        try scratch.write("{}", "settings.json", in: legacy)
+
+        let said = Mutex<[String]>([])
+        _ = VisorFolderMove(folders: scratch.folders, answers: { _ in false }, log: { line in said.withLock { $0.append(line) } }).moveData()
+        let aside = try FileManager.default.contentsOfDirectory(atPath: data.appendingPathComponent("moved-aside").path)
+        let kept = try #require(aside.first(where: { $0.hasPrefix("server.sqlite.staged-") }))
+        #expect(scratch.read("moved-aside/" + kept, in: data) == "real", "the real database, kept")
+        #expect(said.withLock { $0 }.contains { $0.contains("server.sqlite.moving") && $0.contains(kept) }, "and said")
+        #expect(!scratch.exists("server.sqlite.moving", in: data))
+        #expect(scratch.read("server.sqlite", in: data) == "empty", "the home folder's moved as it is")
+    }
+
+    /// A staged file in moved-aside/ (the volume had a database of its own)
+    /// knows its home by its name without its tag: put back with its log,
+    /// and the two kept aside together again.
+    @Test func aStagedFileAsideFindsItsHomeWithoutItsTag() throws {
+        #expect(VisorFolderMove.untagged("server.sqlite-1a2b3c4d-wal") == "server.sqlite-wal")
+        #expect(VisorFolderMove.untagged("server.sqlite-1a2b3c4d") == "server.sqlite")
+        #expect(VisorFolderMove.untagged("server.sqlite-wal") == "server.sqlite-wal")
+        #expect(VisorFolderMove.untagged("push.json") == "push.json")
+        let scratch = try Scratch()
+        defer { try? FileManager.default.removeItem(at: scratch.root) }
+        let legacy = scratch.folders.legacyData
+        let data = scratch.folders.data
+        try scratch.write("volume", "server.sqlite", in: data)
+        try scratch.write("staged", "moved-aside/server.sqlite-1a2b3c4d.moving", in: data)
+        try scratch.write("log", "server.sqlite-wal", in: legacy)
+        _ = VisorFolderMove(folders: scratch.folders, answers: { _ in false }).moveData()
+        #expect(scratch.read("server.sqlite", in: data) == "volume")
+        let aside = try FileManager.default.contentsOfDirectory(atPath: data.appendingPathComponent("moved-aside").path)
+        #expect(!aside.contains { $0.hasSuffix(".moving") })
+        let database = try #require(aside.first(where: { scratch.read("moved-aside/" + $0, in: data) == "staged" }))
+        #expect(scratch.read("moved-aside/" + database + "-wal", in: data) == "log", "with its log: \(aside)")
+    }
+
+    /// A move cut short by a crash, part of a database staged on the volume
+    /// and part still at home: put back and moved again whole; and one
+    /// staged whole, nothing left at home, put in place.
+    @Test func aDatabaseMoveCutShortIsSortedOutAtTheNextStart() throws {
+        let scratch = try Scratch()
+        defer { try? FileManager.default.removeItem(at: scratch.root) }
+        let legacy = scratch.folders.legacyData
+        let data = scratch.folders.data
+        try scratch.write("db", "server.sqlite.moving", in: data)
+        try scratch.write("log", "server.sqlite-wal", in: legacy)
+        try scratch.write("{}", "settings.json", in: legacy)
+        #expect(VisorFolderMove(folders: scratch.folders, answers: { _ in false }).moveData()
+            == .moved(["server.sqlite", "server.sqlite-wal", "settings.json"]))
+        #expect(scratch.read("server.sqlite", in: data) == "db")
+        #expect(scratch.read("server.sqlite-wal", in: data) == "log")
+        #expect(!scratch.exists("server.sqlite.moving", in: data))
+
+        // A copy cut short: the home folder still has the file, so the
+        // staged part is kept aside, never deleted, and the move done again.
+        try FileManager.default.removeItem(at: data.appendingPathComponent("server.sqlite"))
+        try FileManager.default.removeItem(at: data.appendingPathComponent("server.sqlite-wal"))
+        try scratch.write("half", "server.sqlite.moving", in: data)
+        try scratch.write("whole", "server.sqlite", in: legacy)
+        _ = VisorFolderMove(folders: scratch.folders, answers: { _ in false }).moveData()
+        #expect(scratch.read("server.sqlite", in: data) == "whole")
+        #expect(!scratch.exists("server.sqlite.moving", in: data))
+        let kept = try FileManager.default.contentsOfDirectory(atPath: data.appendingPathComponent("moved-aside").path)
+        #expect(kept.contains { $0.hasPrefix("server.sqlite.staged-") && scratch.read("moved-aside/" + $0, in: data) == "half" })
+
+        // Staged whole, the home folder empty of it: put in place.
+        try FileManager.default.removeItem(at: data.appendingPathComponent("server.sqlite"))
+        try scratch.write("staged", "server.sqlite.moving", in: data)
+        #expect(VisorFolderMove(folders: scratch.folders, answers: { _ in false }).moveData() == .nothing)
+        #expect(scratch.read("server.sqlite", in: data) == "staged")
+    }
+
     @Test func aCacheMovesWholeOrIsDropped() throws {
         let scratch = try Scratch()
         defer { try? FileManager.default.removeItem(at: scratch.root) }

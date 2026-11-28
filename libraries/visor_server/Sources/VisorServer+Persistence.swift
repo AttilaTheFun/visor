@@ -1,5 +1,6 @@
-// The sessions written down and read back: sessions.json, what a launch
-// carries on with, and the agents a previous life left behind.
+// The sessions written down and read back: the store (server.sqlite,
+// SessionStore), what a launch carries on with, and the agents a previous
+// life left behind.
 
 import ClaudeTranscript
 import MessageCache
@@ -26,51 +27,12 @@ extension VisorServer {
     }
 
     func loadSessions() {
-        var stored: [StoredSession] = []
-        var dropped = false
-        let legacy = Self.storeURL.deletingLastPathComponent().appendingPathComponent("archive.json", isDirectory: false)
-        for url in [Self.storeURL, legacy] {
-            guard let data = try? Data(contentsOf: url), data.count > 2 else { continue }
-            do {
-                let read = try JSONDecoder().decode([StoredItem].self, from: data)
-                // Terminal sessions are gone: one kept by an older build is
-                // dropped here, where it would otherwise read as a Claude
-                // session (what an agent's name not known here reads as).
-                for item in read where item.isTerminal {
-                    Self.log("dropped the terminal session \(item.session.info.title) (\(item.session.info.id)): Visor no longer has terminal sessions")
-                    dropped = true
-                }
-                var items = read.filter { !$0.isTerminal }.map(\.session)
-                // Rows written before sizes were kept: read the sizes once
-                // now, so an old thread lays out as steadily as a new one.
-                for i in items.indices {
-                    for j in items[i].entries.indices where items[i].entries[j].images.count > items[i].entries[j].imageSizes.count {
-                        items[i].entries[j].imageSizes = AgentImages.pixelSizes(paths: items[i].entries[j].images)
-                    }
-                }
-                stored += items.filter { item in !stored.contains { $0.info.id == item.info.id } }
-            } catch {
-                // A file we cannot read is not an empty one. Keep it, keep
-                // quiet about nothing, and refuse to write over it: this is
-                // the whole record of every session, and a decoding change
-                // once turned it into "[]".
-                let kept = url.deletingLastPathComponent()
-                    .appendingPathComponent(url.lastPathComponent + ".unreadable", isDirectory: false)
-                try? FileManager.default.removeItem(at: kept)
-                try? FileManager.default.copyItem(at: url, to: kept)
-                storeIsReadable = false
-                lastError = "Could not read \(url.lastPathComponent): \(error). A copy is at \(kept.path); sessions are not being saved."
-                return
-            }
-        }
+        guard let stored = readStore() else { return }
         let asked = Self.requestedResumes()
-        // Its pins are the database's, not the file's (VisorServer+SessionPins).
-        let pinned = ServerCache.shared.pinnedSessions()
         var orphans: [(session: String, pid: Int32, resume: String?)] = []
         var hosted: [(record: SessionRecord, host: StoredHost, pid: Int32?, resume: String?)] = []
         for item in stored {
             var info = item.info
-            info.pinned = pinned.contains(info.id) && !info.archived
             info.busy = false
             info.ended = false
             // A stopped agent stays stopped; one the app went away under
@@ -154,8 +116,7 @@ extension VisorServer {
             }
             sessions.append(record)
         }
-        try? FileManager.default.removeItem(at: legacy)
-        if !stored.isEmpty || dropped { saveArchiveNow() }
+        if !stored.isEmpty { saveArchiveNow() }
         for left in hosted {
             Task { await pickUp(left.record, host: left.host, agentPID: left.pid, resume: left.resume) }
         }
@@ -167,6 +128,56 @@ extension VisorServer {
                 if let record = session(orphan.session) { release(record) }
             }
         }
+    }
+
+    /// The sessions as the store has them, pinned as their rows say
+    /// (sessions.json's read into it first, the first time, and the pins
+    /// messages.sqlite kept: VisorServer+SessionImport), and each one's row
+    /// noted as written. Nil when there's no store to read: it couldn't be
+    /// opened, or read, and nothing is written this launch (lastError says
+    /// why).
+    func readStore() -> [StoredSession]? {
+        let name = Self.storeURL.lastPathComponent
+        let store: SessionStore
+        let rows: [SessionStore.Row]
+        do {
+            store = try SessionStore(path: Self.storeURL.path)
+        } catch {
+            refuseStore("Could not open \(name): \(error). Sessions are not being saved.")
+            return nil
+        }
+        sessionStore = store
+        guard importLegacyStore(into: store) else { return nil }
+        movePinsFromCache(into: store)
+        do {
+            rows = try store.rows()
+        } catch {
+            refuseStore("Could not read \(name): \(error). Sessions are not being saved.")
+            return nil
+        }
+        var stored: [StoredSession] = []
+        var read: [String: SessionStore.Row] = [:]
+        for row in rows where read[row.id] == nil {
+            // A row we cannot read is kept, and so is every other: nothing
+            // is written until a build that reads them all.
+            guard var session = try? JSONDecoder().decode(StoredSession.self, from: Data(row.stored.utf8)) else {
+                refuseStore("Could not read the session \(row.title) (\(row.id)) in \(name). Sessions are not being saved.")
+                return nil
+            }
+            // Its pin is the row's (an archived session isn't pinned).
+            session.info.pinned = row.pinned && !session.info.archived
+            read[row.id] = row
+            stored.append(session)
+        }
+        writtenRows = read
+        // Rows written before sizes were kept: read the sizes once now, so
+        // an old thread lays out as steadily as a new one.
+        for i in stored.indices {
+            for j in stored[i].entries.indices where stored[i].entries[j].images.count > stored[i].entries[j].imageSizes.count {
+                stored[i].entries[j].imageSizes = AgentImages.pixelSizes(paths: stored[i].entries[j].images)
+            }
+        }
+        return stored
     }
 
     /// Ends an agent left over from a previous life of the app. The pid
@@ -183,14 +194,14 @@ extension VisorServer {
         if await !Command.exited(pid, within: .seconds(2)) { processes.kill(pid) }
     }
 
-    /// Writes every session down soon: once, `archiveSaveDelay` after the
+    /// Writes the sessions down soon: once, `archiveSaveDelay` after the
     /// first change, with every change made by then. Most changes are of a
     /// turn (its state, its queue, mail read and sent), and a turn makes
-    /// many; written whole on each, the store (megabytes, with the
-    /// sessions' mailboxes) cost the Mac about a gigabyte an hour. What
-    /// must survive a crash (a session made or ended, an agent's pid,
-    /// archiving) is written at once with saveArchiveNow, as is everything
-    /// before a quit or a relaunch.
+    /// many; written on each, the store (megabytes, with the sessions'
+    /// mailboxes) cost the Mac about a gigabyte an hour when it was
+    /// sessions.json, written whole. What must survive a crash (a session
+    /// made or ended, an agent's pid, archiving) is written at once with
+    /// saveArchiveNow, as is everything before a quit or a relaunch.
     func saveArchive() {
         guard !archiveSavePending else { return }
         archiveSavePending = true
@@ -202,22 +213,41 @@ extension VisorServer {
         }
     }
 
-    /// Writes every session down now (the name is historical: it began as
-    /// the archive), and with it any change waiting to be.
+    /// Writes the sessions down now (the name is historical: it began as
+    /// the archive), and with them any change waiting to be: in one
+    /// transaction, the rows of the sessions that changed since they were
+    /// last written, the places and pins of those that moved in the list or
+    /// were pinned or unpinned, and the rows of those gone. A session as it
+    /// was is not written again.
     func saveArchiveNow() {
         archiveSavePending = false
-        guard storeIsReadable else { return }
-        let stored = sessions.map(\.stored)
+        guard storeIsReadable, let store = sessionStore else { return }
+        var put: [SessionStore.Row] = []
+        var placed: [(id: String, position: Int, pinned: Bool)] = []
+        var present: Set<String> = []
         do {
-            let data = try JSONEncoder().encode(stored)
-            // Yesterday's file is kept beside today's: the difference between
-            // a bad write and a lost afternoon. Copied once a day, not on
-            // every write: on every write it doubled what the store cost.
-            let backup = Self.storeURL.deletingLastPathComponent().appendingPathComponent("sessions.previous.json", isDirectory: false)
-            if Self.backupIsDue(backup), let existing = try? Data(contentsOf: Self.storeURL), existing.count > 2, existing != data {
-                try? existing.write(to: backup, options: .atomic)
+            for (position, record) in sessions.enumerated() {
+                let session = record.stored
+                guard present.insert(session.info.id).inserted else { continue }
+                let encoded = try SessionStore.Row.encoded(session)
+                if let written = writtenRows[session.info.id], written.stored == encoded {
+                    if written.position != position || written.pinned != record.info.pinned {
+                        placed.append((session.info.id, position, record.info.pinned))
+                    }
+                } else {
+                    put.append(SessionStore.Row(session, encoded: encoded, position: position, pinned: record.info.pinned))
+                }
             }
-            try data.write(to: Self.storeURL, options: .atomic)
+            let removed = writtenRows.keys.filter { !present.contains($0) }.sorted()
+            if !put.isEmpty || !placed.isEmpty || !removed.isEmpty {
+                try store.write(put: put, placed: placed, removed: removed)
+                for row in put { writtenRows[row.id] = row }
+                for place in placed {
+                    writtenRows[place.id]?.position = place.position
+                    writtenRows[place.id]?.pinned = place.pinned
+                }
+                for id in removed { writtenRows[id] = nil }
+            }
             if savingFailed {
                 savingFailed = false
                 lastError = nil
@@ -226,33 +256,7 @@ extension VisorServer {
             // Said in the menu, not swallowed: sessions that are not being
             // written down are lost at the next quit.
             savingFailed = true
-            lastError = "Sessions are not being saved: \(error.localizedDescription)"
+            lastError = "Sessions are not being saved: \(error)"
         }
-    }
-
-    /// Whether the day's copy of the store is due: none yet, or the one
-    /// there is a day old.
-    static func backupIsDue(_ backup: URL, now: Date = Date()) -> Bool {
-        guard let made = (try? FileManager.default.attributesOfItem(atPath: backup.path))?[.modificationDate] as? Date else { return true }
-        return now.timeIntervalSince(made) >= 24 * 60 * 60
-    }
-}
-
-/// A stored session as the file has it, with its agent's name as written:
-/// a name this build does not know reads as Claude in `SessionInfo`, and a
-/// terminal session ("shell", kept by 0.18 to 0.31) must be told apart to
-/// be dropped instead.
-private struct StoredItem: Decodable {
-    var session: StoredSession
-    var agent: String?
-
-    var isTerminal: Bool { agent == "shell" }
-
-    private enum Keys: String, CodingKey { case info, agent }
-
-    init(from decoder: Decoder) throws {
-        session = try StoredSession(from: decoder)
-        agent = try decoder.container(keyedBy: Keys.self).nestedContainer(keyedBy: Keys.self, forKey: .info)
-            .decodeIfPresent(String.self, forKey: .agent)
     }
 }

@@ -176,8 +176,69 @@ snapshot on subscribe: the turn's state, status items, activity, busy,
 approval, queue, notice; then `turn`, `status`, `activity`, `busy`, …
 envelopes). The reply's words are not streamed to clients: the turn's
 state says `responding`, and the reply comes with its row.
-The archive `~/Library/Application Support/Visor/sessions.json` keeps the
-session list and a suffix of rows; the queue is NOT archived (ephemeral).
+The sessions' store, `server.sqlite` in the server's data folder
+(`/Volumes/Visor/Data` on a Mac with the Visor volume, else
+`~/Library/Application Support/Visor`; `~/.local/share/visor` on Linux),
+keeps the session list and a suffix of rows; the queue is NOT archived
+(ephemeral).
+
+**The sessions' store** (`SessionStore`, from 0.73; swift_sql, WAL). One
+row a session in `sessions`: `id`, `position` (its place in the server's
+list), `title`, `archived`, `pinned` (SessionInfo's `pinned`: the
+session's pin is its row's alone, never in its JSON, and is written at
+once), `updated`, and `stored`, the session as `StoredSession` encodes it
+(JSON, keys sorted); `notes` holds what the store notes of itself (its
+imports). The pins a build of 0.73 before the store kept in messages.sqlite
+(a `pins` table, #560) are moved into the rows once, at the start after
+sessions.json's import (`movePinsFromCache`), and noted, but only once the
+cache's file was read: a cache in memory, or a read that failed, moves
+and notes nothing, and the next start tries again. The cache's table is
+left as it is, and never written again. The schema grows a step
+at a time (`SessionStore.migrations`, `PRAGMA user_version`), never
+dropped as the message cache's is, and a file at a later version than a
+build knows is not opened: the server says so and saves nothing. A save
+(`saveArchive`, 30 s after a change; `saveArchiveNow` at once) writes, in
+one transaction, the rows of the sessions whose JSON changed since they
+were written, the places and pins of those that moved or were pinned, and
+deletes the rows of those gone; it never rewrites the store. Before 0.73
+the store was `sessions.json`, written whole (`sessions.previous.json` its
+copy of the day before): the first start of 0.73 imports it
+(VisorServer+SessionImport) when the store has never imported one and is
+empty, every session in one transaction with the count read back. It
+leaves `sessions.json` where it is, read-only, so an older build always
+finds it, with a copy beside it, `sessions.json.imported-<day>`, and
+renames `sessions.previous.json` and `archive.json` to
+`<name>.imported-<day>`; nothing is deleted. A sessions.json that doesn't
+decode is left as it is, nothing is imported and nothing saved, and the
+next start tries again. **Going back to 0.72 or before** (Logan did, 27
+Nov): the older build reads sessions.json, so it lists the sessions as they
+were at the import (not what changed since; the transcripts are the
+agents' own files either way), and an update that doesn't stay up and is
+rolled back lands the same way. It writes its own sessions.json, and the
+next start of 0.73 or later sees the file isn't the one it imported (the
+store notes its SHA-256) and imports it again, merged: the store first
+copied aside whole (`server.sqlite.before-import-<yyyymmdd-hhmmss>`, VACUUM
+INTO); then a session the file and the store both have takes from the
+file only what the older build changed, three ways against the file the
+store last imported (`importedAs`, the copy beside sessions.json; an older
+build writes back what it read for every session it didn't touch): key by
+key, and within `info` key by key, the file's where it isn't that base's,
+else the store's, its place and pin kept (VisorServer+SessionReimport);
+a session's queue (info's `queued` with `queuedImages` and
+`queuedOrigins`, lined up) is one key, taken or kept whole. The copy of
+each imported file is written before the store notes the import: when it
+can't be, an older build's file isn't imported until a start that can
+write it, and a first import's copy is written at a later start.
+With no base to go by (its copy gone, or a session it hasn't), the store's
+whole, said in the log. Each session the file has that the store hasn't is
+added after the rest, and the sessions it hasn't (made on 0.73 since, with
+their history) are kept as they are, so going back and forth loses
+nothing. A session ended on the older build comes back,
+to be ended again. The copy beside sessions.json is
+`sessions.json.imported-<day>-2` then. Leaving sessions.json for an older
+build is for one version: a later one stops. To read the store by hand: `sqlite3
+/Volumes/Visor/Data/server.sqlite "select position, id, title, archived
+from sessions order by position"`.
 
 **Claude's transcript comes from the file.** For tool "claude" the process
 emits deltas (taken only as `responding`), status and busy only; rows come from Claude Code's own
@@ -185,7 +246,7 @@ emits deltas (taken only as `responding`), status and busy only; rows come from 
 (an actor) into the **message cache**; the record reads its events in order.
 The file is a tree (uuid/parentUuid); `ClaudeBranch.current` keeps to
 the branch the session was on — its head, the prompt its latest turn
-began with, kept in sessions.json — and follows whatever carries on from
+began with, kept in the sessions' store — and follows whatever carries on from
 it; without a head, the branch holding the newest message (never a line
 that is not a message: Claude Code hangs attachments and snapshots off
 older messages). Prompts off it are abandoned. When the file's newest
@@ -1026,8 +1087,8 @@ privacy grants (a launchd job would not: a job reading ~/Downloads is
 refused) — and the host calls `setsid`, so it outlives the server. The
 agent's adapter drives a `HostedChild` as it would a `PipedChild`: lines
 in, lines out, an exit. `relaunch` lets the hosts go (`leaveAgents`) and
-writes each socket and the next line not yet heard into sessions.json
-(`StoredSession.host`); the next launch picks each up (`pickUp`, while the
+writes each socket and the next line not yet heard into the sessions'
+store (`StoredSession.host`); the next launch picks each up (`pickUp`, while the
 session is held) and is sent what it missed, Codex's turn in flight
 carried by the adapter (`HostableProcess.carried`). A host that is gone
 leaves the session as a restart used to: resumed with the nudge. A quit
@@ -1048,7 +1109,7 @@ Hosts log to `hosts/hosts.log` in the data folder.
 
 **Sessions on runners across a restart** (visor#424). A session moved to
 a runner (`moveToRunner`) is `driven`, and keeps its move on its record in
-sessions.json (`SessionRecord.move`: the agent id its job is for, its
+the sessions' store (`SessionRecord.move`: the agent id its job is for, its
 conversation and folder here, its folder and conversation on the runner
 once its wrapper and Started say). Only `moveBack` makes it this
 computer's again, with a dated notice and a push; a wrapper of protocol 2

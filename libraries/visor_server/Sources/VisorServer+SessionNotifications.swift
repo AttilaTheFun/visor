@@ -1,6 +1,6 @@
 // A session's notifications switched on or off (`notifications`): the
-// session's own, kept with it in sessions.json and told to every client,
-// so each device shows the same switch. Off, nothing it does is pushed
+// session's own, kept with it in the sessions' store and told to every
+// client, so each device shows the same switch. Off, nothing it does is pushed
 // but the widget's silent state (VisorServer+Push), and clients make no
 // notifications of their own for it.
 

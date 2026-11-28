@@ -4,7 +4,7 @@
 // name. Minted, listed and revoked over REST by the computer's owner
 // (`/api/runners/tokens`; VisorServer+RunnerTokens), never by an agent.
 // Kept with the server's secrets (`runnerTokens`: name to token and when
-// it was minted), never in sessions.json, jobs.json or the log; shown once,
+// it was minted), never in the sessions' store, jobs.json or the log; shown once,
 // when minted. This server's own runner (Visor's native runner, in this
 // process, on loopback) is given one at its start, held in memory alone.
 //

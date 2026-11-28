@@ -1,8 +1,8 @@
-// The sessions' store, written whole: once a while after a change, with
-// every change made by then, not once per change (it was most of the
-// gigabytes a day the Mac saw Visor write); at once where it must be (a
-// session made or ended, before a quit); and its copy of the day before
-// made once a day, not on every write.
+// The sessions' store, written once a while after a change, with every
+// change made by then, not once per change (written whole, as sessions.json,
+// it was most of the gigabytes a day the Mac saw Visor write); at once where
+// it must be (a session made or ended, before a quit); and only the
+// sessions that changed, never the whole store.
 
 import Foundation
 @testable import VisorAgent
@@ -54,7 +54,8 @@ extension ServerTests {
         SessionRecord(info: SessionInfo(id: id, agent: .claude, cwd: "/tmp", title: title, created: 0), process: IdleAgent())
     }
 
-    private var stored: String { (try? String(contentsOf: VisorServer.storeURL, encoding: .utf8)) ?? "" }
+    /// The store's rows as a second reader of the file has them.
+    private var stored: String { ((try? SessionStore(path: VisorServer.storeURL.path).rows()) ?? []).map(\.stored).joined(separator: "\n") }
 
     @Test func testChangesAreWrittenOnceTheirDelayIsOverAllTogether() async throws {
         server.archiveSaveDelay = .milliseconds(200)
@@ -84,26 +85,38 @@ extension ServerTests {
         #expect(!server.archiveSavePending, "nothing left waiting")
     }
 
-    @Test func testTheCopyOfTheDayBeforeIsMadeOnceADay() throws {
-        let backup = root.appendingPathComponent("sessions.previous.json")
-        #expect(VisorServer.backupIsDue(backup), "none yet")
-        try Data("[]".utf8).write(to: backup)
-        #expect(!VisorServer.backupIsDue(backup), "just made")
-        #expect(VisorServer.backupIsDue(backup, now: Date().addingTimeInterval(25 * 60 * 60)), "a day on")
+    @Test func testOnlyTheSessionsThatChangedAreWritten() throws {
+        let one = record("A", title: "One")
+        let other = record("B", title: "Other")
+        server.sessions = [one, other]
+        server.saveArchiveNow()
 
-        // Writes in a row: the copy is made by the first, and kept.
-        let session = record("S", title: "One")
-        server.sessions = [session]
+        // B's row, changed behind the server's back: a write that isn't
+        // B's leaves it as it is.
+        let reader = try SessionStore(path: VisorServer.storeURL.path)
+        var marked = try #require(try reader.rows().first(where: { $0.id == "B" }))
+        marked.title = "Marked"
+        try reader.write(put: [marked])
+        one.info.title = "Two"
         server.saveArchiveNow()
-        try? FileManager.default.removeItem(at: backup)
-        session.info.title = "Two"
+        let rows = try reader.rows()
+        #expect(rows.map(\.title) == ["Two", "Marked"], "A written, B not")
+
+        // Nothing changed: nothing written.
+        try reader.write(put: [marked, SessionStore.Row(id: "A", position: 0, title: "Kept", archived: false, stored: rows[0].stored)])
         server.saveArchiveNow()
-        let copied = try String(contentsOf: backup, encoding: .utf8)
-        #expect(copied.contains("One"))
-        session.info.title = "Three"
+        #expect(try reader.rows().map(\.title) == ["Kept", "Marked"])
+
+        // B gone: its row deleted, and A's place is as it was.
+        server.sessions = [one]
         server.saveArchiveNow()
-        #expect(try String(contentsOf: backup, encoding: .utf8).contains("One"), "not rewritten on the next write")
-        #expect(stored.contains("Three"))
+        #expect(try reader.rows().map(\.id) == ["A"])
+
+        // In front of A, a new one: A moves, without being written again.
+        server.sessions = [record("C", title: "New"), one]
+        server.saveArchiveNow()
+        #expect(try reader.rows().map(\.id) == ["C", "A"])
+        #expect(try reader.rows().map(\.title) == ["New", "Kept"])
     }
 }
 }

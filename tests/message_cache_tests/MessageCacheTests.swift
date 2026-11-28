@@ -1,7 +1,7 @@
 import Foundation
 // The cache behaves the same whatever holds it: rows by place, appended,
 // prepended, replaced, dropped by source; states kept; words found; the
-// server's pins kept apart from all of it.
+// pins an earlier server kept here read, and none kept now.
 
 import MessageCache
 import SwiftSQL
@@ -131,30 +131,28 @@ import Testing
         }
     }
 
-    /// The server's pins: kept by either storage, in a file through the
-    /// next open, and left by a session's reset and by a new schema,
-    /// which drop the rows.
-    @Test func testPinsAreKeptApartFromTheRows() throws {
-        for cache in [MessageCache.inMemory(), try MessageCache.sqliteInMemory()] {
-            try cache.setPinned(true, for: "a")
-            try cache.setPinned(true, for: "b")
-            try cache.setPinned(true, for: "b")
-            try cache.setPinned(false, for: "a")
-            #expect(cache.pinnedSessions() == ["b"])
-            try cache.resetSource("b", state: SourceState(path: "", identity: "", bytes: 0, nextSeq: 0))
-            try cache.remove("b")
-            #expect(cache.pinnedSessions() == ["b"], "a session's reset leaves its pin")
-        }
+    /// The pins a server of 0.73 kept here before its sessions' store: read
+    /// from a `pins` table an earlier build left, kept by a new schema,
+    /// which drops the rows; none from a file without the table, which the
+    /// cache no longer makes; and nil, not none, from a cache in memory,
+    /// which has no file to read them from.
+    @Test func testPinsAnEarlierBuildKeptAreReadAndNoneAreMade() throws {
+        #expect(MessageCache.inMemory().pinnedSessions() == nil)
+        #expect(try MessageCache.sqliteInMemory().pinnedSessions() == nil)
         let folder = URL(fileURLWithPath: NSTemporaryDirectory() + "visor-pins-" + String(UInt64.random(in: 0...UInt64.max)), isDirectory: true)
         defer { try? FileManager.default.removeItem(at: folder) }
-        try MessageCache.open(named: "messages", in: folder).setPinned(true, for: "s")
-        #expect(MessageCache.open(named: "messages", in: folder).pinnedSessions() == ["s"], "through the next open")
-        // A cache of another schema: its rows dropped, its pins kept.
         let path = folder.appendingPathComponent("messages.sqlite").path
         try MessageCache.open(named: "messages", in: folder).append("s", [TranscriptEntry(id: "r", role: .assistant, text: "row")])
+        #expect(try Database(path: path).query("SELECT COUNT(*) FROM sqlite_master WHERE name = 'pins'", row: { $0.int(0) }) == [0], "not made")
+        #expect(MessageCache.open(named: "messages", in: folder).pinnedSessions() == [])
+
+        // As the earlier build left it.
+        try Database(path: path).execute(#"CREATE TABLE "pins" ("session" TEXT PRIMARY KEY NOT NULL); INSERT INTO pins VALUES ('s')"#)
+        #expect(MessageCache.open(named: "messages", in: folder).pinnedSessions() == ["s"])
+        // A cache of another schema: its rows dropped, the pins left.
         try Database(path: path).execute("PRAGMA user_version = \(MessageCache.schemaVersion - 1)")
         let rebuilt = MessageCache.open(named: "messages", in: folder)
         #expect(rebuilt.count(in: "s") == 0, "the rows dropped")
-        #expect(rebuilt.pinnedSessions() == ["s"], "the pins kept")
+        #expect(rebuilt.pinnedSessions() == ["s"], "the pins left")
     }
 }

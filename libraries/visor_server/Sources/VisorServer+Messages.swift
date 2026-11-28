@@ -397,7 +397,6 @@ extension VisorServer {
         record.process.stop()
         record.markEnded()
         sessions.removeAll { $0 === record }
-        if record.info.pinned { setPinned(false, record) }
         forgetAgentToken(of: record.info.id)
         // Its agent's shims waiting on approvals go with it.
         for waiter in (approvalWaiters.removeValue(forKey: record.info.id) ?? [:]).values { waiter.close() }

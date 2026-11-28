@@ -132,7 +132,7 @@ public final class SessionRecord {
     }
     /// A driven session's move to a runner: the agent that carries it on
     /// there, its conversation and folder here, where it works there. Kept
-    /// with the session (sessions.json) while it is driven; only moveBack
+    /// with the session (the sessions' store) while it is driven; only moveBack
     /// clears it.
     package var move: AgentJobMove? {
         didSet { info.placement = Self.placement(driven: driven, move: move) }

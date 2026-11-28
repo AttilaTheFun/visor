@@ -67,7 +67,7 @@ final class JobQueue: AgentJobQueue, DrivenAgentDirectory {
     /// containers (JobQueue+Containers).
     var claimCapabilities: [String: [String]] = [:]
     /// Claims taken up when this server started (from jobs.json, or from a
-    /// driven session's move in sessions.json: adopt), until their runner
+    /// driven session's move in the sessions' store: adopt), until their runner
     /// renews one or its agent starts again: a lapse or a release of one
     /// is this server's restart, not an agent that failed to start, and
     /// isn't counted toward `attempts` (JobQueue+Restart).
