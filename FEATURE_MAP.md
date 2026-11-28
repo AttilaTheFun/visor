@@ -203,6 +203,15 @@ The graph is the same everywhere; what a node is differs with the width:
   Android on its side (1080×2400 at 420 dpi, the proof's and the
   suite's emulator) is regular width too: the list sits beside the chat,
   and `back` from the chat has nothing to go back from.
+- **Narrowest (320 points: an iPad app's narrowest in Stage Manager, the
+  Mac window's least):** as a phone's, one column at a time headless
+  (FeatureMapTests' Narrowest width). On the Mac the window goes down to
+  320 with the sidebar hidden (620 while it shows: showing it widens a
+  narrower window), and a detail column too narrow for the pane beside
+  the content makes Settings and Session details sheets (NarrowWindow);
+  the proof pictures the chat and Session details in a window 320 points
+  wide (`chat-320`, `inspector-320`: `-visor.fixture.width 320`, which
+  opens it with the sidebar hidden).
 - **The Mac only:** the menu bar's Visor menu and this Mac's server's
   Settings window (password, network paths, push, the Sessions
   Container with its own `container-sign-in` and its CPUs and memory,
