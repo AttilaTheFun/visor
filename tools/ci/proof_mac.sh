@@ -1,8 +1,7 @@
 #!/bin/bash
-# The Mac's part of the proof (ci.yml's verify), on one of
-# GitHub's own Macs (`xcode-27`, a desktop session whose shell may picture
-# the screen): Visor.app (applications/visor_mac), built on an `xcode-27`
-# Mac by the proof's build job and signed ad hoc there, opened on the screenshot
+# The Mac's part of the proof (ci.yml's verify), in the desktop session
+# of a macOS VM that a Nimbus runner leases (tools/ci/mac_vm.sh --desktop): Visor.app (applications/visor_mac), built on a Nimbus runner
+# by the proof's build job (build-apple) and signed ad hoc there, opened on the screenshot
 # fixture in the light look, once for each of the fixture's screens (each
 # failing if the app is still busy once it should have settled), on a
 # screen of 1920 by 1080 points (displayplacer; the runner's own is 1024 by
@@ -20,6 +19,14 @@
 #
 #   VISOR_SNAPSHOT_SETTLE  seconds a screen is given (default 8; the
 #                          search's matches in messages, twice that more)
+#   VISOR_PROOF_SHOT       how a screen is pictured: screencapture (the
+#                          default: the session's own, which needs Screen
+#                          Recording) or framebuffer: the whole screen asked
+#                          of whoever runs the Mac (<out>/.shots/<screen>.want
+#                          answered with <screen>.png: tools/ci/mac_vm.sh
+#                          --shots, Nimbus' picture of a VM's framebuffer,
+#                          whose VMs may not picture their own screen yet),
+#                          cut to the window here with sips
 #   VISOR_PROOF_MAC_SCREENS  the screens, in place of all of them (a few,
 #                          by hand in a VM)
 #
@@ -35,6 +42,8 @@ out="$(cd "$2" && pwd)"
 # narrowest, the sidebar collapsed and the chat or the pane in what is left.
 SCREENS="${VISOR_PROOF_MAC_SCREENS:-sessions machines chat question goal inspector models search connect new-session commands settings chat-320 inspector-320}"
 SETTLE="${VISOR_SNAPSHOT_SETTLE:-8}"
+SHOT="${VISOR_PROOF_SHOT:-screencapture}"
+case "$SHOT" in screencapture | framebuffer) ;; *) echo "$me: VISOR_PROOF_SHOT is screencapture or framebuffer, not $SHOT" >&2; exit 2 ;; esac
 [ -f "$apps/visor_mac.zip" ] || { echo "$me: no visor_mac.zip in $apps" >&2; exit 1; }
 
 work="$(mktemp -d)"
@@ -64,6 +73,33 @@ if [ -z "$screen_id" ] || ! displayplacer "id:$screen_id res:1920x1080 scaling:o
     echo "::warning::The runner's screen stayed as it was (displayplacer)"
 fi
 screen_size="$(osascript -l JavaScript -e 'ObjC.import("AppKit"); const f = $.NSScreen.mainScreen.frame; `${f.size.width} by ${f.size.height}`')"
+screen_width="${screen_size%% by *}"
+screen_width="${screen_width%%.*}"
+
+# The window at <frame> (CoreGraphics' points: x,y,width,height) pictured
+# into <file>: by the session itself, or cut from the whole screen's
+# picture, which the Mac's runner gives (VISOR_PROOF_SHOT=framebuffer), at
+# its scale (its pixels over the screen's points).
+picture() {
+    local frame="$1" file="$2" want="$out/.shots/$screen" x y w h pixels scale
+    if [ "$SHOT" = screencapture ]; then
+        screencapture -x -R"$frame" "$file"
+        return
+    fi
+    mkdir -p "$out/.shots"
+    rm -f "$want.png"
+    touch "$want.want"
+    for _ in $(seq 1 120); do
+        [ -s "$want.png" ] && break
+        sleep 0.5
+    done
+    [ -s "$want.png" ] || { echo "::error::$screen: no picture of the screen came (VISOR_PROOF_SHOT=framebuffer)"; return 1; }
+    pixels="$(sips -g pixelWidth "$want.png" | awk '/pixelWidth/ { print $2 }')"
+    scale=$((pixels / screen_width))
+    [ "$scale" -ge 1 ] || scale=1
+    IFS=, read -r x y w h <<< "$frame"
+    sips -c $((h * scale)) $((w * scale)) --cropOffset $((y * scale)) $((x * scale)) "$want.png" --out "$file" > /dev/null
+}
 printf 'macOS %s, a screen %s points\n' "$(sw_vers -productVersion)" "$screen_size" | tee "$out/device.txt"
 # No "quit unexpectedly" dialog over the screens after a crash (a crash is
 # the screen's failure, and its log says so), as Shireworks' guests have.
@@ -155,7 +191,7 @@ for screen in $SCREENS; do
     frame="$(osascript -l JavaScript "$work/windows.js" "$pid" \
         | awk -F'\t' '$1 == 0 { a = $4 * $5; if (a > best) { best = a; f = int($2) "," int($3) "," int($4) "," int($5) } } END { print f }')"
     if [ -n "$frame" ]; then
-        screencapture -x -R"$frame" "$out/screens/mac-$screen.png"
+        picture "$frame" "$out/screens/mac-$screen.png" || status=1
         echo "$screen: the window at $frame"
     else
         echo "::error::$screen: no window of the app on the screen"
@@ -174,6 +210,7 @@ for screen in $SCREENS; do
     esac
     echo "::endgroup::"
 done
+rm -rf "$out/.shots"
 count="$(find "$out/screens" -name 'mac-*.png' | wc -l | tr -d ' ')"
 echo "$count Mac screens"
 [ "$count" -gt 0 ] || status=1
