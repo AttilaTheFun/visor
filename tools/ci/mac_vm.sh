@@ -107,6 +107,10 @@ load() {
     host="$(. "$STATE/lease"; printf '%s' "${NIMBUS_HOST:-}")"
     port="$(. "$STATE/lease"; printf '%s' "${NIMBUS_SSH_PORT:-}")"
     user="$(. "$STATE/lease"; printf '%s' "${NIMBUS_SSH_USER:-runner}")"
+    # The hop to the VM's ssh through the job's egress proxy (`nimbus job
+    # connect %h:%p`), where the job's network is locked down; empty where
+    # none is needed.
+    proxy="$(. "$STATE/lease"; printf '%s' "${NIMBUS_SSH_PROXY_COMMAND:-}")"
 }
 
 release_vm() {
@@ -118,8 +122,10 @@ release_vm() {
 }
 
 vm() {
+    local hop=()
+    [ -z "$proxy" ] || hop=(-o "ProxyCommand=$proxy")
     ssh -p "$port" -i "$STATE/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
-        -o UserKnownHostsFile="$STATE/known_hosts" -o ServerAliveInterval=30 "$user@$host" "$@"
+        -o UserKnownHostsFile="$STATE/known_hosts" -o ServerAliveInterval=30 ${hop[@]+"${hop[@]}"} "$user@$host" "$@"
 }
 
 put_tree() {
