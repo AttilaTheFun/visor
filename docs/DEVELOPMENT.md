@@ -223,7 +223,12 @@ file only what the older build changed, three ways against the file the
 store last imported (`importedAs`, the copy beside sessions.json; an older
 build writes back what it read for every session it didn't touch): key by
 key, and within `info` key by key, the file's where it isn't that base's,
-else the store's, its place and pin kept (VisorServer+SessionReimport).
+else the store's, its place and pin kept (VisorServer+SessionReimport);
+a session's queue (info's `queued` with `queuedImages` and
+`queuedOrigins`, lined up) is one key, taken or kept whole. The copy of
+each imported file is written before the store notes the import: when it
+can't be, an older build's file isn't imported until a start that can
+write it, and a first import's copy is written at a later start.
 With no base to go by (its copy gone, or a session it hasn't), the store's
 whole, said in the log. Each session the file has that the store hasn't is
 added after the rest, and the sessions it hasn't (made on 0.73 since, with

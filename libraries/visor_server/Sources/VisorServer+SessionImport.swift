@@ -7,8 +7,10 @@
 // 0.72 or before should Visor go back to one (Logan did, 27 Nov; and an
 // update that doesn't stay up is rolled back by itself:
 // VisorServer+Rollback): it lists the sessions as they were at the import.
-// A copy is kept beside it, sessions.json.imported-<day>; its copy of the
-// day before (sessions.previous.json) and archive.json (older still) are
+// A copy is kept beside it, sessions.json.imported-<day>, written before
+// the store notes the import (the next import's base: without it an older
+// build's file waits for a start that can write it); its copy of the day
+// before (sessions.previous.json) and archive.json (older still) are
 // renamed likewise. Nothing is deleted.
 //
 // An older build that runs writes its own sessions.json, and the next start
@@ -46,6 +48,10 @@ extension VisorServer {
     /// The store's note of the SHA-256 of the sessions.json it imported.
     static let importedFingerprintNote = "importedFingerprint"
 
+    /// How the copy of an imported sessions.json is written beside it (the
+    /// base of the next import's three ways): a test's may fail.
+    static var writeImportedCopy: (Data, URL) throws -> Void = { data, url in try data.write(to: url, options: .atomic) }
+
     /// sessions.json (and archive.json, from before every session was kept)
     /// read into the store if it's due: never imported, and the store
     /// empty; or imported, and written since by an older build. False when
@@ -68,7 +74,17 @@ extension VisorServer {
         if let imported {
             // The copy left for a downgrade, unless an older build has
             // written its own over it since.
-            guard let data, Self.fingerprint(data) != imported else { return true }
+            guard let data, Self.fingerprint(data) != imported else {
+                // Still the one imported: its copy beside it, the next
+                // import's base, written if the import couldn't.
+                if let data, let name = try? store.note("importedAs"), !name.isEmpty {
+                    let copy = folder.appendingPathComponent(name, isDirectory: false)
+                    if !files.fileExists(atPath: copy.path), (try? Self.writeImportedCopy(data, copy)) != nil {
+                        Self.log("sessions.json copied to \(name), which its import couldn't")
+                    }
+                }
+                return true
+            }
             Self.log("sessions.json isn't the one imported: a Visor of 0.72 or before ran here since, and its sessions are merged into the database's")
         } else if data == nil, files.fileExists(atPath: json.path) {
             return refuseStore("Could not read sessions.json. It is left as it is and nothing was imported from it; sessions are not being saved.")
@@ -95,6 +111,20 @@ extension VisorServer {
         }
         let day = RetiredFiles.day(now)
         let importedName = Self.unusedName("sessions.json.imported-" + day, in: folder)
+        // The file copied beside it first: the base the next import goes by,
+        // there before the store notes it. Imported again without it, the
+        // import waits (the store's notes as they were, so the next start
+        // tries again); the first import goes on, and its copy is written at
+        // a later start, while sessions.json is still the file imported.
+        if let data {
+            do {
+                try Self.writeImportedCopy(data, folder.appendingPathComponent(importedName, isDirectory: false))
+            } catch {
+                Self.log("sessions.json couldn't be copied to \(importedName): \(error.localizedDescription)"
+                    + (imported == nil ? "" : "; it isn't imported again until it can be"))
+                if imported != nil { return true }
+            }
+        }
         // What the store holds, copied aside before it takes another file in.
         do {
             if try store.count() > 0 {
@@ -121,16 +151,9 @@ extension VisorServer {
         }
         Self.log("imported \(sessions.count) session\(sessions.count == 1 ? "" : "s") from sessions.json into \(Self.storeURL.lastPathComponent)"
             + (imported == nil ? "" : ": \(merged.updated) brought up to date, \(merged.added) added, \(merged.kept) it hasn't kept as they were"))
-        // sessions.json stays, for an older build, read-only; a copy of it
-        // beside it, and the other two renamed. Never deleted.
-        if let data {
-            do {
-                try data.write(to: folder.appendingPathComponent(importedName, isDirectory: false), options: .atomic)
-            } catch {
-                Self.log("sessions.json couldn't be copied to \(importedName): \(error.localizedDescription)")
-            }
-            try? files.setAttributes([.posixPermissions: 0o444], ofItemAtPath: json.path)
-        }
+        // sessions.json stays, for an older build, read-only (its copy
+        // beside it, above), and the other two renamed. Never deleted.
+        if data != nil { try? files.setAttributes([.posixPermissions: 0o444], ofItemAtPath: json.path) }
         for name in ["sessions.previous.json", "archive.json"] {
             let url = folder.appendingPathComponent(name, isDirectory: false)
             guard files.fileExists(atPath: url.path) else { continue }

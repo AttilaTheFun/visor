@@ -34,6 +34,9 @@ private final class StillAgent: AgentProcess {
     func end(within deadline: Duration) async {}
 }
 
+/// A copy beside sessions.json that couldn't be written.
+private struct CopyFailed: Error {}
+
 /// What the server logged.
 private final class LoggedLines: Sendable {
     private let lines = Mutex<[String]>([])
@@ -356,6 +359,82 @@ extension ServerTests {
         let again = launch()
         #expect(again.sessions.map(\.info.title) == ["Beta on 0.73", "Alpha", "From 0.72"])
         #expect(logged.all.contains { $0.contains("without the file imported before") })
+    }
+
+    /// The copy of the file imported, the next import's base, is written
+    /// before the store notes the import: when it can't be, an older
+    /// build's file waits, the notes as they were, and the next start
+    /// imports it; a first import goes on, and its copy is written at a
+    /// later start.
+    @Test func testAnImportWaitsForTheCopyOfItsFile() throws {
+        defer { VisorServer.writeImportedCopy = { data, url in try data.write(to: url, options: .atomic) } }
+        VisorServer.writeImportedCopy = { _, _ in throw CopyFailed() }
+        try Data(Self.sessionsJSON().utf8).write(to: file("sessions.json"))
+        let first = launch()
+        #expect(first.sessions.map(\.info.id) == ["beta", "alpha"], "a first import goes on")
+        #expect(!FileManager.default.fileExists(atPath: file("sessions.json.imported-\(day)").path))
+        VisorServer.writeImportedCopy = { data, url in try data.write(to: url, options: .atomic) }
+        _ = launch()
+        #expect(FileManager.default.fileExists(atPath: file("sessions.json.imported-\(day)").path), "written at the next start")
+
+        // 0.72 renames alpha; the copy can't be written: nothing imported.
+        var older = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: file("sessions.json"))) as? [[String: Any]])
+        var info = try #require(older[1]["info"] as? [String: Any])
+        info["title"] = "Alpha on 0.72"
+        older[1]["info"] = info
+        try JSONSerialization.data(withJSONObject: older).write(to: file("sessions.json"), options: .atomic)
+        let notes = { (store: SessionStore) in [try store.note(VisorServer.importedFingerprintNote), try store.note("importedAs")] }
+        let before = try notes(reader())
+        VisorServer.writeImportedCopy = { _, _ in throw CopyFailed() }
+        let waiting = launch()
+        #expect((waiting.session("alpha")?.info.title) == "Alpha", "not imported yet")
+        #expect(try notes(reader()) == before, "the notes as they were")
+        #expect(logged.all.contains { $0.contains("isn't imported again until it can be") })
+
+        VisorServer.writeImportedCopy = { data, url in try data.write(to: url, options: .atomic) }
+        let again = launch()
+        #expect((again.session("alpha")?.info.title) == "Alpha on 0.72", "imported at the next start")
+        #expect(try notes(reader()) != before)
+    }
+
+    /// A session's queue is one thing of three (its words, their files and
+    /// where each came from, lined up): taken whole from the file where the
+    /// older build changed any of it, else kept whole.
+    @Test func testAQueueIsTakenOrKeptWhole() throws {
+        try Data(Self.sessionsJSON().utf8).write(to: file("sessions.json"))
+        let first = launch()
+        let alpha = try #require(first.session("alpha"))
+        alpha.info.queued.append("And this, on 0.73")
+        alpha.queuedImages.append([])
+        alpha.queuedOrigins.append(.mail)
+        first.saveArchiveNow()
+
+        // 0.72 changed only where the one queued came from.
+        var older = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: file("sessions.json"))) as? [[String: Any]])
+        older[1]["queuedOrigins"] = ["system"]
+        try JSONSerialization.data(withJSONObject: older).write(to: file("sessions.json"), options: .atomic)
+        let again = launch()
+        let taken = try #require(again.session("alpha"))
+        #expect(taken.info.queued == ["Then this"], "all three the file's")
+        #expect(taken.queuedOrigins == [.system])
+        #expect(taken.queuedImages.count == 1)
+
+        // Left alone by 0.72: all three the store's.
+        taken.info.queued.append("Once more")
+        taken.queuedImages.append([])
+        taken.queuedOrigins.append(.user)
+        again.saveArchiveNow()
+        var untouched = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: file("sessions.json"))) as? [[String: Any]])
+        var info = try #require(untouched[1]["info"] as? [String: Any])
+        info["title"] = "Alpha, renamed on 0.72"
+        untouched[1]["info"] = info
+        try JSONSerialization.data(withJSONObject: untouched).write(to: file("sessions.json"), options: .atomic)
+        let third = launch()
+        let kept = try #require(third.session("alpha"))
+        #expect(kept.info.title == "Alpha, renamed on 0.72")
+        #expect(kept.info.queued == ["Then this", "Once more"])
+        #expect(kept.queuedOrigins == [.system, .user])
+        #expect(kept.queuedImages.count == 2)
     }
 
     @Test func testAFileThatCantBeReadIsLeftAndNothingIsImported() throws {

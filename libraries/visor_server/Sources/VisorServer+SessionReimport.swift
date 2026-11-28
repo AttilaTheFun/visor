@@ -6,9 +6,11 @@
 // touch, and that, taken as it is, would undo what this build did since
 // (a rename, a turn's rows, a queued message). For each of the session's
 // keys, and each of its info's: the file's where it isn't the base's (the
-// older build's change, taken: it ran last), else the store's. With no base
-// to go by (its file gone, or a session it hasn't), the store's whole, and
-// said in the log.
+// older build's change, taken: it ran last), else the store's. The queue is
+// one key of three (info's `queued`, `queuedImages`, `queuedOrigins`, lined
+// up by place): all three the file's, or all three the store's, never mixed.
+// With no base to go by (its file gone, or a session it hasn't), the
+// store's whole, and said in the log.
 
 import Foundation
 
@@ -37,7 +39,8 @@ extension VisorServer {
                 kept.append(row.id)
                 continue
             }
-            let merged = Self.merged(ours: ours, theirs: now, base: was, within: ["info"])
+            var merged = Self.merged(ours: ours, theirs: now, base: was, within: ["info"], skipping: Self.queueKeys)
+            if !Self.same(Self.queue(of: now), Self.queue(of: was)) { Self.takeQueue(of: now, into: &merged) }
             guard let data = try? JSONSerialization.data(withJSONObject: merged),
                   let session = try? JSONDecoder().decode(StoredSession.self, from: data) else {
                 kept.append(row.id)
@@ -62,15 +65,36 @@ extension VisorServer {
         return found
     }
 
+    /// The keys of a session's queue: info's `queued`, and beside it the
+    /// files and origins of each (StoredSession), taken together.
+    nonisolated static let queueKeys: Set<String> = ["queued", "queuedImages", "queuedOrigins"]
+
+    /// A session's queue, its three keys as one value (none for a key it
+    /// hasn't).
+    nonisolated static func queue(of session: [String: Any]) -> [Any] {
+        [(session["info"] as? [String: Any])?["queued"] ?? NSNull(), session["queuedImages"] ?? NSNull(), session["queuedOrigins"] ?? NSNull()]
+    }
+
+    /// The queue of `session`, all three keys, put in `merged`.
+    nonisolated static func takeQueue(of session: [String: Any], into merged: inout [String: Any]) {
+        var info = merged["info"] as? [String: Any] ?? [:]
+        info["queued"] = (session["info"] as? [String: Any])?["queued"]
+        merged["info"] = info
+        merged["queuedImages"] = session["queuedImages"]
+        merged["queuedOrigins"] = session["queuedOrigins"]
+    }
+
     /// `ours`, with each key whose value `theirs` changed from `base`'s
-    /// taken from `theirs` (a key gone from theirs, gone); those of
-    /// `within` merged the same way, a level down.
-    nonisolated static func merged(ours: [String: Any], theirs: [String: Any], base: [String: Any], within: Set<String> = []) -> [String: Any] {
+    /// taken from `theirs` (a key gone from theirs, gone), but those of
+    /// `skipping`, left as ours; those of `within` merged the same way, a
+    /// level down.
+    nonisolated static func merged(ours: [String: Any], theirs: [String: Any], base: [String: Any], within: Set<String> = [],
+                                   skipping: Set<String> = []) -> [String: Any] {
         var out = ours
-        for key in Set(theirs.keys).union(base.keys) where !same(theirs[key], base[key]) {
+        for key in Set(theirs.keys).union(base.keys) where !skipping.contains(key) && !same(theirs[key], base[key]) {
             if within.contains(key), let mine = ours[key] as? [String: Any], let now = theirs[key] as? [String: Any],
                let was = base[key] as? [String: Any] {
-                out[key] = merged(ours: mine, theirs: now, base: was)
+                out[key] = merged(ours: mine, theirs: now, base: was, skipping: skipping)
             } else {
                 out[key] = theirs[key]
             }
