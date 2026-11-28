@@ -218,13 +218,26 @@ public struct VisorFolderMove: Sendable {
             }
         }
         guard let failure else { return nil }
+        // Put back by way of its staged name: a placed file renamed to it
+        // first (beside where it is, on the same volume), so one that then
+        // can't go home stays staged, which the next start sorts out with
+        // the rest of its unit, never taken for the volume's own. Only one
+        // that can't even be renamed stays where it was placed, and the
+        // next start takes it for the volume's.
         for step in staged {
-            let at = placed.contains { $0.name == step.name } ? step.to : Self.staged(step.to)
+            let stage = Self.staged(step.to)
+            if placed.contains(where: { $0.name == step.name }) {
+                do {
+                    try files.moveItem(at: step.to, to: stage)
+                } catch {
+                    log("\(step.to.path) couldn't be staged again to go back: \(error.localizedDescription); it stays there")
+                    continue
+                }
+            }
             do {
-                try files.moveItem(at: at, to: step.from)
+                try files.moveItem(at: stage, to: step.from)
             } catch {
-                // Left where it is (staged, the next start sorts it out), never lost.
-                log("\(at.path) couldn't be put back at \(step.from.path): \(error.localizedDescription); it is left where it is")
+                log("\(stage.path) couldn't be put back at \(step.from.path): \(error.localizedDescription); it stays staged, for the next start")
             }
         }
         return failure + "; \(first.unit) and its files stay at \(first.from.deletingLastPathComponent().path)"
